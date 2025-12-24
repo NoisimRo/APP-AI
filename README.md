@@ -1,20 +1,152 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
-</div>
+# ExpertAP
 
-# Run and deploy your AI Studio app
+**Business Intelligence Platform for Romanian Public Procurement**
 
-This contains everything you need to run your app locally.
+ExpertAP transforms unstructured CNSC (National Council for Solving Complaints) decisions into actionable intelligence for public procurement professionals.
 
-View your app in AI Studio: https://ai.studio/apps/drive/1Ra646zConWORXA1s8WdaFCUmwDm2JWk0
+## Features
 
-## Run Locally
+- **AI Chatbot** - Ask questions in natural language, get answers grounded in CNSC jurisprudence
+- **Semantic Search** - Find relevant decisions using meaning, not just keywords
+- **Legal Drafter** - Auto-generate complaints with verified citations
+- **Red Flags Detector** - Identify restrictive clauses in procurement documentation
 
-**Prerequisites:**  Node.js
+## Quick Start
 
+### Prerequisites
 
-1. Install dependencies:
-   `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
-   `npm run dev`
+- Docker & Docker Compose
+- Node.js 18+ (for frontend development)
+- Python 3.11+ (for backend development without Docker)
+
+### Setup
+
+1. **Clone the repository**
+   ```bash
+   git clone https://github.com/your-org/APP-AI.git
+   cd APP-AI
+   ```
+
+2. **Configure environment**
+   ```bash
+   cp .env.example .env
+   # Edit .env with your API keys
+   ```
+
+3. **Start with Docker**
+   ```bash
+   docker-compose up -d
+   ```
+
+4. **Access the application**
+   - API: http://localhost:8000
+   - API Docs: http://localhost:8000/docs
+   - Health Check: http://localhost:8000/health
+
+### Development Setup (without Docker)
+
+#### Backend
+```bash
+cd backend
+
+# Create virtual environment
+python -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
+
+# Install dependencies
+pip install -r requirements.txt
+
+# Run the server
+uvicorn app.main:app --reload
+```
+
+#### Frontend (MVP - Google AI Studio export)
+```bash
+# The frontend MVP is in the root directory
+npm install
+npm run dev
+```
+
+## Project Structure
+
+```
+APP-AI/
+├── backend/                 # Python FastAPI backend
+│   ├── app/
+│   │   ├── api/            # API routes
+│   │   ├── core/           # Configuration
+│   │   ├── models/         # Database models
+│   │   ├── services/       # Business logic
+│   │   └── main.py
+│   ├── tests/
+│   └── Dockerfile
+├── frontend/                # Next.js frontend (future)
+├── data/                    # Local data for development
+│   └── decisions/          # CNSC decision files
+├── docker-compose.yml
+├── PROJECT_CONTEXT.md       # Architecture & decisions
+├── CONTRIBUTING.md          # Development workflow
+└── TODO.md                  # Task tracking
+```
+
+## API Endpoints
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/health` | GET | Health check |
+| `/api/v1/chat` | POST | Chat with AI |
+| `/api/v1/search/semantic` | POST | Semantic search |
+| `/api/v1/decisions` | GET | List decisions |
+| `/api/v1/decisions/{id}` | GET | Get decision by ID |
+
+See full API documentation at http://localhost:8000/docs
+
+## Configuration
+
+Key environment variables (see `.env.example` for all options):
+
+| Variable | Description |
+|----------|-------------|
+| `DATABASE_URL` | PostgreSQL connection string |
+| `GEMINI_API_KEY` | Google Gemini API key |
+| `OPENAI_API_KEY` | OpenAI API key (alternative) |
+
+## Running Tests
+
+```bash
+cd backend
+pytest
+pytest --cov=app --cov-report=html  # With coverage
+```
+
+## Documentation
+
+- [PROJECT_CONTEXT.md](PROJECT_CONTEXT.md) - Architecture, tech stack, conventions
+- [CONTRIBUTING.md](CONTRIBUTING.md) - Development workflow, git strategy
+- [TODO.md](TODO.md) - Feature backlog and progress
+
+## Tech Stack
+
+**Backend**
+- FastAPI (Python 3.11+)
+- PostgreSQL + pgvector
+- SQLAlchemy 2.0
+- LangChain
+
+**Frontend**
+- Next.js 14 (planned)
+- React 19
+- TailwindCSS
+
+**LLM Providers** (abstracted)
+- Google Gemini (primary)
+- OpenAI (fallback)
+- Anthropic (alternative)
+
+## License
+
+Proprietary - All rights reserved
+
+## Contact
+
+For questions about this project, please open an issue.
