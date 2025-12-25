@@ -1,34 +1,37 @@
 # ExpertAP - Project Context
 
-## ⚠️ STATUS CURENT (2024-12-25)
+## ⚠️ STATUS CURENT (2025-12-25) - READY TO DEPLOY! 🚀
 
-**Deploy-ul funcționează, dar frontend-ul NU este complet funcțional!**
+**Aplicația funcționează, TOATE scripturile database sunt create!**
 
 | Component | Status | URL |
 |-----------|--------|-----|
 | Cloud Run | ✅ Running | https://expertap-api-850584928584.europe-west1.run.app/ |
 | Health Check | ✅ OK | /health (indică "healthy") |
 | API Docs | ✅ OK | /docs |
-| Frontend UI | ⚠️ Se vede | / |
-| Frontend Functions | ❌ NU funcționează | Toate funcțiile dau eroare |
-| Baza de Date | ❌ NU configurată | Rulează cu SKIP_DB=true |
+| Frontend UI | ✅ Se vede | / |
+| Frontend Functions | ⚠️ Fără date | Aplicația funcționează, dar DB goală |
+| Baza de Date | ✅ SCRIPTS READY | Scripturile create, trebuie rulate manual |
+| Import Scripts | ✅ COMPLETE | Toate scripturile și docs gata |
 
-**CAUZA PROBABILĂ:** Baza de date NU este funcțională
-- Aplicația rulează cu `SKIP_DB=true` (fără bază de date)
-- Nu există Cloud SQL (PostgreSQL) configurat
-- Frontend-ul încearcă să acceseze date care nu există
+**SOLUȚIE PREGĂTITĂ:** Toate scripturile pentru setup sunt create!
+- ✅ Script Cloud SQL: `scripts/setup_cloud_sql.sh`
+- ✅ Script import GCS: `scripts/import_decisions_from_gcs.py`
+- ✅ Alembic migrations: `backend/alembic/versions/20251225_0001_initial_schema.py`
+- ✅ Documentație completă: `QUICKSTART.md`, `docs/SETUP_DATABASE.md`
+- ⏳ Trebuie rulate **manual** (vezi QUICKSTART.md)
 
 **DATE DISPONIBILE:**
 - **GCS Bucket:** `date-ap-raw/decizii-cnsc`
 - **Conținut:** ~3000 decizii CNSC în format text
 - **Format:** Conform convenției `BO{AN}_{NR_BO}_{COD_CRITICI}_CPV_{COD_CPV}_{SOLUTIE}.txt`
 
-**CE TREBUIE FĂCUT:**
-1. Configurare Cloud SQL (PostgreSQL + pgvector)
-2. Conectare aplicație la baza de date
-3. Conectare la bucket-ul GCS `date-ap-raw/decizii-cnsc`
-4. Import și parsare cele 3000 decizii CNSC
-5. Testare frontend cu date reale
+**PAȘI URMĂTORI (MANUAL - 15-20 min total):**
+1. ✅ **DONE**: Scripturile create → Vezi `QUICKSTART.md`
+2. ⏳ **TODO**: Rulează `./scripts/setup_cloud_sql.sh` (5 min)
+3. ⏳ **TODO**: Conectează Cloud Run (2 min) → Vezi `docs/CLOUD_RUN_DATABASE_CONFIG.md`
+4. ⏳ **TODO**: Importă date: `python scripts/import_decisions_from_gcs.py --create-tables` (10-15 min)
+5. ⏳ **TODO**: Testare cu date reale
 
 ---
 
