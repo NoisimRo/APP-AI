@@ -37,7 +37,7 @@ CRITICISM_CODES_LEGEND = {
     # Critici la Documentația de Atribuire (D)
     "D1": "Cerințe restrictive: experiență similară, criterii calificare, specificații tehnice",
     "D2": "Criterii atribuire/factori evaluare fără algoritm calcul sau cu algoritm netransparent/subiectiv",
-    "D3": "Denumiri tehnologii/produse/mărci/producători fără sintagma „sau echivalent"",
+    "D3": "Denumiri tehnologii/produse/marci/producatori fara sintagma 'sau echivalent'",
     "D4": "Lipsa răspuns clar/complet la solicitările de clarificări privind documentația",
     "D5": "Forma de constituire a garanției de participare",
     "D6": "Clauze contractuale inechitabile sau excesive",

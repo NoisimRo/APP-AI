@@ -57,7 +57,7 @@ async def get_session() -> AsyncSession:
 
 async def close_db() -> None:
     """Close database connections."""
-    global engine
+    global engine, async_session_factory
 
     if engine:
         await engine.dispose()
