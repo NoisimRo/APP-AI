@@ -43,11 +43,65 @@ jobs:
 
       - name: Run tests with pytest
         env:
-          DATABASE_URL: sqlite:///./test.db
+          SKIP_DB: "true"
           ENVIRONMENT: test
-          GEMINI_API_KEY: test-key-not-used
         run: |
           pytest tests/ -v --tb=short || true
+
+  # =============================================================================
+  # Docker Build & Startup Test
+  # =============================================================================
+  docker-test:
+    name: Docker Build & Startup Test
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Build Docker image
+        run: |
+          docker build -t expertap-api:test ./backend
+
+      - name: Test container starts and responds
+        run: |
+          # Start container in background
+          docker run -d --name test-api \
+            -p 8000:8000 \
+            -e PORT=8000 \
+            -e SKIP_DB=true \
+            -e ENVIRONMENT=test \
+            expertap-api:test
+
+          # Wait for container to start
+          echo "Waiting for container to start..."
+          sleep 5
+
+          # Check if container is still running
+          if ! docker ps | grep -q test-api; then
+            echo "Container crashed! Logs:"
+            docker logs test-api
+            exit 1
+          fi
+
+          # Test health endpoint
+          echo "Testing health endpoint..."
+          for i in {1..10}; do
+            if curl -s http://localhost:8000/health | grep -q "healthy"; then
+              echo "Health check passed!"
+              docker logs test-api
+              docker stop test-api
+              exit 0
+            fi
+            echo "Attempt $i failed, waiting..."
+            sleep 2
+          done
+
+          # If we get here, health check failed
+          echo "Health check failed! Container logs:"
+          docker logs test-api
+          docker stop test-api
+          exit 1
 
   # =============================================================================
   # Frontend Build (Vite/React)
@@ -76,7 +130,7 @@ jobs:
   # =============================================================================
   ci-success:
     name: CI Success
-    needs: [backend-tests, frontend-build]
+    needs: [backend-tests, docker-test, frontend-build]
     runs-on: ubuntu-latest
     if: always()
 
@@ -84,6 +138,7 @@ jobs:
       - name: Check all jobs passed
         run: |
           if [[ "${{ needs.backend-tests.result }}" == "failure" ]] || \
+             [[ "${{ needs.docker-test.result }}" == "failure" ]] || \
              [[ "${{ needs.frontend-build.result }}" == "failure" ]]; then
             echo "One or more jobs failed"
             exit 1
