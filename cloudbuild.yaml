@@ -9,15 +9,14 @@ steps:
   # Step 1: Build the Docker image
   - name: 'gcr.io/cloud-builders/docker'
     id: 'build'
+    dir: 'backend'
     args:
       - 'build'
       - '-t'
       - 'gcr.io/${PROJECT_ID}/${_SERVICE_NAME}:${COMMIT_SHA}'
       - '-t'
       - 'gcr.io/${PROJECT_ID}/${_SERVICE_NAME}:latest'
-      - '-f'
-      - 'backend/Dockerfile'
-      - 'backend'
+      - '.'
 
   # Step 2: Push to Container Registry
   - name: 'gcr.io/cloud-builders/docker'
