@@ -1,5 +1,37 @@
 # ExpertAP - Project Context
 
+## ⚠️ STATUS CURENT (2024-12-25)
+
+**Deploy-ul funcționează, dar frontend-ul NU este complet funcțional!**
+
+| Component | Status | URL |
+|-----------|--------|-----|
+| Cloud Run | ✅ Running | https://expertap-api-850584928584.europe-west1.run.app/ |
+| Health Check | ✅ OK | /health (indică "healthy") |
+| API Docs | ✅ OK | /docs |
+| Frontend UI | ⚠️ Se vede | / |
+| Frontend Functions | ❌ NU funcționează | Toate funcțiile dau eroare |
+| Baza de Date | ❌ NU configurată | Rulează cu SKIP_DB=true |
+
+**CAUZA PROBABILĂ:** Baza de date NU este funcțională
+- Aplicația rulează cu `SKIP_DB=true` (fără bază de date)
+- Nu există Cloud SQL (PostgreSQL) configurat
+- Frontend-ul încearcă să acceseze date care nu există
+
+**DATE DISPONIBILE:**
+- **GCS Bucket:** `date-ap-raw/decizii-cnsc`
+- **Conținut:** ~3000 decizii CNSC în format text
+- **Format:** Conform convenției `BO{AN}_{NR_BO}_{COD_CRITICI}_CPV_{COD_CPV}_{SOLUTIE}.txt`
+
+**CE TREBUIE FĂCUT:**
+1. Configurare Cloud SQL (PostgreSQL + pgvector)
+2. Conectare aplicație la baza de date
+3. Conectare la bucket-ul GCS `date-ap-raw/decizii-cnsc`
+4. Import și parsare cele 3000 decizii CNSC
+5. Testare frontend cu date reale
+
+---
+
 ## Project Purpose and Scope
 
 **ExpertAP** is a business intelligence platform for the Romanian public procurement ecosystem. It transforms unstructured data (CNSC decisions, legislation, jurisprudence) into competitive advantage for domain actors.

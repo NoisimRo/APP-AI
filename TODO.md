@@ -1,14 +1,62 @@
 # ExpertAP - TODO
 
-## Current Sprint: Project Foundation
+## URGENT - Sesiunea Următoare
 
-### In Progress
-- [ ] Set up Docker development infrastructure
-- [ ] Create backend project structure (FastAPI)
-- [ ] Implement CNSC decision parser
+### ❌ PROBLEMA CURENTĂ: Frontend-ul nu funcționează
+**Status Deploy:** Deploy-ul s-a făcut cu succes, dar frontend-ul NU funcționează corect.
 
-### Blocked
-_(none)_
+**URL-uri:**
+- Frontend: https://expertap-api-850584928584.europe-west1.run.app/ (se afișează, dar nu funcționează)
+- Health: https://expertap-api-850584928584.europe-west1.run.app/health ✅ (indică "healthy")
+- API Docs: https://expertap-api-850584928584.europe-west1.run.app/docs
+
+**Problemă:** Frontend-ul se vede, dar NICIO funcție nu merge - toate dau eroare.
+
+**Cauza probabilă:** BAZA DE DATE NU ESTE FUNCȚIONALĂ
+- Aplicația rulează cu `SKIP_DB=true`
+- Nu există o bază de date PostgreSQL configurată
+- Frontend-ul încearcă să acceseze date care nu există
+
+### Ce trebuie făcut în sesiunea următoare:
+1. [ ] Configurare Cloud SQL (PostgreSQL cu pgvector)
+2. [ ] Conectare aplicație la baza de date
+3. [ ] Conectare la bucket-ul GCS cu decizii CNSC
+4. [ ] Import decizii din bucket în baza de date
+5. [ ] Testare frontend cu date reale
+
+### Date CNSC disponibile:
+- **GCS Bucket:** `date-ap-raw/decizii-cnsc`
+- **Conținut:** ~3000 decizii CNSC în format text
+- **Format fișiere:** Conform convenției `BO{AN}_{NR_BO}_{COD_CRITICI}_CPV_{COD_CPV}_{SOLUTIE}.txt`
+
+---
+
+## Completed în această sesiune (2024-12-25)
+
+### ✅ CI/CD Pipeline
+- [x] GitHub Actions CI cu:
+  - Backend Tests (flake8, pytest)
+  - Docker Build & Startup Test
+  - Frontend Build Check
+- [x] Cloud Build pentru deploy pe Cloud Run
+- [x] Health check endpoint funcțional
+
+### ✅ Deploy GCP
+- [x] Conectare GitHub cu Cloud Build
+- [x] Configurare Cloud Run
+- [x] Dockerfile unificat (frontend + backend)
+- [x] Deploy reușit la https://expertap-api-850584928584.europe-west1.run.app/
+
+### ✅ CNSC Parser
+- [x] Parser cu convenție de denumire: `BO{AN}_{NR_BO}_{COD_CRITICI}_CPV_{COD_CPV}_{SOLUTIE}.txt`
+- [x] Coduri critici (D1-D7, R1-R7, DAL, RAL)
+- [x] Extracție soluție din "CONSILIUL DECIDE:"
+- [x] Schema bază de date
+
+### ✅ Infrastructură
+- [x] FastAPI backend cu structură modulară
+- [x] Configurație opțională pentru baza de date (SKIP_DB)
+- [x] LLM abstraction layer (Gemini provider)
 
 ---
 
@@ -16,159 +64,63 @@ _(none)_
 
 ### P0 - MVP Core (Must Have)
 
-#### Infrastructure
-- [ ] Docker Compose setup (PostgreSQL, Redis, API)
-- [ ] PostgreSQL with pgvector extension
-- [ ] Environment configuration (.env)
-- [ ] Basic logging and error handling
-- [ ] Health check endpoints
+#### 🔴 Baza de Date și Date Reale
+- [ ] **URGENT**: Configurare Cloud SQL (PostgreSQL + pgvector)
+- [ ] Conectare la GCS bucket `date-ap-raw/decizii-cnsc`
+- [ ] Import și parsare cele 3000 decizii CNSC
+- [ ] Generare embeddings pentru semantic search
+- [ ] Testare frontend cu date reale
 
-#### Data Pipeline
-- [ ] CNSC decision parser (extract structured data from .txt)
-- [ ] Decision metadata extraction (case number, date, parties)
-- [ ] CPV code extraction
-- [ ] Criticism code classification (D1-D7, R1-R7)
-- [ ] Ruling extraction (ADMIS/RESPINS)
-- [ ] Text chunking for RAG
-- [ ] Embedding generation pipeline
-- [ ] Database schema for decisions
+#### Frontend Funcțional
+- [ ] Debugging și fix pentru frontend
+- [ ] Conectare frontend la API-uri backend cu date reale
+- [ ] Testare end-to-end a tuturor funcțiilor
 
 #### Search (Chatbot Foundation)
-- [ ] Semantic search endpoint (vector similarity)
+- [ ] Semantic search endpoint
 - [ ] Hybrid search (semantic + keyword)
-- [ ] Filter by metadata (CPV, criticism, ruling, article)
-- [ ] Search result ranking
-- [ ] Citation extraction and verification
+- [ ] Filter by metadata
 
 #### Chatbot "Intreaba ExpertAP"
-- [ ] Chat endpoint with conversation history
-- [ ] RAG pipeline (retrieve → augment → generate)
-- [ ] Citation verification (anti-hallucination)
-- [ ] Confidence level indicator
-- [ ] Suggested follow-up questions
-- [ ] Rate limiting per tier (5/20/unlimited)
+- [ ] RAG pipeline complet
+- [ ] Citation verification
+- [ ] Conversation history
 
-#### Authentication
-- [ ] Firebase Auth integration
-- [ ] User registration/login
-- [ ] Role-based access control (RBAC)
-- [ ] Tier management (free/premium)
-
-### P1 - MVP Features (Should Have)
-
-#### Legal Drafter (Contestation Generator)
-- [ ] Input form (facts, authority args, legal grounds)
-- [ ] Document upload (attribution docs, authority communication)
-- [ ] Contestation type classification (documentation vs result)
-- [ ] Criticism classification (D1-D7, R1-R7)
-- [ ] Similar winning cases search
-- [ ] Contestation structure generation (per Law 101/2016)
-- [ ] VERBATIM citation insertion with verification
-- [ ] .docx export
-
-#### Red Flags Detector
-- [ ] Document upload (terms of reference, data sheet)
-- [ ] Restrictive clause identification
-- [ ] Jurisprudence matching for each flag
-- [ ] Suggested remediation text
-- [ ] Risk level categorization (High/Medium/Low)
-- [ ] Report generation
-
-### P2 - Post-MVP Features
-
-#### Litigation Predictor
-- [ ] ML model for outcome prediction
-- [ ] Feature extraction from case description
-- [ ] Probability calculation with confidence interval
-- [ ] Positive/negative factor analysis
-- [ ] Recommended arguments
-- [ ] Similar case references
-
-#### Point of View Assistant (for Authorities)
-- [ ] Contestation upload and parsing
-- [ ] Attribution documentation upload
-- [ ] Counter-argument generation per criticism
-- [ ] VERBATIM citation from AC-winning cases
-- [ ] Weak points identification
-- [ ] Structured output generation
-
-#### Decision Drafting Assistant (for CNSC)
-- [ ] Multi-document upload (contestation, point of view, interventions)
-- [ ] Automatic summarization per section
-- [ ] Per-criticism analysis structure
-- [ ] Jurisprudence suggestions (CNSC, courts, CJUE)
-- [ ] Contradictory precedent identification
-- [ ] CNSC template output
-
-### P3 - Future Features
-
-#### Trend Spotter
-- [ ] Admission rate evolution per criticism type
-- [ ] Automatic alerts for trend changes
-- [ ] Comparative charts over time
-- [ ] Jurisprudential "reversals" detection
-
-#### Competitor Profile
-- [ ] Per-competitor analysis (contestations filed)
-- [ ] Success rate per competitor
-- [ ] Frequently used arguments
-- [ ] Relationship graph (competition patterns)
-
-#### Clarification Assistant
-- [ ] Attribution documentation analysis
-- [ ] Ambiguous zone identification
-- [ ] Clarification question suggestions
-- [ ] Jurisprudence for evasive AC responses
-
-#### Offer Drafting Assistant
-- [ ] Document checklist generation
-- [ ] Technical offer structure suggestion
-- [ ] Rejection risk identification
-- [ ] Sensitive area formulation suggestions
+### P1 - MVP Features
+- [ ] Legal Drafter
+- [ ] Red Flags Detector
+- [ ] Authentication (Firebase)
 
 ---
 
-## Technical Debt
-- [ ] Add comprehensive test suite
-- [ ] Set up CI/CD pipeline
-- [ ] Add API rate limiting
-- [ ] Implement caching layer
-- [ ] Add request/response logging
-- [ ] Set up monitoring and alerting
+## Fișiere Cheie
+
+| Fișier | Scop |
+|--------|------|
+| `/Dockerfile` | Build unificat frontend + backend |
+| `/backend/app/main.py` | Entry point FastAPI, servește static files |
+| `/backend/app/services/parser.py` | Parser pentru decizii CNSC |
+| `/backend/app/db/session.py` | Conexiune bază de date |
+| `/index.tsx` | Frontend React principal |
+| `/cloudbuild.yaml` | Configurare Cloud Build |
+| `/.github/workflows/ci.yml` | GitHub Actions CI |
 
 ---
 
-## Completed
+## GCP Project Info
 
-### 2024-12-24
-- [x] Analyze MVP codebase from Google AI Studio
-- [x] Create PROJECT_CONTEXT.md
-- [x] Create CONTRIBUTING.md
-- [x] Create TODO.md
+- **Project Name**: ExpertAPP
+- **Project ID**: gen-lang-client-0706147575
+- **Project Number**: 850584928584
+- **Region**: europe-west1
+- **Service URL**: https://expertap-api-850584928584.europe-west1.run.app/
 
----
-
-## Notes
-
-### MVP Scope
-The MVP focuses on:
-1. **Chatbot** - Core value proposition, grounded in CNSC decisions
-2. **Semantic Search** - Foundation for all features
-3. **Legal Drafter** - High-value premium feature for Economic Operators
-4. **Red Flags Detector** - High-value premium feature for Authorities
-
-### Key Success Metrics
-- Latency: <5s for chat responses (p95)
-- Citation accuracy: 100% (verified against database)
-- Search latency: <500ms (p95)
-- Uptime: 99.5%
-
-### Data Considerations
-- 10,000+ CNSC decisions to process
-- Need robust parsing for inconsistent document formats
-- Consider incremental processing for new decisions
-- Plan for growing data volume
+### GCS Bucket cu Date
+- **Bucket:** `date-ap-raw`
+- **Folder:** `decizii-cnsc`
+- **Număr fișiere:** ~3000 decizii CNSC
+- **Format:** Text (.txt)
 
 ---
 
-_Last updated: 2024-12-24_
+_Last updated: 2024-12-25_
