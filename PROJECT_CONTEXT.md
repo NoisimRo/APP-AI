@@ -7,19 +7,28 @@
 | Component | Status | URL |
 |-----------|--------|-----|
 | Cloud Run | ✅ Running | https://expertap-api-850584928584.europe-west1.run.app/ |
-| Health Check | ✅ OK | /health |
+| Health Check | ✅ OK | /health (indică "healthy") |
 | API Docs | ✅ OK | /docs |
 | Frontend UI | ⚠️ Se vede | / |
 | Frontend Functions | ❌ NU funcționează | Toate funcțiile dau eroare |
+| Baza de Date | ❌ NU configurată | Rulează cu SKIP_DB=true |
 
-**PROBLEMA:** Frontend-ul se încarcă, dar nicio funcție nu merge. Trebuie investigat:
-1. Ce API-uri apelează frontend-ul (`index.tsx`)
-2. Dacă backend-ul răspunde corect la acele API-uri
-3. Dacă există probleme de CORS sau URL-uri greșite
+**CAUZA PROBABILĂ:** Baza de date NU este funcțională
+- Aplicația rulează cu `SKIP_DB=true` (fără bază de date)
+- Nu există Cloud SQL (PostgreSQL) configurat
+- Frontend-ul încearcă să acceseze date care nu există
 
-**REFERINȚĂ:** Utilizatorul are o aplicație similară (flashcards) unde totul funcționează:
-- https://flashcards-492967174276.europe-west1.run.app/
-- https://flashcards-492967174276.europe-west1.run.app/api/health
+**DATE DISPONIBILE:**
+- **GCS Bucket:** `date-ap-raw/decizii-cnsc`
+- **Conținut:** ~3000 decizii CNSC în format text
+- **Format:** Conform convenției `BO{AN}_{NR_BO}_{COD_CRITICI}_CPV_{COD_CPV}_{SOLUTIE}.txt`
+
+**CE TREBUIE FĂCUT:**
+1. Configurare Cloud SQL (PostgreSQL + pgvector)
+2. Conectare aplicație la baza de date
+3. Conectare la bucket-ul GCS `date-ap-raw/decizii-cnsc`
+4. Import și parsare cele 3000 decizii CNSC
+5. Testare frontend cu date reale
 
 ---
 

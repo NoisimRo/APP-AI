@@ -6,28 +6,28 @@
 **Status Deploy:** Deploy-ul s-a făcut cu succes, dar frontend-ul NU funcționează corect.
 
 **URL-uri:**
-- Frontend: https://expertap-api-850584928584.europe-west1.run.app/
-- Health: https://expertap-api-850584928584.europe-west1.run.app/health ✅
+- Frontend: https://expertap-api-850584928584.europe-west1.run.app/ (se afișează, dar nu funcționează)
+- Health: https://expertap-api-850584928584.europe-west1.run.app/health ✅ (indică "healthy")
 - API Docs: https://expertap-api-850584928584.europe-west1.run.app/docs
 
 **Problemă:** Frontend-ul se vede, dar NICIO funcție nu merge - toate dau eroare.
 
-**Referință:** La aplicația flashcards, utilizatorul are deploy funcțional unde:
-- Frontend: https://flashcards-492967174276.europe-west1.run.app/
-- Backend: https://flashcards-492967174276.europe-west1.run.app/api/health
-- Ambele funcționează complet!
+**Cauza probabilă:** BAZA DE DATE NU ESTE FUNCȚIONALĂ
+- Aplicația rulează cu `SKIP_DB=true`
+- Nu există o bază de date PostgreSQL configurată
+- Frontend-ul încearcă să acceseze date care nu există
 
-### Ce trebuie investigat:
-1. [ ] Analizează frontend-ul din `index.tsx` - ce API-uri apelează?
-2. [ ] Verifică dacă API-urile din backend răspund corect
-3. [ ] Verifică dacă frontend-ul apelează URL-uri corecte (relative vs absolute)
-4. [ ] Compară cu aplicația flashcards pentru a înțelege structura corectă
-5. [ ] Verifică logurile din Cloud Run pentru erori
+### Ce trebuie făcut în sesiunea următoare:
+1. [ ] Configurare Cloud SQL (PostgreSQL cu pgvector)
+2. [ ] Conectare aplicație la baza de date
+3. [ ] Conectare la bucket-ul GCS cu decizii CNSC
+4. [ ] Import decizii din bucket în baza de date
+5. [ ] Testare frontend cu date reale
 
-### Ce NU am înțeles bine:
-- Utilizatorul vrea o aplicație COMPLET FUNCȚIONALĂ, nu doar frontend static servit
-- Frontend-ul trebuie să comunice corect cu backend-ul
-- Modelul de referință este aplicația flashcards
+### Date CNSC disponibile:
+- **GCS Bucket:** `date-ap-raw/decizii-cnsc`
+- **Conținut:** ~3000 decizii CNSC în format text
+- **Format fișiere:** Conform convenției `BO{AN}_{NR_BO}_{COD_CRITICI}_CPV_{COD_CPV}_{SOLUTIE}.txt`
 
 ---
 
@@ -64,16 +64,17 @@
 
 ### P0 - MVP Core (Must Have)
 
-#### 🔴 Frontend Funcțional
-- [ ] **URGENT**: Debugging și fix pentru frontend
-- [ ] Conectare frontend la API-uri backend
-- [ ] Testare end-to-end a tuturor funcțiilor
+#### 🔴 Baza de Date și Date Reale
+- [ ] **URGENT**: Configurare Cloud SQL (PostgreSQL + pgvector)
+- [ ] Conectare la GCS bucket `date-ap-raw/decizii-cnsc`
+- [ ] Import și parsare cele 3000 decizii CNSC
+- [ ] Generare embeddings pentru semantic search
+- [ ] Testare frontend cu date reale
 
-#### Data Pipeline
-- [ ] Database schema migration (Alembic)
-- [ ] Procesare decizii CNSC reale
-- [ ] Generare embeddings
-- [ ] Indexare în pgvector
+#### Frontend Funcțional
+- [ ] Debugging și fix pentru frontend
+- [ ] Conectare frontend la API-uri backend cu date reale
+- [ ] Testare end-to-end a tuturor funcțiilor
 
 #### Search (Chatbot Foundation)
 - [ ] Semantic search endpoint
@@ -98,6 +99,8 @@
 |--------|------|
 | `/Dockerfile` | Build unificat frontend + backend |
 | `/backend/app/main.py` | Entry point FastAPI, servește static files |
+| `/backend/app/services/parser.py` | Parser pentru decizii CNSC |
+| `/backend/app/db/session.py` | Conexiune bază de date |
 | `/index.tsx` | Frontend React principal |
 | `/cloudbuild.yaml` | Configurare Cloud Build |
 | `/.github/workflows/ci.yml` | GitHub Actions CI |
@@ -111,6 +114,12 @@
 - **Project Number**: 850584928584
 - **Region**: europe-west1
 - **Service URL**: https://expertap-api-850584928584.europe-west1.run.app/
+
+### GCS Bucket cu Date
+- **Bucket:** `date-ap-raw`
+- **Folder:** `decizii-cnsc`
+- **Număr fișiere:** ~3000 decizii CNSC
+- **Format:** Text (.txt)
 
 ---
 
