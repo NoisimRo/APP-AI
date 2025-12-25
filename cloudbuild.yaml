@@ -59,7 +59,7 @@ steps:
       - '--max-instances'
       - '3'
       - '--set-env-vars'
-      - 'ENVIRONMENT=production,DATABASE_URL=sqlite:///./test.db'
+      - 'ENVIRONMENT=production,SKIP_DB=true,DEBUG=false'
     waitFor: ['push']
 
 images:
