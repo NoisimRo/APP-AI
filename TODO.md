@@ -1,28 +1,52 @@
 # ExpertAP - TODO
 
-## URGENT - Sesiunea Următoare
+## URGENT - READY TO DEPLOY! 🚀
 
-### ❌ PROBLEMA CURENTĂ: Frontend-ul nu funcționează
-**Status Deploy:** Deploy-ul s-a făcut cu succes, dar frontend-ul NU funcționează corect.
+### ✅ SCRIPTURILE SUNT GATA - Rulează manual (Vezi QUICKSTART.md)
+
+**Status:** Toate scripturile și documentația sunt create. Trebuie doar rulate manual!
 
 **URL-uri:**
-- Frontend: https://expertap-api-850584928584.europe-west1.run.app/ (se afișează, dar nu funcționează)
+- Frontend: https://expertap-api-850584928584.europe-west1.run.app/ (se afișează, dar fără date)
 - Health: https://expertap-api-850584928584.europe-west1.run.app/health ✅ (indică "healthy")
 - API Docs: https://expertap-api-850584928584.europe-west1.run.app/docs
 
-**Problemă:** Frontend-ul se vede, dar NICIO funcție nu merge - toate dau eroare.
+**Situație:** Aplicația rulează cu `SKIP_DB=true` - trebuie configurată baza de date.
 
-**Cauza probabilă:** BAZA DE DATE NU ESTE FUNCȚIONALĂ
-- Aplicația rulează cu `SKIP_DB=true`
-- Nu există o bază de date PostgreSQL configurată
-- Frontend-ul încearcă să acceseze date care nu există
+**Soluție pregătită - Vezi QUICKSTART.md pentru instrucțiuni complete!**
 
-### Ce trebuie făcut în sesiunea următoare:
-1. [ ] Configurare Cloud SQL (PostgreSQL cu pgvector)
-2. [ ] Conectare aplicație la baza de date
-3. [ ] Conectare la bucket-ul GCS cu decizii CNSC
-4. [ ] Import decizii din bucket în baza de date
-5. [ ] Testare frontend cu date reale
+### 📋 Pași pentru finalizare (MANUAL - 15-20 minute total):
+
+1. [ ] **Rulează setup Cloud SQL** (5 min) - Vezi QUICKSTART.md sau docs/SETUP_DATABASE.md
+   ```bash
+   ./scripts/setup_cloud_sql.sh
+   ```
+
+2. [ ] **Conectează Cloud Run** (2 min) - Vezi docs/CLOUD_RUN_DATABASE_CONFIG.md
+   ```bash
+   gcloud run services update expertap-api \
+       --add-cloudsql-instances=CONNECTION_NAME \
+       --update-env-vars="DATABASE_URL=...,SKIP_DB=false"
+   ```
+
+3. [ ] **Importă datele** (10-15 min)
+   ```bash
+   python scripts/import_decisions_from_gcs.py --create-tables
+   ```
+
+4. [ ] **Testare completă**
+   ```bash
+   curl https://expertap-api-850584928584.europe-west1.run.app/health
+   ```
+
+### 📚 Documentație completă creată:
+- ✅ **QUICKSTART.md** - Ghid rapid în 3 pași
+- ✅ **docs/SETUP_DATABASE.md** - Setup detaliat Cloud SQL
+- ✅ **docs/CLOUD_RUN_DATABASE_CONFIG.md** - Configurare conexiune
+- ✅ **scripts/setup_cloud_sql.sh** - Script automat Cloud SQL
+- ✅ **scripts/import_decisions_from_gcs.py** - Script import GCS
+- ✅ **scripts/init_database.sql** - SQL inițializare
+- ✅ **backend/alembic/** - Migrations configurate
 
 ### Date CNSC disponibile:
 - **GCS Bucket:** `date-ap-raw/decizii-cnsc`
@@ -31,7 +55,34 @@
 
 ---
 
-## Completed în această sesiune (2024-12-25)
+## Completed în sesiunea curentă (2025-12-25) 🎉
+
+### ✅ Database Setup - Toate scripturile create!
+- [x] **Script automat Cloud SQL**: `scripts/setup_cloud_sql.sh`
+  - Creare PostgreSQL 15 cu pgvector
+  - Configurare automată database și user
+  - Generare password securizat
+- [x] **Script import GCS**: `scripts/import_decisions_from_gcs.py`
+  - Conectare la bucket GCS
+  - Download și parsare decizii
+  - Import batch în database
+  - Suport pentru --limit, --create-tables
+- [x] **Alembic configuration**
+  - alembic.ini configurat
+  - alembic/env.py cu async support
+  - Migration inițială completă
+- [x] **Migrații database**: `backend/alembic/versions/20251225_0001_initial_schema.py`
+  - Toate tabelele (decizii_cnsc, argumentare_critica, etc.)
+  - Indexuri optimizate
+  - pgvector și pg_trgm extensions
+- [x] **SQL inițializare**: `scripts/init_database.sql`
+- [x] **Documentație completă**:
+  - QUICKSTART.md - Ghid rapid 3 pași
+  - docs/SETUP_DATABASE.md - Setup detaliat
+  - docs/CLOUD_RUN_DATABASE_CONFIG.md - Configurare
+- [x] **Requirements updated**: google-cloud-storage adăugat
+
+## Completed în sesiunea anterioară (2024-12-25)
 
 ### ✅ CI/CD Pipeline
 - [x] GitHub Actions CI cu:
@@ -64,10 +115,14 @@
 
 ### P0 - MVP Core (Must Have)
 
-#### 🔴 Baza de Date și Date Reale
-- [ ] **URGENT**: Configurare Cloud SQL (PostgreSQL + pgvector)
-- [ ] Conectare la GCS bucket `date-ap-raw/decizii-cnsc`
-- [ ] Import și parsare cele 3000 decizii CNSC
+#### 🟢 Baza de Date și Date Reale - SCRIPTURILE SUNT GATA!
+- [x] **DONE**: Scripturile pentru Cloud SQL create (vezi QUICKSTART.md)
+- [x] **DONE**: Script import din GCS creat
+- [x] **DONE**: Alembic migrations configurate
+- [x] **DONE**: Documentație completă
+- [ ] **MANUAL**: Rulare setup Cloud SQL (5 min) - Vezi QUICKSTART.md
+- [ ] **MANUAL**: Conectare Cloud Run (2 min) - Vezi docs/CLOUD_RUN_DATABASE_CONFIG.md
+- [ ] **MANUAL**: Import date (10-15 min) - Rulează `python scripts/import_decisions_from_gcs.py`
 - [ ] Generare embeddings pentru semantic search
 - [ ] Testare frontend cu date reale
 
@@ -123,4 +178,4 @@
 
 ---
 
-_Last updated: 2024-12-25_
+_Last updated: 2025-12-25 - Database scripts completed! 🎉_
