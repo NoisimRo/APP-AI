@@ -11,7 +11,25 @@ ExpertAP transforms unstructured CNSC (National Council for Solving Complaints) 
 - **Legal Drafter** - Auto-generate complaints with verified citations
 - **Red Flags Detector** - Identify restrictive clauses in procurement documentation
 
-## Quick Start
+## 🚀 Cloud Deployment (Production)
+
+**Live Application:** https://expertap-api-850584928584.europe-west1.run.app/
+
+The application is deployed on Google Cloud Platform (Cloud Run). To set up the database and import data:
+
+**📖 See [QUICKSTART.md](QUICKSTART.md) for complete setup instructions (15-20 minutes)**
+
+Quick overview:
+1. Run `./scripts/setup_cloud_sql.sh` to create Cloud SQL instance
+2. Connect Cloud Run to database
+3. Import ~3000 CNSC decisions: `python scripts/import_decisions_from_gcs.py`
+
+For detailed instructions, see:
+- [QUICKSTART.md](QUICKSTART.md) - Quick 3-step guide
+- [docs/SETUP_DATABASE.md](docs/SETUP_DATABASE.md) - Detailed setup
+- [docs/CLOUD_RUN_DATABASE_CONFIG.md](docs/CLOUD_RUN_DATABASE_CONFIG.md) - Cloud Run configuration
+
+## Quick Start (Local Development)
 
 ### Prerequisites
 
@@ -121,6 +139,12 @@ pytest --cov=app --cov-report=html  # With coverage
 
 ## Documentation
 
+### Getting Started
+- **[QUICKSTART.md](QUICKSTART.md)** - Quick setup guide for cloud deployment ⭐
+- [docs/SETUP_DATABASE.md](docs/SETUP_DATABASE.md) - Detailed database setup
+- [docs/CLOUD_RUN_DATABASE_CONFIG.md](docs/CLOUD_RUN_DATABASE_CONFIG.md) - Cloud Run configuration
+
+### Development
 - [PROJECT_CONTEXT.md](PROJECT_CONTEXT.md) - Architecture, tech stack, conventions
 - [CONTRIBUTING.md](CONTRIBUTING.md) - Development workflow, git strategy
 - [TODO.md](TODO.md) - Feature backlog and progress
