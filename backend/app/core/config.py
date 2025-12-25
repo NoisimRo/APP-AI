@@ -1,7 +1,7 @@
 """Application configuration using Pydantic Settings."""
 
 from functools import lru_cache
-from typing import Literal
+from typing import Literal, Optional
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -17,13 +17,14 @@ class Settings(BaseSettings):
 
     # Application
     app_name: str = "ExpertAP"
-    environment: Literal["development", "staging", "production"] = "development"
+    environment: Literal["development", "staging", "production", "test"] = "development"
     debug: bool = True
     log_level: str = "DEBUG"
     secret_key: str = "change-me-in-production"
 
-    # Database
-    database_url: str = "postgresql://expertap:expertap_dev@localhost:5432/expertap"
+    # Database - Optional for demo/test mode
+    database_url: Optional[str] = None
+    skip_db: bool = False  # Set to True to run without database
 
     # Redis
     redis_url: str = "redis://localhost:6379"
@@ -55,9 +56,26 @@ class Settings(BaseSettings):
         return self.environment == "production"
 
     @property
-    def async_database_url(self) -> str:
+    def has_database(self) -> bool:
+        """Check if database is configured."""
+        return bool(self.database_url) and not self.skip_db
+
+    @property
+    def async_database_url(self) -> Optional[str]:
         """Get async database URL for SQLAlchemy."""
-        return self.database_url.replace("postgresql://", "postgresql+asyncpg://")
+        if not self.database_url:
+            return None
+
+        url = self.database_url
+
+        # Handle different database types
+        if url.startswith("postgresql://"):
+            return url.replace("postgresql://", "postgresql+asyncpg://")
+        elif url.startswith("sqlite:"):
+            # SQLite async requires aiosqlite
+            return url.replace("sqlite:", "sqlite+aiosqlite:")
+        else:
+            return url
 
 
 @lru_cache
