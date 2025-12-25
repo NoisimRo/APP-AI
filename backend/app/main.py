@@ -1,84 +1,84 @@
 """ExpertAP FastAPI Application Entry Point."""
 
+import os
+import sys
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api.v1 import api_router
-from app.core.config import get_settings
-from app.core.logging import get_logger, setup_logging
-from app.db.session import init_db, is_db_available, close_db
-
-settings = get_settings()
-logger = get_logger(__name__)
+# Early startup logging for debugging
+print(f"[STARTUP] Python: {sys.version}", flush=True)
+print(f"[STARTUP] PORT: {os.environ.get('PORT', '8000')}", flush=True)
+print(f"[STARTUP] SKIP_DB: {os.environ.get('SKIP_DB', 'false')}", flush=True)
+print(f"[STARTUP] ENVIRONMENT: {os.environ.get('ENVIRONMENT', 'development')}", flush=True)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan handler for startup and shutdown."""
-    # Startup
-    setup_logging()
-    logger.info(
-        "starting_application",
-        app_name=settings.app_name,
-        environment=settings.environment,
-    )
+    print("[LIFESPAN] Starting...", flush=True)
 
-    # Initialize database (optional - app runs without it)
-    db_initialized = await init_db()
-    if db_initialized:
-        logger.info("database_initialized")
+    # Only initialize database if not skipped
+    skip_db = os.environ.get("SKIP_DB", "false").lower() == "true"
+
+    if not skip_db:
+        try:
+            from app.db.session import init_db
+            db_ok = await init_db()
+            print(f"[LIFESPAN] Database: {'OK' if db_ok else 'SKIPPED'}", flush=True)
+        except Exception as e:
+            print(f"[LIFESPAN] Database error (non-fatal): {e}", flush=True)
     else:
-        logger.warning("running_without_database")
+        print("[LIFESPAN] Database skipped (SKIP_DB=true)", flush=True)
 
+    print("[LIFESPAN] Ready!", flush=True)
     yield
-
-    # Shutdown
-    await close_db()
-    logger.info("shutting_down_application")
+    print("[LIFESPAN] Shutting down...", flush=True)
 
 
+# Create FastAPI app
 app = FastAPI(
-    title=settings.app_name,
+    title="ExpertAP",
     description="Business Intelligence Platform for Romanian Public Procurement",
     version="0.1.0",
-    docs_url="/docs" if not settings.is_production else None,
-    redoc_url="/redoc" if not settings.is_production else None,
     lifespan=lifespan,
 )
 
-# CORS middleware
+# CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Allow all origins for Cloud Run
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Include API routes
-app.include_router(api_router, prefix="/api/v1")
-
 
 @app.get("/health")
 async def health_check():
     """Health check endpoint for Cloud Run."""
-    return {
-        "status": "healthy",
-        "app": settings.app_name,
-        "environment": settings.environment,
-        "database": "connected" if is_db_available() else "not_configured",
-    }
+    return {"status": "healthy", "version": "0.1.0"}
 
 
 @app.get("/")
 async def root():
-    """Root endpoint with API information."""
+    """Root endpoint."""
     return {
-        "app": settings.app_name,
-        "version": "0.1.0",
+        "app": "ExpertAP",
         "status": "running",
-        "docs": "/docs" if not settings.is_production else None,
+        "version": "0.1.0",
         "health": "/health",
     }
+
+
+# Load API routes
+try:
+    from app.api.v1 import api_router
+    app.include_router(api_router, prefix="/api/v1")
+    print("[STARTUP] API routes loaded", flush=True)
+except Exception as e:
+    print(f"[STARTUP] API routes failed: {e}", flush=True)
+
+
+print("[STARTUP] FastAPI app ready", flush=True)
