@@ -60,8 +60,6 @@ steps:
       - '3'
       - '--set-env-vars'
       - 'ENVIRONMENT=production,SKIP_DB=true,DEBUG=false,LOG_LEVEL=INFO'
-      - '--cpu-boost'
-      - '--startup-cpu-boost'
     waitFor: ['push']
 
 images:
