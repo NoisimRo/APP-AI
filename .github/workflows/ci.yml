@@ -61,7 +61,7 @@ jobs:
 
       - name: Build Docker image
         run: |
-          docker build -t expertap-api:test ./backend
+          docker build -t expertap-api:test .
 
       - name: Test container starts and responds
         run: |

@@ -1,15 +1,14 @@
 # Cloud Build configuration for ExpertAP
-# Deploys to Cloud Run after running tests
+# Deploys frontend + backend to Cloud Run
 
 substitutions:
   _SERVICE_NAME: expertap-api
   _REGION: europe-west1
 
 steps:
-  # Step 1: Build the Docker image
+  # Step 1: Build the Docker image (frontend + backend)
   - name: 'gcr.io/cloud-builders/docker'
     id: 'build'
-    dir: 'backend'
     args:
       - 'build'
       - '-t'
