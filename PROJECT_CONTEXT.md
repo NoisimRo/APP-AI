@@ -1,5 +1,28 @@
 # ExpertAP - Project Context
 
+## ⚠️ STATUS CURENT (2024-12-25)
+
+**Deploy-ul funcționează, dar frontend-ul NU este complet funcțional!**
+
+| Component | Status | URL |
+|-----------|--------|-----|
+| Cloud Run | ✅ Running | https://expertap-api-850584928584.europe-west1.run.app/ |
+| Health Check | ✅ OK | /health |
+| API Docs | ✅ OK | /docs |
+| Frontend UI | ⚠️ Se vede | / |
+| Frontend Functions | ❌ NU funcționează | Toate funcțiile dau eroare |
+
+**PROBLEMA:** Frontend-ul se încarcă, dar nicio funcție nu merge. Trebuie investigat:
+1. Ce API-uri apelează frontend-ul (`index.tsx`)
+2. Dacă backend-ul răspunde corect la acele API-uri
+3. Dacă există probleme de CORS sau URL-uri greșite
+
+**REFERINȚĂ:** Utilizatorul are o aplicație similară (flashcards) unde totul funcționează:
+- https://flashcards-492967174276.europe-west1.run.app/
+- https://flashcards-492967174276.europe-west1.run.app/api/health
+
+---
+
 ## Project Purpose and Scope
 
 **ExpertAP** is a business intelligence platform for the Romanian public procurement ecosystem. It transforms unstructured data (CNSC decisions, legislation, jurisprudence) into competitive advantage for domain actors.
