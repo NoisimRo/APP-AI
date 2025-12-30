@@ -46,7 +46,7 @@ class RedFlagsAnalyzer:
         Args:
             llm_provider: Optional LLM provider for analysis
         """
-        self.llm = llm_provider or GeminiProvider(model="gemini-1.5-pro")
+        self.llm = llm_provider or GeminiProvider(model="gemini-3-pro-preview")
 
     async def search_related_decisions(
         self,
