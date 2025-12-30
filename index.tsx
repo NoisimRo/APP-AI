@@ -269,31 +269,43 @@ const App = () => {
     setIsLoading(true);
 
     try {
-      const contextParts = getActiveContextParts();
-      
-      const contents = [
-        ...chatMessages.map(m => ({ role: m.role, parts: [{ text: m.text }] })),
-        { 
-          role: 'user', 
-          parts: [
-            ...contextParts, 
-            { text: userMsg }
-          ] 
-        }
-      ];
-
-      const response = await ai.models.generateContent({
-        model: 'gemini-3-flash-preview',
-        contents: contents,
-        config: {
-          systemInstruction: "Ești ExpertAP, un consultant senior în achiziții publice. Răspunde concis, citând legislația din România (Legea 98/2016). Folosește contextul documentelor atașate dacă există."
-        }
+      // Call backend API instead of Gemini directly
+      const response = await fetch('/api/v1/chat/', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          message: userMsg,
+          history: chatMessages.map(m => ({
+            role: m.role === 'model' ? 'assistant' : m.role,
+            content: m.text
+          }))
+        })
       });
-      
-      setChatMessages(prev => [...prev, { role: 'model', text: response.text || "" }]);
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const data = await response.json();
+
+      // Add response with citations if available
+      let responseText = data.message;
+      if (data.citations && data.citations.length > 0) {
+        responseText += "\n\n📚 Surse:";
+        data.citations.forEach((citation: any) => {
+          responseText += `\n- ${citation.decision_id}`;
+        });
+      }
+
+      setChatMessages(prev => [...prev, { role: 'model', text: responseText }]);
     } catch (err) {
       console.error(err);
-      setChatMessages(prev => [...prev, { role: 'model', text: "Eroare la procesarea cererii. Verifică dimensiunea fișierelor active." }]);
+      setChatMessages(prev => [...prev, {
+        role: 'model',
+        text: "Eroare la procesarea cererii. Asigură-te că backend-ul este pornit și conectat la baza de date."
+      }]);
     } finally {
       setIsLoading(false);
     }
@@ -806,7 +818,7 @@ const App = () => {
             <MessageSquare className="text-blue-500" size={18} /> 
             ExpertAP Chat
          </h2>
-         <span className="text-xs text-slate-500 bg-slate-100 px-2 py-1 rounded">Context: {activeFiles.length} documente active</span>
+         <span className="text-xs text-slate-500 bg-slate-100 px-2 py-1 rounded">🗄️ Conectat la baza de date CNSC</span>
       </div>
       <div className="flex-1 overflow-y-auto p-6 space-y-6 bg-slate-50/50">
         {chatMessages.length === 0 && (
@@ -815,7 +827,7 @@ const App = () => {
                 <MessageSquare size={32} className="text-blue-500" />
              </div>
              <h3 className="text-slate-800 font-bold mb-2">Cu ce te pot ajuta astăzi?</h3>
-             <p className="text-sm max-w-md mx-auto">Pot analiza documentele active din Data Lake sau pot răspunde la întrebări generale despre legislație.</p>
+             <p className="text-sm max-w-md mx-auto">Pot răspunde la întrebări despre deciziile CNSC din baza de date sau despre legislația în achiziții publice.</p>
            </div>
         )}
         {chatMessages.map((msg, i) => (
