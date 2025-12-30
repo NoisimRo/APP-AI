@@ -28,7 +28,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
 from app.core.logging import get_logger
-from app.db.session import init_db, async_session_factory, Base
+from app.db.session import init_db, Base
 from app.db import session as db_session
 from app.models.decision import DecizieCNSC, ArgumentareCritica
 from app.services.parser import parse_decision_text
@@ -219,7 +219,7 @@ class DecisionImporter:
         for i in range(0, len(files), batch_size):
             batch = files[i:i + batch_size]
 
-            async with async_session_factory() as session:
+            async with db_session.async_session_factory() as session:
                 for blob_name in batch:
                     try:
                         # Download file
