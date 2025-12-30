@@ -135,6 +135,18 @@ class DecisionImporter:
             # Parse decision
             parsed = parse_decision_text(content, source_file=filename)
 
+            # Skip decisions with invalid parsing (an_bo=0 or numar_bo=0)
+            # These would violate the unique constraint ix_decizii_bo_unique
+            if parsed.an_bo == 0 or parsed.numar_bo == 0:
+                logger.warning(
+                    "decision_skipped_invalid_parsing",
+                    filename=filename,
+                    an_bo=parsed.an_bo,
+                    numar_bo=parsed.numar_bo,
+                    reason="Invalid BO metadata (would violate unique constraint)",
+                )
+                return None
+
             # Check if already exists
             result = await session.execute(
                 select(DecizieCNSC).where(DecizieCNSC.filename == filename)
