@@ -97,9 +97,7 @@ def is_db_available() -> bool:
 
 async def get_session() -> AsyncSession:
     """Get a database session for dependency injection."""
-    # Access the module-level variable dynamically, not the imported value
-    global async_session_factory
-
+    # Access module-level variable - this resolves at runtime, not import time
     if async_session_factory is None:
         raise RuntimeError("Database not initialized")
 
