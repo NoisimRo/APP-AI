@@ -35,7 +35,7 @@ class RAGService:
         Args:
             llm_provider: Optional LLM provider. If not provided, creates new GeminiProvider.
         """
-        self.llm = llm_provider or GeminiProvider(model="gemini-1.5-flash")
+        self.llm = llm_provider or GeminiProvider(model="gemini-3-flash-preview")
 
     async def search_decisions(
         self,
