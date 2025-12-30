@@ -2,13 +2,13 @@
 """Import CNSC decisions from GCS bucket to database.
 
 This script:
-1. Connects to GCS bucket (date-ap-raw/decizii-cnsc)
+1. Connects to GCS bucket (date-expert-app/decizii-cnsc)
 2. Downloads and parses decision files
 3. Saves to PostgreSQL database
 4. Generates embeddings for semantic search
 
 Usage:
-    python scripts/import_decisions_from_gcs.py --bucket date-ap-raw --folder decizii-cnsc
+    python scripts/import_decisions_from_gcs.py --bucket date-expert-app --folder decizii-cnsc
     python scripts/import_decisions_from_gcs.py --limit 100  # Import only first 100
     python scripts/import_decisions_from_gcs.py --skip-embeddings  # Skip embedding generation
 """
@@ -283,8 +283,8 @@ async def main():
 
     parser.add_argument(
         "--bucket",
-        default="date-ap-raw",
-        help="GCS bucket name (default: date-ap-raw)",
+        default="date-expert-app",
+        help="GCS bucket name (default: date-expert-app)",
     )
     parser.add_argument(
         "--folder",
