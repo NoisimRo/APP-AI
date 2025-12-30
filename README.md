@@ -4,6 +4,8 @@
 
 ExpertAP transforms unstructured CNSC (National Council for Solving Complaints) decisions into actionable intelligence for public procurement professionals.
 
+🚀 **Live Demo:** https://expertap-api-850584928584.europe-west1.run.app/
+
 ## Features
 
 - **AI Chatbot** - Ask questions in natural language, get answers grounded in CNSC jurisprudence
