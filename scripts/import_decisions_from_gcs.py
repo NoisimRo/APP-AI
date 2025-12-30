@@ -28,7 +28,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
 from app.core.logging import get_logger
-from app.db.session import init_db, async_session_factory, Base, engine
+from app.db.session import init_db, async_session_factory, Base
+from app.db import session as db_session
 from app.models.decision import DecizieCNSC, ArgumentareCritica
 from app.services.parser import parse_decision_text
 
@@ -262,7 +263,10 @@ async def create_tables():
     """Create database tables."""
     logger.info("creating_database_tables")
 
-    async with engine.begin() as conn:
+    if db_session.engine is None:
+        raise RuntimeError("Database engine not initialized. Call init_db() first.")
+
+    async with db_session.engine.begin() as conn:
         # Enable pgvector extension
         await conn.execute("CREATE EXTENSION IF NOT EXISTS vector")
         await conn.execute("CREATE EXTENSION IF NOT EXISTS pg_trgm")
