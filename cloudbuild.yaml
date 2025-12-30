@@ -58,7 +58,7 @@ steps:
       - '--max-instances'
       - '3'
       - '--set-env-vars'
-      - 'ENVIRONMENT=production,SKIP_DB=true,DEBUG=false,LOG_LEVEL=INFO'
+      - 'ENVIRONMENT=production,SKIP_DB=false,DEBUG=false,LOG_LEVEL=INFO'
     waitFor: ['push']
 
 images:
