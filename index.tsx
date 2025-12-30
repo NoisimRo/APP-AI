@@ -152,6 +152,12 @@ const App = () => {
   const [clarificationClause, setClarificationClause] = useState("");
   const [memoTopic, setMemoTopic] = useState("");
 
+  // Red Flags States
+  const [redFlagsText, setRedFlagsText] = useState("");
+  const [redFlagsResults, setRedFlagsResults] = useState<any[]>([]);
+  const [redFlagsTab, setRedFlagsTab] = useState<'manual' | 'upload'>('manual');
+  const [uploadedDocument, setUploadedDocument] = useState<{name: string, text: string} | null>(null);
+
   const chatEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -269,31 +275,43 @@ const App = () => {
     setIsLoading(true);
 
     try {
-      const contextParts = getActiveContextParts();
-      
-      const contents = [
-        ...chatMessages.map(m => ({ role: m.role, parts: [{ text: m.text }] })),
-        { 
-          role: 'user', 
-          parts: [
-            ...contextParts, 
-            { text: userMsg }
-          ] 
-        }
-      ];
-
-      const response = await ai.models.generateContent({
-        model: 'gemini-3-flash-preview',
-        contents: contents,
-        config: {
-          systemInstruction: "Ești ExpertAP, un consultant senior în achiziții publice. Răspunde concis, citând legislația din România (Legea 98/2016). Folosește contextul documentelor atașate dacă există."
-        }
+      // Call backend API instead of Gemini directly
+      const response = await fetch('/api/v1/chat/', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          message: userMsg,
+          history: chatMessages.map(m => ({
+            role: m.role === 'model' ? 'assistant' : m.role,
+            content: m.text
+          }))
+        })
       });
-      
-      setChatMessages(prev => [...prev, { role: 'model', text: response.text || "" }]);
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const data = await response.json();
+
+      // Add response with citations if available
+      let responseText = data.message;
+      if (data.citations && data.citations.length > 0) {
+        responseText += "\n\n📚 Surse:";
+        data.citations.forEach((citation: any) => {
+          responseText += `\n- ${citation.decision_id}`;
+        });
+      }
+
+      setChatMessages(prev => [...prev, { role: 'model', text: responseText }]);
     } catch (err) {
       console.error(err);
-      setChatMessages(prev => [...prev, { role: 'model', text: "Eroare la procesarea cererii. Verifică dimensiunea fișierelor active." }]);
+      setChatMessages(prev => [...prev, {
+        role: 'model',
+        text: "Eroare la procesarea cererii. Asigură-te că backend-ul este pornit și conectat la baza de date."
+      }]);
     } finally {
       setIsLoading(false);
     }
@@ -334,39 +352,91 @@ const App = () => {
     }
   };
 
-  const handleRedFlags = async () => {
-    if (activeFiles.length === 0) {
-      alert("Selectează cel puțin un fișier activ (Caiet de Sarcini) din Data Lake.");
+  const handleDocumentUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    // Check file type
+    const allowedTypes = ['.txt', '.md', '.pdf'];
+    const extension = '.' + file.name.split('.').pop()?.toLowerCase();
+    if (!allowedTypes.includes(extension)) {
+      alert('Tip de fișier nesuportat. Folosește .txt, .md sau .pdf');
       return;
     }
+
     setIsLoading(true);
-    setGeneratedContent("");
+    try {
+      // Convert to base64
+      const base64 = await fileToBase64(file);
+
+      // Call backend to extract text
+      const response = await fetch('/api/v1/documents/analyze', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          filename: file.name,
+          content: base64,
+          mime_type: file.type
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const data = await response.json();
+      setUploadedDocument({
+        name: file.name,
+        text: data.text
+      });
+      setRedFlagsText(data.text);
+
+    } catch (err) {
+      console.error(err);
+      alert('Eroare la procesarea documentului. Verifică că backend-ul este pornit.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleRedFlags = async () => {
+    const textToAnalyze = redFlagsTab === 'upload' && uploadedDocument
+      ? uploadedDocument.text
+      : redFlagsText;
+
+    if (!textToAnalyze || textToAnalyze.trim().length < 10) {
+      alert("Introduceți text pentru analiză (min. 10 caractere) sau încărcați un document.");
+      return;
+    }
+
+    setIsLoading(true);
+    setRedFlagsResults([]);
 
     try {
-      const parts = [
-        ...getActiveContextParts(),
-        {
-          text: `
-        Analizează documentația atașată. Identifică "Steaguri Roșii" (clauze restrictive/ilegale).
-        Pentru fiecare:
-        1. Clauza originală.
-        2. Riscul juridic.
-        3. Strategie de "Imunizare" (Clarificare propusă).
-        
-        Gândește profund la implicațiile subtile ale specificațiilor tehnice.
-      ` }
-      ];
-
-      const response = await ai.models.generateContent({
-        model: 'gemini-3-pro-preview',
-        contents: { parts },
-        config: {
-          thinkingConfig: { thinkingBudget: 2048 }
-        }
+      // Call backend Red Flags API
+      const response = await fetch('/api/v1/redflags/', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          text: textToAnalyze,
+          use_jurisprudence: true
+        })
       });
-      setGeneratedContent(response.text || "");
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const data = await response.json();
+      setRedFlagsResults(data.red_flags || []);
+
     } catch (err) {
-      setGeneratedContent("Eroare la analiza documentelor.");
+      console.error(err);
+      alert('Eroare la analiza documentului. Verifică că backend-ul este pornit.');
     } finally {
       setIsLoading(false);
     }
@@ -392,33 +462,37 @@ const App = () => {
   };
 
   const handleRAGMemo = async () => {
-    if (activeFiles.length === 0) {
-      alert("Selectează fișiere relevante din Data Lake pentru a genera memo-ul.");
+    if (!memoTopic || memoTopic.trim().length < 3) {
+      alert("Introduceți un topic pentru memo juridic (min. 3 caractere).");
       return;
     }
+
     setIsLoading(true);
     setGeneratedContent("");
 
     try {
-      const parts = [
-        ...getActiveContextParts(),
-        { text: `
-        Folosind DOAR documentele atașate ca jurisprudență:
-        Redactează un Memo Juridic pe tema: "${memoTopic}".
-        Analizează cum s-a pronunțat CNSC în cazurile atașate și estimează șansele de succes.
-      `}
-      ];
-
-      const response = await ai.models.generateContent({
-        model: 'gemini-3-pro-preview',
-        contents: { parts },
-        config: {
-           thinkingConfig: { thinkingBudget: 4096 } 
-        }
+      // Call backend RAG Memo API
+      const response = await fetch('/api/v1/ragmemo/', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          topic: memoTopic,
+          max_decisions: 5
+        })
       });
-      setGeneratedContent(response.text || "");
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const data = await response.json();
+      setGeneratedContent(data.memo);
+
     } catch (err) {
-      setGeneratedContent("Eroare la generarea memo-ului.");
+      console.error(err);
+      setGeneratedContent("Eroare la generarea memo-ului. Verifică că backend-ul este pornit și conectat la baza de date.");
     } finally {
       setIsLoading(false);
     }
@@ -604,131 +678,153 @@ const App = () => {
     </div>
   );
 
-  const renderDataLake = () => (
-    <div className="h-full flex flex-col bg-slate-50">
-      <div className="p-6 border-b border-slate-200 bg-white shrink-0">
-        <div className="flex justify-between items-start mb-4">
+  const renderDataLake = () => {
+    // Filter decisions based on search query
+    const filteredDecisions = apiDecisions.filter(dec => {
+      const searchLower = fileSearch.toLowerCase();
+      return (
+        dec.filename?.toLowerCase().includes(searchLower) ||
+        dec.numar_decizie?.toString().includes(searchLower) ||
+        dec.contestator?.toLowerCase().includes(searchLower) ||
+        dec.autoritate_contractanta?.toLowerCase().includes(searchLower) ||
+        dec.coduri_critici?.some((c: string) => c.toLowerCase().includes(searchLower))
+      );
+    });
+
+    return (
+      <div className="h-full flex flex-col bg-slate-50">
+        <div className="p-6 border-b border-slate-200 bg-white shrink-0">
+          <div className="flex justify-between items-start mb-4">
             <div>
               <h2 className="text-xl font-bold text-slate-800 flex items-center gap-2">
                 <Database className="text-blue-600" /> Data Lake
               </h2>
               <div className="flex items-center gap-2 mt-1">
-                 <div className="flex items-center gap-1.5 bg-blue-50 text-blue-700 px-2 py-0.5 rounded border border-blue-100 text-xs font-mono">
-                    <Wifi size={12} />
-                    s3://date-ap-raw/decizii-cnsc
-                 </div>
-                 <span className={`text-xs px-2 py-0.5 rounded font-medium ${files.length > 0 ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-500'}`}>
-                    {files.length > 0 ? 'Online' : 'Offline'}
-                 </span>
+                <div className="flex items-center gap-1.5 bg-green-50 text-green-700 px-2 py-0.5 rounded border border-green-100 text-xs font-medium">
+                  <Wifi size={12} />
+                  Conectat la baza de date
+                </div>
+                <span className="text-xs px-2 py-0.5 rounded font-medium bg-blue-100 text-blue-700">
+                  PostgreSQL
+                </span>
               </div>
             </div>
-            
-            <div className="flex gap-2">
-               <button 
-                  onClick={simulateSync}
-                  className="flex items-center gap-2 bg-slate-900 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-slate-800 transition shadow-sm"
-               >
-                 {isUploading ? <Loader2 size={16} className="animate-spin"/> : <RefreshCw size={16} />}
-                 {isUploading ? "Se încarcă..." : "Sincronizare Bucket"}
-               </button>
-            </div>
-        </div>
-        
-        {/* Status Bar */}
-        <div className="bg-slate-50 rounded-lg p-3 text-xs text-slate-500 flex gap-4 border border-slate-100">
-           <span>Total Obiecte: <span className="font-bold text-slate-700">{files.length}</span></span>
-           <span>Dimensiune: <span className="font-bold text-slate-700">{(files.reduce((acc, f) => acc + f.content.length, 0) / 1024 / 1024).toFixed(2)} MB</span> (Load Memory)</span>
-           <span>Actualizat: <span className="font-bold text-slate-700">Acum</span></span>
-        </div>
-      </div>
+          </div>
 
-      <div className="p-4 border-b border-slate-200 bg-white flex items-center gap-4 shrink-0">
-         <div className="relative flex-1">
+          {/* Status Bar */}
+          <div className="bg-slate-50 rounded-lg p-3 text-xs text-slate-500 flex gap-4 border border-slate-100">
+            <span>Total Decizii: <span className="font-bold text-slate-700">{apiDecisions.length}</span></span>
+            <span>Documentație: <span className="font-bold text-slate-700">{apiDecisions.filter((d: any) => d.tip_contestatie === 'documentatie').length}</span></span>
+            <span>Rezultat: <span className="font-bold text-slate-700">{apiDecisions.filter((d: any) => d.tip_contestatie === 'rezultat').length}</span></span>
+            <span>Actualizat: <span className="font-bold text-slate-700">Live</span></span>
+          </div>
+        </div>
+
+        <div className="p-4 border-b border-slate-200 bg-white shrink-0">
+          <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-            <input 
-              type="text" 
+            <input
+              type="text"
               className="w-full pl-10 pr-4 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none"
-              placeholder="Filtrează după nume, an sau metadate..."
+              placeholder="Caută după număr decizie, contestator, autoritate, cod critică..."
               value={fileSearch}
               onChange={(e) => setFileSearch(e.target.value)}
             />
-         </div>
-         <div className="flex items-center gap-2 text-sm text-slate-600 border-l pl-4 border-slate-200">
-            <button onClick={() => toggleAllActive(true)} className="hover:text-blue-600 px-2 py-1 font-medium">Selectează Tot</button>
-            <button onClick={() => toggleAllActive(false)} className="hover:text-red-600 px-2 py-1 font-medium">Deselectează Tot</button>
-         </div>
-      </div>
+          </div>
+        </div>
 
-      <div className="flex-1 overflow-y-auto p-6 relative">
-        {isUploading && (
-           <div className="absolute inset-0 bg-white/80 z-10 flex flex-col items-center justify-center backdrop-blur-sm">
-              <Loader2 size={48} className="text-blue-600 animate-spin mb-4" />
-              <h3 className="text-lg font-bold text-slate-800">Se procesează datele...</h3>
-              <p className="text-slate-500">Se încarcă fișierele din bucket-ul local.</p>
-           </div>
-        )}
-        
-        <div className="grid grid-cols-1 gap-2">
-          {filteredFiles.map((file) => (
-            <div key={file.id} className={`group flex items-center justify-between p-3 rounded-lg border transition-all ${
-              file.isActive 
-                ? "bg-blue-50/50 border-blue-200 shadow-sm" 
-                : "bg-white border-slate-200 hover:border-slate-300"
-            }`}>
-              <div className="flex items-center gap-4 flex-1 min-w-0">
-                <button onClick={() => toggleFileActive(file.id)} className="text-slate-400 hover:text-blue-600 transition">
-                  {file.isActive ? <CheckSquare className="text-blue-600" /> : <Square />}
-                </button>
-                <div className={`p-2 rounded text-slate-500 ${file.type.includes('pdf') ? 'bg-red-50 text-red-500' : 'bg-slate-50'}`}>
-                  <FileText size={20} />
-                </div>
-                <div className="min-w-0">
-                  <p className={`text-sm font-medium truncate ${file.isActive ? 'text-blue-900' : 'text-slate-700'}`}>
-                    {file.name}
-                  </p>
-                  <div className="flex gap-2 mt-0.5 items-center">
-                     <span className="text-[10px] text-slate-400 font-mono hidden md:inline-block">/decizii-cnsc/</span>
-                    {file.metadata?.year && <span className="text-[10px] bg-slate-100 px-1.5 rounded text-slate-500 border border-slate-200">{file.metadata.year}</span>}
-                    {file.metadata?.ruling === 'Admis' && <span className="text-[10px] bg-green-100 text-green-700 px-1.5 rounded border border-green-200 font-medium">Admis</span>}
-                    {file.metadata?.ruling === 'Respins' && <span className="text-[10px] bg-red-100 text-red-700 px-1.5 rounded border border-red-200 font-medium">Respins</span>}
+        <div className="flex-1 overflow-y-auto p-6">
+          <div className="grid grid-cols-1 gap-2">
+            {filteredDecisions.map((dec: any) => (
+              <div key={dec.id} className="group flex items-start justify-between p-4 rounded-lg border bg-white border-slate-200 hover:border-blue-300 hover:shadow-sm transition-all">
+                <div className="flex items-start gap-4 flex-1 min-w-0">
+                  <div className="p-2 rounded bg-blue-50 text-blue-600 shrink-0">
+                    <FileText size={20} />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="min-w-0">
+                        <p className="text-sm font-bold text-slate-800 mb-1">
+                          Decizia nr. {dec.numar_decizie || 'N/A'} / {dec.an_bo}
+                        </p>
+                        <p className="text-xs text-slate-600 mb-2">
+                          <span className="font-medium">Contestator:</span> {dec.contestator || 'N/A'}
+                        </p>
+                        <p className="text-xs text-slate-600 mb-2 truncate">
+                          <span className="font-medium">Autoritate:</span> {dec.autoritate_contractanta || 'N/A'}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex gap-2 mt-3 flex-wrap items-center">
+                      <span className="text-[10px] bg-slate-100 px-2 py-1 rounded text-slate-600 border border-slate-200 font-mono">
+                        BO{dec.an_bo}_{dec.numar_bo}
+                      </span>
+                      <span className={`text-[10px] px-2 py-1 rounded font-medium border ${
+                        dec.tip_contestatie === 'documentatie'
+                          ? 'bg-purple-50 text-purple-700 border-purple-200'
+                          : 'bg-orange-50 text-orange-700 border-orange-200'
+                      }`}>
+                        {dec.tip_contestatie === 'documentatie' ? 'Documentație' : 'Rezultat'}
+                      </span>
+                      {dec.solutie_contestatie === 'ADMIS' && (
+                        <span className="text-[10px] bg-green-100 text-green-700 px-2 py-1 rounded border border-green-200 font-medium">
+                          Admis
+                        </span>
+                      )}
+                      {dec.solutie_contestatie === 'ADMIS_PARTIAL' && (
+                        <span className="text-[10px] bg-yellow-100 text-yellow-700 px-2 py-1 rounded border border-yellow-200 font-medium">
+                          Admis Parțial
+                        </span>
+                      )}
+                      {dec.solutie_contestatie === 'RESPINS' && (
+                        <span className="text-[10px] bg-red-100 text-red-700 px-2 py-1 rounded border border-red-200 font-medium">
+                          Respins
+                        </span>
+                      )}
+                      {dec.coduri_critici?.map((cod: string) => (
+                        <span key={cod} className="text-[10px] bg-blue-50 text-blue-700 px-2 py-1 rounded border border-blue-200 font-mono">
+                          {cod}
+                        </span>
+                      ))}
+                      {dec.cod_cpv && (
+                        <span className="text-[10px] bg-slate-50 text-slate-600 px-2 py-1 rounded border border-slate-200 font-mono">
+                          CPV: {dec.cod_cpv}
+                        </span>
+                      )}
+                    </div>
                   </div>
                 </div>
               </div>
-              
-              <div className="flex items-center gap-3 pl-4">
-                 <span className="text-xs text-slate-400 font-mono">{(file.content.length / 1024).toFixed(1)} KB</span>
-                 <button onClick={() => removeFile(file.id)} className="p-2 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-full transition opacity-0 group-hover:opacity-100">
-                    <Trash2 size={16} />
-                 </button>
-              </div>
-            </div>
-          ))}
-          
-          {filteredFiles.length === 0 && !isUploading && (
-             <div className="text-center py-20 text-slate-400 flex flex-col items-center">
+            ))}
+
+            {filteredDecisions.length === 0 && (
+              <div className="text-center py-20 text-slate-400 flex flex-col items-center">
                 <div className="w-20 h-20 bg-slate-100 rounded-full flex items-center justify-center mb-4">
-                   <Cloud size={32} className="text-slate-300" />
+                  <Database size={32} className="text-slate-300" />
                 </div>
-                <h3 className="text-lg font-medium text-slate-600 mb-1">Bucket Neinițializat sau Gol</h3>
-                <p className="max-w-md mx-auto mb-6">
-                   Nu există date încărcate în memoria aplicației din <span className="font-mono bg-slate-100 px-1 rounded text-slate-600">date-ap-raw/decizii-cnsc</span>.
+                <h3 className="text-lg font-medium text-slate-600 mb-1">
+                  {apiDecisions.length === 0 ? 'Baza de date este goală' : 'Nu s-au găsit rezultate'}
+                </h3>
+                <p className="max-w-md mx-auto text-sm">
+                  {apiDecisions.length === 0
+                    ? 'Nu există decizii CNSC în baza de date. Importă decizii pentru a începe.'
+                    : 'Încearcă o altă căutare sau modifică filtrele.'}
                 </p>
-                <button onClick={simulateSync} className="text-blue-600 font-medium hover:underline flex items-center gap-2">
-                   <FolderInput size={16} />
-                   Selectează folderul local pentru sincronizare
-                </button>
-             </div>
-          )}
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="bg-white p-3 border-t border-slate-200 text-xs text-slate-500 flex justify-between px-6">
+          <span>Afișate: {filteredDecisions.length} din {apiDecisions.length} decizii</span>
+          <span className="text-green-600 font-medium">
+            Database: Connected
+          </span>
         </div>
       </div>
-      <div className="bg-white p-3 border-t border-slate-200 text-xs text-slate-500 flex justify-between px-6">
-         <span>Capacitate Browser Utilizată: {(files.reduce((acc, f) => acc + f.content.length, 0) / 1024 / 1024).toFixed(1)} MB</span>
-         <span className={activeFiles.length > 10 ? "text-amber-600 font-bold" : "text-green-600"}>
-            {activeFiles.length} Active (Limită recomandată: 15)
-         </span>
-      </div>
-    </div>
-  );
+    );
+  };
 
   const renderDrafter = () => (
     <div className="h-full flex flex-col md:flex-row bg-white">
@@ -806,7 +902,7 @@ const App = () => {
             <MessageSquare className="text-blue-500" size={18} /> 
             ExpertAP Chat
          </h2>
-         <span className="text-xs text-slate-500 bg-slate-100 px-2 py-1 rounded">Context: {activeFiles.length} documente active</span>
+         <span className="text-xs text-slate-500 bg-slate-100 px-2 py-1 rounded">🗄️ Conectat la baza de date CNSC</span>
       </div>
       <div className="flex-1 overflow-y-auto p-6 space-y-6 bg-slate-50/50">
         {chatMessages.length === 0 && (
@@ -815,7 +911,7 @@ const App = () => {
                 <MessageSquare size={32} className="text-blue-500" />
              </div>
              <h3 className="text-slate-800 font-bold mb-2">Cu ce te pot ajuta astăzi?</h3>
-             <p className="text-sm max-w-md mx-auto">Pot analiza documentele active din Data Lake sau pot răspunde la întrebări generale despre legislație.</p>
+             <p className="text-sm max-w-md mx-auto">Pot răspunde la întrebări despre deciziile CNSC din baza de date sau despre legislația în achiziții publice.</p>
            </div>
         )}
         {chatMessages.map((msg, i) => (
@@ -870,30 +966,211 @@ const App = () => {
         {mode === 'datalake' && renderDataLake()}
         {mode === 'drafter' && renderDrafter()}
         {mode === 'chat' && renderChat()}
-        {mode === 'redflags' && handleRedFlags && (
-          <div className="p-8 max-w-5xl mx-auto h-full overflow-y-auto flex flex-col">
-              <header className="mb-6">
-                 <h2 className="text-2xl font-bold text-slate-800 flex items-center gap-2"><AlertTriangle className="text-red-500"/> Red Flags Detector</h2>
-                 <p className="text-slate-600">Identifică clauze restrictive în documentele active.</p>
-              </header>
-              
+        {mode === 'redflags' && (
+          <div className="p-8 max-w-6xl mx-auto h-full overflow-y-auto flex flex-col">
+            <header className="mb-6">
+              <h2 className="text-2xl font-bold text-slate-800 flex items-center gap-2">
+                <AlertTriangle className="text-red-500"/> Red Flags Detector
+              </h2>
+              <p className="text-slate-600">Identifică clauze restrictive în documentația de achiziții publice.</p>
+            </header>
+
+            {/* Tabs */}
+            <div className="flex gap-2 mb-6 border-b border-slate-200">
+              <button
+                onClick={() => setRedFlagsTab('manual')}
+                className={`px-4 py-2 font-medium transition border-b-2 ${
+                  redFlagsTab === 'manual'
+                    ? 'border-red-600 text-red-600'
+                    : 'border-transparent text-slate-600 hover:text-slate-800'
+                }`}
+              >
+                Manual Input
+              </button>
+              <button
+                onClick={() => setRedFlagsTab('upload')}
+                className={`px-4 py-2 font-medium transition border-b-2 ${
+                  redFlagsTab === 'upload'
+                    ? 'border-red-600 text-red-600'
+                    : 'border-transparent text-slate-600 hover:text-slate-800'
+                }`}
+              >
+                Upload Document
+              </button>
+            </div>
+
+            {/* Manual Input Tab */}
+            {redFlagsTab === 'manual' && (
               <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm mb-6">
-                 <div className="flex items-center justify-between mb-4">
-                    <span className="font-bold text-slate-700">Documente Active: {activeFiles.length}</span>
-                    <button 
-                      onClick={handleRedFlags}
-                      disabled={isLoading || activeFiles.length === 0}
-                      className="bg-red-600 text-white px-6 py-2.5 rounded-lg font-medium hover:bg-red-700 transition disabled:opacity-50 flex items-center gap-2"
-                    >
-                      {isLoading ? <Loader2 className="animate-spin" size={18} /> : "Începe Analiza"}
-                    </button>
-                 </div>
-                 {activeFiles.length === 0 && <p className="text-sm text-red-500">Atenție: Nu ai selectat documente pentru analiză.</p>}
+                <label className="block font-bold text-slate-700 mb-3">
+                  Documentație Achiziție (Caiet Sarcini, Fișă Date, etc.)
+                </label>
+                <textarea
+                  className="w-full p-4 border border-slate-300 rounded-lg h-48 mb-4 focus:ring-2 focus:ring-red-500 outline-none font-mono text-sm"
+                  placeholder="Introduceți sau lipiți conținutul documentației..."
+                  value={redFlagsText}
+                  onChange={(e) => setRedFlagsText(e.target.value)}
+                />
+                <button
+                  onClick={handleRedFlags}
+                  disabled={isLoading || !redFlagsText.trim()}
+                  className="bg-red-600 text-white px-6 py-3 rounded-lg font-medium hover:bg-red-700 transition disabled:opacity-50 flex items-center gap-2 w-full justify-center"
+                >
+                  {isLoading ? <Loader2 className="animate-spin" size={18} /> : <AlertTriangle size={18} />}
+                  {isLoading ? 'Analizare în curs...' : 'Analizează Red Flags'}
+                </button>
               </div>
-              
-              <div className="flex-1 bg-slate-50 rounded-xl border border-slate-200 p-6 overflow-y-auto font-mono text-sm whitespace-pre-wrap">
-                 {generatedContent || <span className="text-slate-400">Rezultatul analizei va apărea aici...</span>}
+            )}
+
+            {/* Upload Document Tab */}
+            {redFlagsTab === 'upload' && (
+              <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm mb-6">
+                <label className="block font-bold text-slate-700 mb-3">
+                  Încarcă Document (.txt, .md, .pdf)
+                </label>
+                <input
+                  type="file"
+                  accept=".txt,.md,.pdf"
+                  onChange={handleDocumentUpload}
+                  className="block w-full text-sm text-slate-600 mb-4
+                    file:mr-4 file:py-2 file:px-4
+                    file:rounded-lg file:border-0
+                    file:text-sm file:font-semibold
+                    file:bg-red-50 file:text-red-700
+                    hover:file:bg-red-100"
+                />
+                {uploadedDocument && (
+                  <div className="mb-4 p-4 bg-green-50 border border-green-200 rounded-lg">
+                    <p className="text-sm text-green-800">
+                      ✓ Document procesat: <span className="font-bold">{uploadedDocument.name}</span>
+                    </p>
+                    <p className="text-xs text-green-600 mt-1">
+                      {uploadedDocument.text.length} caractere extrase
+                    </p>
+                  </div>
+                )}
+                <button
+                  onClick={handleRedFlags}
+                  disabled={isLoading || !uploadedDocument}
+                  className="bg-red-600 text-white px-6 py-3 rounded-lg font-medium hover:bg-red-700 transition disabled:opacity-50 flex items-center gap-2 w-full justify-center"
+                >
+                  {isLoading ? <Loader2 className="animate-spin" size={18} /> : <AlertTriangle size={18} />}
+                  {isLoading ? 'Analizare în curs...' : 'Analizează Red Flags'}
+                </button>
               </div>
+            )}
+
+            {/* Results */}
+            {redFlagsResults.length > 0 && (
+              <div className="flex-1 space-y-4">
+                <div className="bg-white p-4 rounded-lg border border-slate-200 flex items-center justify-between">
+                  <h3 className="font-bold text-slate-800">Rezultate Analiză</h3>
+                  <div className="flex gap-4 text-sm">
+                    <span className="text-red-600 font-bold">
+                      {redFlagsResults.filter(rf => rf.severity === 'CRITICĂ').length} Critice
+                    </span>
+                    <span className="text-orange-600 font-bold">
+                      {redFlagsResults.filter(rf => rf.severity === 'MEDIE').length} Medii
+                    </span>
+                    <span className="text-yellow-600 font-bold">
+                      {redFlagsResults.filter(rf => rf.severity === 'SCĂZUTĂ').length} Scăzute
+                    </span>
+                  </div>
+                </div>
+
+                {redFlagsResults.map((flag, idx) => (
+                  <div
+                    key={idx}
+                    className={`bg-white p-6 rounded-xl border-l-4 shadow-sm ${
+                      flag.severity === 'CRITICĂ'
+                        ? 'border-red-500'
+                        : flag.severity === 'MEDIE'
+                        ? 'border-orange-500'
+                        : 'border-yellow-500'
+                    }`}
+                  >
+                    <div className="flex items-start justify-between mb-3">
+                      <div className="flex items-center gap-2">
+                        <AlertTriangle
+                          className={
+                            flag.severity === 'CRITICĂ'
+                              ? 'text-red-500'
+                              : flag.severity === 'MEDIE'
+                              ? 'text-orange-500'
+                              : 'text-yellow-500'
+                          }
+                          size={20}
+                        />
+                        <h4 className="font-bold text-slate-800">{flag.category}</h4>
+                      </div>
+                      <span
+                        className={`text-xs px-3 py-1 rounded-full font-bold ${
+                          flag.severity === 'CRITICĂ'
+                            ? 'bg-red-100 text-red-700'
+                            : flag.severity === 'MEDIE'
+                            ? 'bg-orange-100 text-orange-700'
+                            : 'bg-yellow-100 text-yellow-700'
+                        }`}
+                      >
+                        {flag.severity}
+                      </span>
+                    </div>
+
+                    <div className="space-y-3 text-sm">
+                      <div>
+                        <p className="font-semibold text-slate-700 mb-1">📝 Clauză Problematică:</p>
+                        <p className="bg-slate-50 p-3 rounded border border-slate-200 italic text-slate-600">
+                          "{flag.clause}"
+                        </p>
+                      </div>
+
+                      <div>
+                        <p className="font-semibold text-slate-700 mb-1">⚠️ Problemă:</p>
+                        <p className="text-slate-600">{flag.issue}</p>
+                      </div>
+
+                      <div>
+                        <p className="font-semibold text-slate-700 mb-1">⚖️ Referință Legală:</p>
+                        <p className="text-slate-600 font-mono text-xs">{flag.legal_reference}</p>
+                      </div>
+
+                      <div>
+                        <p className="font-semibold text-slate-700 mb-1">✅ Recomandare:</p>
+                        <p className="text-slate-600">{flag.recommendation}</p>
+                      </div>
+
+                      {flag.decision_refs && flag.decision_refs.length > 0 && (
+                        <div>
+                          <p className="font-semibold text-slate-700 mb-1">📚 Jurisprudență CNSC:</p>
+                          <div className="flex gap-2">
+                            {flag.decision_refs.map((ref: string) => (
+                              <span
+                                key={ref}
+                                className="text-xs bg-blue-50 text-blue-700 px-2 py-1 rounded border border-blue-200 font-mono"
+                              >
+                                {ref}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {!isLoading && redFlagsResults.length === 0 && (
+              <div className="flex-1 flex items-center justify-center text-slate-400">
+                <div className="text-center">
+                  <AlertTriangle size={64} className="mx-auto mb-4 opacity-20" />
+                  <p className="text-lg font-medium">Rezultatele analizei vor apărea aici</p>
+                  <p className="text-sm mt-2">
+                    Introduceți text sau încărcați un document pentru a începe analiza
+                  </p>
+                </div>
+              </div>
+            )}
           </div>
         )}
         {mode === 'clarification' && handleClarification && (

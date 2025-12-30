@@ -1,9 +1,12 @@
 """Chat API endpoints."""
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel, Field
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.logging import get_logger
+from app.db.session import get_session
+from app.services.rag import RAGService
 
 router = APIRouter()
 logger = get_logger(__name__)
@@ -43,7 +46,10 @@ class ChatResponse(BaseModel):
 
 
 @router.post("/", response_model=ChatResponse)
-async def chat(request: ChatRequest) -> ChatResponse:
+async def chat(
+    request: ChatRequest,
+    session: AsyncSession = Depends(get_session)
+) -> ChatResponse:
     """
     Chat with ExpertAP.
 
@@ -56,29 +62,48 @@ async def chat(request: ChatRequest) -> ChatResponse:
         has_history=len(request.history) > 0,
     )
 
-    # TODO: Implement RAG pipeline
-    # 1. Generate embedding for the query
-    # 2. Search for relevant documents
-    # 3. Build context from retrieved documents
-    # 4. Generate response with LLM
-    # 5. Verify citations
-    # 6. Return response
+    try:
+        # Initialize RAG service
+        rag = RAGService()
 
-    # Placeholder response
-    return ChatResponse(
-        message=(
-            "Aceasta este o versiune demo. Sistemul RAG va fi implementat în curând. "
-            "Întrebarea ta a fost: " + request.message
-        ),
-        conversation_id=request.conversation_id or "demo-conversation",
-        citations=[],
-        confidence=0.0,
-        suggested_questions=[
-            "Care sunt criteriile de calificare acceptabile?",
-            "Ce spune CNSC despre experiența similară?",
-            "Cum se interpretează art. 210 din Legea 98/2016?",
-        ],
-    )
+        # Convert chat history to format expected by RAG
+        history = [
+            {"role": msg.role, "content": msg.content}
+            for msg in request.history
+        ] if request.history else None
+
+        # Generate response using RAG pipeline
+        response_text, citations, confidence, suggested = await rag.generate_response(
+            query=request.message,
+            session=session,
+            conversation_history=history,
+            max_decisions=5
+        )
+
+        # Generate or reuse conversation ID
+        conversation_id = request.conversation_id or f"conv-{hash(request.message)}"
+
+        logger.info(
+            "chat_response_generated",
+            conversation_id=conversation_id,
+            citations_count=len(citations),
+            confidence=confidence
+        )
+
+        return ChatResponse(
+            message=response_text,
+            conversation_id=conversation_id,
+            citations=citations,
+            confidence=confidence,
+            suggested_questions=suggested,
+        )
+
+    except Exception as e:
+        logger.error("chat_error", error=str(e), exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail=f"Eroare la procesarea cererii: {str(e)}"
+        )
 
 
 @router.get("/conversations/{conversation_id}")
