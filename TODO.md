@@ -1,111 +1,210 @@
 # ExpertAP - TODO
 
-## URGENT - READY TO IMPORT DATA! 🚀
+## ⚠️ CRITICAL - ÎNAINTE DE MERGE! 🔐
 
-### ✅ DATABASE CONECTAT! - Gata pentru import date
+### 🔑 Creează Secret în Google Cloud (OBLIGATORIU)
 
-**Status:** Cloud SQL creat și conectat la Cloud Run! Import script reparat. Gata pentru import ~3000 decizii!
+**STATUS:** API funcțional! Frontend conectat! 7 decizii importate! Database securizat prin Secret Manager.
+
+**URGENT:** Trebuie să creezi secretul `expertap-database-url` în Google Cloud **ÎNAINTE** de a merge PR-ul!
+
+#### Rulează în Cloud Shell:
+
+```bash
+# 1. Creează secretul
+echo "postgresql+asyncpg://expertap:ExpertAP2025Pass@/expertap?host=/cloudsql/gen-lang-client-0706147575:europe-west1:expertap-db" | \
+gcloud secrets create expertap-database-url \
+  --data-file=- \
+  --replication-policy="automatic"
+
+# 2. Dă permisiuni Cloud Run service account
+gcloud secrets add-iam-policy-binding expertap-database-url \
+  --member="serviceAccount:850584928584-compute@developer.gserviceaccount.com" \
+  --role="roles/secretmanager.secretAccessor"
+
+# 3. Verifică că secretul există
+gcloud secrets describe expertap-database-url
+```
+
+### ✅ După crearea secretului:
+
+1. **Merge PR** `claude/review-session-status-uyIS6` în GitHub
+2. Așteaptă ~3-4 minute pentru Cloud Build
+3. Testează frontend: https://expertap-api-850584928584.europe-west1.run.app/
+4. Ar trebui să vezi: **"Conectat: 7 decizii"** ✅
+
+---
+
+## 📊 Status Curent (2025-12-30 - Sesiunea 2)
 
 **URL-uri:**
-- Frontend: https://expertap-api-850584928584.europe-west1.run.app/ (funcțional, dar fără date încă)
-- Health: https://expertap-api-850584928584.europe-west1.run.app/health ✅ (database: connected)
-- API Docs: https://expertap-api-850584928584.europe-west1.run.app/docs
+- Frontend: https://expertap-api-850584928584.europe-west1.run.app/ ✅ (conectat la API!)
+- API Decisions: https://expertap-api-850584928584.europe-west1.run.app/api/v1/decisions/ ✅
+- API Docs: https://expertap-api-850584928584.europe-west1.run.app/docs ✅
+- Health: https://expertap-api-850584928584.europe-west1.run.app/health ✅
 
-**Situație actuală (2025-12-30):**
-- ✅ Cloud SQL instance creat: `expertap-db`
-- ✅ Cloud Run conectat la database cu `postgresql+asyncpg://`
-- ✅ `SKIP_DB=false` configurat în cloudbuild.yaml
-- ✅ Import script reparat (engine reference fix)
-- ⏳ **NEXT:** Import ~3000 decizii CNSC din GCS
+**Progres:**
+- ✅ Cloud SQL instance: `expertap-db`
+- ✅ Cloud Run conectat la database (unix socket)
+- ✅ API `/api/v1/decisions/` implementat complet
+- ✅ Frontend conectat la API (fetch on mount)
+- ✅ Dashboard afișează statistici reale
+- ✅ 7 decizii CNSC importate în PostgreSQL
+- ✅ Import script robust (skip invalid parsing)
+- ✅ DATABASE_URL securizat prin Secret Manager
+- ⏳ **NEXT:** Creează secret, merge PR, import complet ~3000 decizii
 
-### 📋 Următorul pas (10-15 minute):
+---
 
-**IMPORTANT:** Vezi `SESIUNE_REZUMAT_2025-12-30.md` pentru detalii complete despre sesiunea anterioară!
+## 📋 Următorii Pași
 
-#### 1. Setup Cloud SQL Proxy (dacă nu rulează deja)
+### 1. Import complet decizii (~10-15 minute)
+
+După merge PR successful:
+
 ```bash
-# Verifică dacă rulează:
-ps aux | grep cloud-sql-proxy
+cd ~/APP-AI
+git pull origin main
 
-# Dacă nu, pornește-l:
+# Pornește Cloud SQL Proxy dacă nu rulează
 ./cloud-sql-proxy gen-lang-client-0706147575:europe-west1:expertap-db &
-```
 
-#### 2. Rulează import (TEST cu 10 fișiere mai întâi!)
-```bash
-# Test cu 10 fișiere:
+# Import TOATE deciziile (~3000)
 DATABASE_URL="postgresql+asyncpg://expertap:ExpertAP2025Pass@localhost:5432/expertap" \
-python3 scripts/import_decisions_from_gcs.py --create-tables --limit 10
+python3 scripts/import_decisions_from_gcs.py
 
-# Dacă testul merge, rulează pentru toate ~3000:
-DATABASE_URL="postgresql+asyncpg://expertap:ExpertAP2025Pass@localhost:5432/expertap" \
-python3 scripts/import_decisions_from_gcs.py --create-tables
+# Verifică în frontend
+curl "https://expertap-api-850584928584.europe-west1.run.app/api/v1/decisions/?limit=5"
 ```
 
-#### 3. Verifică importul
+### 2. Generează embeddings pentru semantic search
+
 ```bash
-# Check health
-curl https://expertap-api-850584928584.europe-west1.run.app/health
-
-# Test API - ar trebui să returneze decizii
-curl "https://expertap-api-850584928584.europe-west1.run.app/api/v1/decisions?limit=5"
+DATABASE_URL="postgresql+asyncpg://expertap:ExpertAP2025Pass@localhost:5432/expertap" \
+python3 scripts/generate_embeddings.py
 ```
 
-### 🔑 Credențiale Database (pentru referință):
+### 3. Testează funcționalitățile
+
+- ✅ Dashboard cu statistici complete
+- ✅ Search semantic (după embeddings)
+- ✅ Chatbot RAG cu date reale
+- ✅ Frontend complet funcțional
+
+---
+
+## 🔑 Credențiale & Config
+
+### Database:
 - **Instance**: `gen-lang-client-0706147575:europe-west1:expertap-db`
 - **Database**: `expertap`
 - **User**: `expertap`
 - **Password**: `ExpertAP2025Pass`
-- **DATABASE_URL (Cloud Run)**: `postgresql+asyncpg://expertap:ExpertAP2025Pass@/expertap?host=/cloudsql/gen-lang-client-0706147575:europe-west1:expertap-db`
+- **Secret Name**: `expertap-database-url` (în Secret Manager)
+- **DATABASE_URL (Cloud Run)**: Citit din Secret Manager ✅
 - **DATABASE_URL (Local/Proxy)**: `postgresql+asyncpg://expertap:ExpertAP2025Pass@localhost:5432/expertap`
 
-### 📚 Documentație completă creată:
-- ✅ **QUICKSTART.md** - Ghid rapid în 3 pași
-- ✅ **docs/SETUP_DATABASE.md** - Setup detaliat Cloud SQL
-- ✅ **docs/CLOUD_RUN_DATABASE_CONFIG.md** - Configurare conexiune
-- ✅ **scripts/setup_cloud_sql.sh** - Script automat Cloud SQL
-- ✅ **scripts/import_decisions_from_gcs.py** - Script import GCS
-- ✅ **scripts/init_database.sql** - SQL inițializare
-- ✅ **backend/alembic/** - Migrations configurate
-
-### Date CNSC disponibile:
-- **GCS Bucket:** `date-ap-raw/decizii-cnsc`
-- **Conținut:** ~3000 decizii CNSC în format text
-- **Format fișiere:** Conform convenției `BO{AN}_{NR_BO}_{COD_CRITICI}_CPV_{COD_CPV}_{SOLUTIE}.txt`
+### GCS Bucket:
+- **Bucket**: `date-expert-app`
+- **Folder**: `decizii-cnsc`
+- **Fișiere**: ~3000 decizii CNSC
+- **Importate**: 7 (pentru test)
 
 ---
 
-## Completed în sesiunea curentă (2025-12-30) 🎉
+## 📚 Documentație
+
+**Vezi documentația completă în:**
+- ✅ **SESIUNE_REZUMAT_2025-12-30.md** - Prima sesiune (database setup)
+- ✅ **SESIUNE_REZUMAT_2025-12-30_P2.md** - Sesiunea curentă (API + Frontend)
+- ✅ **QUICKSTART.md** - Ghid rapid
+- ✅ **docs/SETUP_DATABASE.md** - Setup detaliat
+- ✅ **docs/CLOUD_RUN_DATABASE_CONFIG.md** - Configurare
+
+---
+
+## Completed în Sesiunea 2 (2025-12-30) 🎉
+
+### ✅ API Implementation - Funcțional cu Date Reale
+- [x] **Endpoint `/api/v1/decisions/` implementat**
+  - Query PostgreSQL cu paginare
+  - Filtrare după ruling și year
+  - Mapare DecizieCNSC → DecisionSummary
+  - Returnează JSON cu 7 decizii ✅
+  - Commit: `ccc7222`
+
+- [x] **Endpoint `/api/v1/decisions/{id}` implementat**
+  - Query by ID
+  - Returnează detalii complete
+  - Mapare la Decision model
+  - Commit: `ccc7222`
+
+### ✅ Database Connection Fixes
+- [x] **RuntimeError: Database not initialized - REZOLVAT**
+  - Cauză: `async_session_factory` None la runtime
+  - Fix: Acces runtime la variabila globală (fără `global` keyword)
+  - Commits: `b20bac1`, `3809a61`
+
+- [x] **DATABASE_URL missing în Cloud Run - REZOLVAT**
+  - Cauză: Env var setat manual, șters la fiecare deploy
+  - Fix: `localhost:5432` → unix socket `/cloudsql/...`
+  - Setat manual în Console (temporar)
+
+- [x] **DATABASE_URL persistent - SECURIZAT**
+  - Implementat Secret Manager în `cloudbuild.yaml`
+  - `--set-secrets=DATABASE_URL=expertap-database-url:latest`
+  - Zero passwords hardcodate în cod ✅
+  - Commit: `1dc53da`
+
+### ✅ Import Script Improvements
+- [x] **Skip invalid decisions**
+  - Decizii cu `an_bo=0` sau `numar_bo=0` → skip cu warning
+  - Previne batch rollback din duplicate key
+  - 7 decizii importate cu succes ✅
+  - Commit: `54e1d0e`
+
+- [x] **Bucket actualizat**
+  - `date-ap-raw` → `date-expert-app`
+  - Commit anterior
+
+### ✅ Frontend Integration
+- [x] **Fetch decisions from API**
+  - `useEffect` pentru fetch on mount
+  - State management: `apiDecisions`, `isLoadingDecisions`
+  - Commit: `1dc53da`
+
+- [x] **Dashboard cu date reale**
+  - "Conectat: 7 decizii" (nu mai "Deconectat")
+  - Total Decizii CNSC: 7
+  - Decizii Rezultat, Admise, Respinse - calculat dinamic
+  - Commit: `1dc53da`
+
+---
+
+## Completed în Sesiunea 1 (2025-12-30) 🎉
 
 ### ✅ Database Connection - Cloud Run conectat cu succes!
 - [x] **Cloud SQL Instance creat manual**: `expertap-db`
   - PostgreSQL 15 cu pgvector extension
   - Database `expertap` + user `expertap`
-  - Password: `ExpertAP2025Pass` (simplu, fără caractere speciale)
+  - Password: `ExpertAP2025Pass`
   - Extensions activate: vector, pg_trgm
-- [x] **Cloud Run conectat la database**:
-  - Format corect descoperit: `postgresql+asyncpg://...` (nu `postgresql://`)
-  - DATABASE_URL configurat cu unix socket `/cloudsql/...`
-  - SKIP_DB=false în cloudbuild.yaml
-  - Verificat în logs: `database_connection_initialized` ✅
-- [x] **Import script reparat**: `scripts/import_decisions_from_gcs.py`
-  - Fix pentru "engine is None" AttributeError
-  - Modificat import să folosească `db_session.engine`
-  - Adăugată verificare pentru engine inițializat
-  - Commit: `18417de`
-- [x] **Cloud SQL Proxy setup**: Pentru import local/Cloud Shell
-  - Configurare pentru localhost:5432
-  - DATABASE_URL pentru conexiune locală
-- [x] **Documentation updated**:
-  - Creat SESIUNE_REZUMAT_2025-12-30.md
-  - Actualizat TODO.md cu status curent
 
-### 🔧 Probleme majore rezolvate:
-1. Bash special characters în password (`!` interpretat ca history expansion)
-2. cloudbuild.yaml override (SKIP_DB hardcodat la true)
-3. **CRITICAL:** Format DATABASE_URL greșit (`postgresql://` vs `postgresql+asyncpg://`)
-4. Unix socket vs TCP pentru Cloud Shell connections
-5. Engine reference issue în import script (captured None value)
+- [x] **Cloud Run conectat la database**:
+  - Format corect: `postgresql+asyncpg://...`
+  - DATABASE_URL cu unix socket `/cloudsql/...`
+  - `SKIP_DB=false` în cloudbuild.yaml
+  - Verificat: `database_connection_initialized` ✅
+
+- [x] **Import script reparat**:
+  - Fix "engine is None" AttributeError
+  - Folosește `db_session.engine`
+  - Verificare engine inițializat
+  - `text()` wrapper pentru SQL statements
+
+- [x] **Cloud SQL Proxy setup**:
+  - Pentru import local/Cloud Shell
+  - localhost:5432 connection
 
 ---
 
@@ -113,55 +212,10 @@ curl "https://expertap-api-850584928584.europe-west1.run.app/api/v1/decisions?li
 
 ### ✅ Database Setup - Toate scripturile create!
 - [x] **Script automat Cloud SQL**: `scripts/setup_cloud_sql.sh`
-  - Creare PostgreSQL 15 cu pgvector
-  - Configurare automată database și user
-  - Generare password securizat
 - [x] **Script import GCS**: `scripts/import_decisions_from_gcs.py`
-  - Conectare la bucket GCS
-  - Download și parsare decizii
-  - Import batch în database
-  - Suport pentru --limit, --create-tables
-- [x] **Alembic configuration**
-  - alembic.ini configurat
-  - alembic/env.py cu async support
-  - Migration inițială completă
+- [x] **Alembic configuration** cu async support
 - [x] **Migrații database**: `backend/alembic/versions/20251225_0001_initial_schema.py`
-  - Toate tabelele (decizii_cnsc, argumentare_critica, etc.)
-  - Indexuri optimizate
-  - pgvector și pg_trgm extensions
-- [x] **SQL inițializare**: `scripts/init_database.sql`
-- [x] **Documentație completă**:
-  - QUICKSTART.md - Ghid rapid 3 pași
-  - docs/SETUP_DATABASE.md - Setup detaliat
-  - docs/CLOUD_RUN_DATABASE_CONFIG.md - Configurare
-- [x] **Requirements updated**: google-cloud-storage adăugat
-
-## Completed în sesiunea anterioară (2024-12-25)
-
-### ✅ CI/CD Pipeline
-- [x] GitHub Actions CI cu:
-  - Backend Tests (flake8, pytest)
-  - Docker Build & Startup Test
-  - Frontend Build Check
-- [x] Cloud Build pentru deploy pe Cloud Run
-- [x] Health check endpoint funcțional
-
-### ✅ Deploy GCP
-- [x] Conectare GitHub cu Cloud Build
-- [x] Configurare Cloud Run
-- [x] Dockerfile unificat (frontend + backend)
-- [x] Deploy reușit la https://expertap-api-850584928584.europe-west1.run.app/
-
-### ✅ CNSC Parser
-- [x] Parser cu convenție de denumire: `BO{AN}_{NR_BO}_{COD_CRITICI}_CPV_{COD_CPV}_{SOLUTIE}.txt`
-- [x] Coduri critici (D1-D7, R1-R7, DAL, RAL)
-- [x] Extracție soluție din "CONSILIUL DECIDE:"
-- [x] Schema bază de date
-
-### ✅ Infrastructură
-- [x] FastAPI backend cu structură modulară
-- [x] Configurație opțională pentru baza de date (SKIP_DB)
-- [x] LLM abstraction layer (Gemini provider)
+- [x] **Documentație completă**: QUICKSTART.md, SETUP_DATABASE.md
 
 ---
 
@@ -169,27 +223,26 @@ curl "https://expertap-api-850584928584.europe-west1.run.app/api/v1/decisions?li
 
 ### P0 - MVP Core (Must Have)
 
-#### 🟢 Baza de Date și Date Reale - DATABASE CONECTAT!
-- [x] **DONE**: Scripturile pentru Cloud SQL create (vezi QUICKSTART.md)
-- [x] **DONE**: Script import din GCS creat și reparat
-- [x] **DONE**: Alembic migrations configurate
-- [x] **DONE**: Documentație completă
-- [x] **DONE**: Cloud SQL instance creat manual (expertap-db)
-- [x] **DONE**: Cloud Run conectat la database (postgresql+asyncpg)
-- [x] **DONE**: Import script reparat (engine reference fix)
-- [ ] **NEXT**: Import date (10-15 min) - Rulează `python scripts/import_decisions_from_gcs.py --create-tables`
+#### 🟢 Baza de Date și Date Reale - API FUNCȚIONAL!
+- [x] **DONE**: API `/api/v1/decisions/` implementat
+- [x] **DONE**: Frontend conectat la API
+- [x] **DONE**: 7 decizii importate pentru test
+- [x] **DONE**: DATABASE_URL securizat prin Secret Manager
+- [ ] **NEXT**: Creează secret în Google Cloud (CRITICAL!)
+- [ ] Import complet ~3000 decizii
 - [ ] Generare embeddings pentru semantic search
-- [ ] Testare frontend cu date reale
+- [ ] Testare frontend cu toate datele
 
 #### Frontend Funcțional
-- [ ] Debugging și fix pentru frontend
-- [ ] Conectare frontend la API-uri backend cu date reale
+- [x] Dashboard conectat la API ✅
+- [ ] Debugging și fix pentru orice erori
 - [ ] Testare end-to-end a tuturor funcțiilor
+- [ ] Search interface cu date reale
 
 #### Search (Chatbot Foundation)
-- [ ] Semantic search endpoint
+- [ ] Semantic search endpoint (după embeddings)
 - [ ] Hybrid search (semantic + keyword)
-- [ ] Filter by metadata
+- [ ] Filter by metadata (CPV, critic codes, etc.)
 
 #### Chatbot "Intreaba ExpertAP"
 - [ ] RAG pipeline complet
@@ -203,34 +256,4 @@ curl "https://expertap-api-850584928584.europe-west1.run.app/api/v1/decisions?li
 
 ---
 
-## Fișiere Cheie
-
-| Fișier | Scop |
-|--------|------|
-| `/Dockerfile` | Build unificat frontend + backend |
-| `/backend/app/main.py` | Entry point FastAPI, servește static files |
-| `/backend/app/services/parser.py` | Parser pentru decizii CNSC |
-| `/backend/app/db/session.py` | Conexiune bază de date |
-| `/index.tsx` | Frontend React principal |
-| `/cloudbuild.yaml` | Configurare Cloud Build |
-| `/.github/workflows/ci.yml` | GitHub Actions CI |
-
----
-
-## GCP Project Info
-
-- **Project Name**: ExpertAPP
-- **Project ID**: gen-lang-client-0706147575
-- **Project Number**: 850584928584
-- **Region**: europe-west1
-- **Service URL**: https://expertap-api-850584928584.europe-west1.run.app/
-
-### GCS Bucket cu Date
-- **Bucket:** `date-ap-raw`
-- **Folder:** `decizii-cnsc`
-- **Număr fișiere:** ~3000 decizii CNSC
-- **Format:** Text (.txt)
-
----
-
-_Last updated: 2025-12-30 - Database connected! Ready to import data! 🎉_
+_Last updated: 2025-12-30 - API funcțional! Frontend conectat! Database securizat! 🎉_
