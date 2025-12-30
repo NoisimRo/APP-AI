@@ -95,10 +95,10 @@ def is_db_available() -> bool:
     return db_available
 
 
-async def get_session() -> Optional[AsyncSession]:
+async def get_session() -> AsyncSession:
     """Get a database session for dependency injection."""
     if async_session_factory is None:
-        return None
+        raise RuntimeError("Database not initialized")
 
     async with async_session_factory() as session:
         try:
