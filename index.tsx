@@ -138,6 +138,8 @@ const App = () => {
   const [fileSearch, setFileSearch] = useState("");
   const [isUploading, setIsUploading] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
+  const [apiDecisions, setApiDecisions] = useState<any[]>([]);
+  const [isLoadingDecisions, setIsLoadingDecisions] = useState(false);
   
   // Chat/Interaction States
   const [chatMessages, setChatMessages] = useState<Message[]>([]);
@@ -162,6 +164,25 @@ const App = () => {
   useEffect(() => {
     setGeneratedContent("");
   }, [mode]);
+
+  // Fetch decisions from API on mount
+  useEffect(() => {
+    const fetchDecisions = async () => {
+      setIsLoadingDecisions(true);
+      try {
+        const response = await fetch('/api/v1/decisions/?limit=100');
+        if (response.ok) {
+          const data = await response.json();
+          setApiDecisions(data.decisions || []);
+        }
+      } catch (error) {
+        console.error('Failed to fetch decisions:', error);
+      } finally {
+        setIsLoadingDecisions(false);
+      }
+    };
+    fetchDecisions();
+  }, []);
 
   // --- File Management ---
 
@@ -455,37 +476,37 @@ const App = () => {
            <p className="text-slate-500">Bine ai venit în centrul de comandă ExpertAP.</p>
         </div>
         <div className="flex items-center gap-2 bg-white border border-slate-200 px-3 py-1.5 rounded-full shadow-sm">
-           <div className={`w-2.5 h-2.5 rounded-full ${files.length > 0 ? 'bg-green-500 animate-pulse' : 'bg-slate-300'}`}></div>
+           <div className={`w-2.5 h-2.5 rounded-full ${apiDecisions.length > 0 ? 'bg-green-500 animate-pulse' : isLoadingDecisions ? 'bg-yellow-500 animate-pulse' : 'bg-slate-300'}`}></div>
            <span className="text-xs font-medium text-slate-600">
-              {files.length > 0 ? "Conectat la date-ap-raw" : "Deconectat"}
+              {apiDecisions.length > 0 ? `Conectat: ${apiDecisions.length} decizii` : isLoadingDecisions ? "Conectare..." : "Deconectat"}
            </span>
         </div>
       </header>
 
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-10">
-         <StatCard 
-            label="Total Documente" 
-            value={files.length} 
-            icon={FileText} 
-            color="bg-blue-500 text-blue-600" 
+         <StatCard
+            label="Total Decizii CNSC"
+            value={apiDecisions.length}
+            icon={FileText}
+            color="bg-blue-500 text-blue-600"
          />
-         <StatCard 
-            label="Context Activ" 
-            value={activeFiles.length} 
-            icon={Database} 
-            color="bg-green-500 text-green-600" 
+         <StatCard
+            label="Decizii Rezultat"
+            value={apiDecisions.filter(d => d.tip_contestatie === 'rezultat').length}
+            icon={Database}
+            color="bg-purple-500 text-purple-600"
          />
-         <StatCard 
-            label="Decizii Admise" 
-            value={files.filter(f => f.metadata?.ruling === 'Admis').length} 
-            icon={CheckCircle} 
-            color="bg-teal-500 text-teal-600" 
+         <StatCard
+            label="Admise/Admis Parțial"
+            value={apiDecisions.filter(d => d.solutie_contestatie?.includes('ADMIS')).length}
+            icon={CheckCircle}
+            color="bg-teal-500 text-teal-600"
          />
-         <StatCard 
-            label="Decizii Respinse" 
-            value={files.filter(f => f.metadata?.ruling === 'Respins').length} 
-            icon={XCircle} 
-            color="bg-red-500 text-red-600" 
+         <StatCard
+            label="Respinse"
+            value={apiDecisions.filter(d => d.solutie_contestatie === 'RESPINS').length}
+            icon={XCircle}
+            color="bg-red-500 text-red-600"
          />
       </div>
 
