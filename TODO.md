@@ -1,259 +1,338 @@
 # ExpertAP - TODO
 
-## ⚠️ CRITICAL - ÎNAINTE DE MERGE! 🔐
+## 🔴 CRITICA - SESIUNEA URMĂTOARE (2025-12-30+)
 
-### 🔑 Creează Secret în Google Cloud (OBLIGATORIU)
+### ⚠️ STATUS CURENT: Cod complet implementat, dar GEMINI_API_KEY invalid!
 
-**STATUS:** API funcțional! Frontend conectat! 7 decizii importate! Database securizat prin Secret Manager.
+**Branch:** `claude/fix-ai-assistant-frontend-mipdn`
 
-**URGENT:** Trebuie să creezi secretul `expertap-database-url` în Google Cloud **ÎNAINTE** de a merge PR-ul!
+**Problema:** GEMINI_API_KEY conține caracter `\n` (newline) care cauzează eroare "Illegal header value" la apeluri API.
 
-#### Rulează în Cloud Shell:
+**Cauză:** Creat cu `echo` în loc de `printf` → `echo` adaugă `\n` automat.
 
+---
+
+## 🚨 PAȘI OBLIGATORII - TREBUIE FĂCUȚI ÎNAINTEA DEPLOY!
+
+### 1. 🔑 Fix GEMINI_API_KEY (CRITICAL - Primul pas!)
+
+**Verifică problema:**
 ```bash
-# 1. Creează secretul
-echo "postgresql+asyncpg://expertap:ExpertAP2025Pass@/expertap?host=/cloudsql/gen-lang-client-0706147575:europe-west1:expertap-db" | \
-gcloud secrets create expertap-database-url \
-  --data-file=- \
-  --replication-policy="automatic"
-
-# 2. Dă permisiuni Cloud Run service account
-gcloud secrets add-iam-policy-binding expertap-database-url \
-  --member="serviceAccount:850584928584-compute@developer.gserviceaccount.com" \
-  --role="roles/secretmanager.secretAccessor"
-
-# 3. Verifică că secretul există
-gcloud secrets describe expertap-database-url
+# Verifică dacă există \n la final
+gcloud secrets versions access latest --secret="expertap-gemini-api-key" | od -c
+# Ar trebui să vezi ... \n la final (asta e problema!)
 ```
 
-### ✅ După crearea secretului:
+**Obține API key clean:**
+1. Mergi la: https://aistudio.google.com/app/apikey
+2. Copiază API key (fără spații sau enter)
+3. Păstrează într-un editor text
 
-1. **Merge PR** `claude/review-session-status-uyIS6` în GitHub
-2. Așteaptă ~3-4 minute pentru Cloud Build
-3. Testează frontend: https://expertap-api-850584928584.europe-west1.run.app/
-4. Ar trebui să vezi: **"Conectat: 7 decizii"** ✅
+**Recreează secretul CORECT:**
+```bash
+# ❌ NU FOLOSI:
+# echo "API_KEY" | gcloud secrets create ...
 
----
+# ✅ FOLOSEȘTE (COPIAZĂ API KEY-UL ÎN LOC DE PASTE_API_KEY_HERE):
+printf "PASTE_API_KEY_HERE" | gcloud secrets versions add expertap-gemini-api-key --data-file=-
+```
 
-## 📊 Status Curent (2025-12-30 - Sesiunea 2)
+**Verifică fix-ul:**
+```bash
+# Verifică că NU mai există \n
+gcloud secrets versions access latest --secret="expertap-gemini-api-key" | od -c
 
-**URL-uri:**
-- Frontend: https://expertap-api-850584928584.europe-west1.run.app/ ✅ (conectat la API!)
-- API Decisions: https://expertap-api-850584928584.europe-west1.run.app/api/v1/decisions/ ✅
-- API Docs: https://expertap-api-850584928584.europe-west1.run.app/docs ✅
-- Health: https://expertap-api-850584928584.europe-west1.run.app/health ✅
+# Verifică lungime exactă (ar trebui să fie ~39 caractere pentru Gemini API key)
+gcloud secrets versions access latest --secret="expertap-gemini-api-key" | wc -c
+```
 
-**Progres:**
-- ✅ Cloud SQL instance: `expertap-db`
-- ✅ Cloud Run conectat la database (unix socket)
-- ✅ API `/api/v1/decisions/` implementat complet
-- ✅ Frontend conectat la API (fetch on mount)
-- ✅ Dashboard afișează statistici reale
-- ✅ 7 decizii CNSC importate în PostgreSQL
-- ✅ Import script robust (skip invalid parsing)
-- ✅ DATABASE_URL securizat prin Secret Manager
-- ⏳ **NEXT:** Creează secret, merge PR, import complet ~3000 decizii
+**Rezultat așteptat:** NU ar trebui să vezi `\n` la final!
 
 ---
 
-## 📋 Următorii Pași
+### 2. 🚀 Deploy CORECT via GitHub (NU manual!)
 
-### 1. Import complet decizii (~10-15 minute)
+**⚠️ IMPORTANT:** NU folosi `gcloud builds submit` manual!
 
-După merge PR successful:
+**Workflow corect:**
 
 ```bash
-cd ~/APP-AI
-git pull origin main
+# 1. Verifică status branch
+git status
+git log --oneline -5
 
-# Pornește Cloud SQL Proxy dacă nu rulează
+# 2. Merge PR în GitHub UI (NU în terminal!)
+# - Deschide: https://github.com/NoisimRo/APP-AI/pulls
+# - Find PR pentru branch: claude/fix-ai-assistant-frontend-mipdn
+# - Click "Merge pull request"
+# - Click "Confirm merge"
+
+# 3. Monitorizează Cloud Build (automat triggered)
+# - Deschide: https://console.cloud.google.com/cloud-build/builds
+# - Așteaptă build să se termine (~3-5 minute)
+# - Status: SUCCESS ✅
+
+# 4. Verifică deployment
+curl https://expertap-api-850584928584.europe-west1.run.app/health
+# Ar trebui: {"status": "healthy", "version": "0.1.0"}
+```
+
+**De ce NU manual deploy:**
+- Deploy manual cu `gcloud builds submit` poate restaura versiune veche
+- GitHub workflow are configurare corectă pentru secrets și environment
+- Triggers automate asigură consistență
+
+---
+
+## ✅ TESTING POST-DEPLOY (După fix GEMINI_API_KEY + Deploy)
+
+### Test 1: Health Check
+```bash
+curl https://expertap-api-850584928584.europe-west1.run.app/health
+# Așteptat: {"status": "healthy", "version": "0.1.0"}
+```
+
+### Test 2: Database Connection
+```bash
+curl https://expertap-api-850584928584.europe-west1.run.app/api/v1/decisions/?limit=3
+# Așteptat: JSON cu 7 decizii CNSC
+```
+
+### Test 3: Chat Assistant (în Frontend)
+**URL:** https://expertap-api-850584928584.europe-west1.run.app/
+
+**Pași:**
+1. Click tab "Intreaba ExpertAP"
+2. Scrie: "Ce decizii CNSC ai în baza de date?"
+3. Click "Trimite"
+
+**Așteptat:**
+- Răspuns generat cu Gemini AI ✅
+- Citări din cele 7 decizii ✅
+- NU erori "Illegal header value" ✅
+
+### Test 4: Red Flags Analyzer (în Frontend)
+**Pași:**
+1. Click tab "Red Flags"
+2. Click "Upload Document"
+3. Upload fișier .txt cu clauză restrictivă (sau paste text manual)
+   - Exemplu text: "Operatorul economic trebuie să aibă o cifră de afaceri de minimum 10 milioane EUR în ultimii 3 ani și să fi realizat minimum 5 contracte similare cu valoare de peste 2 milioane EUR fiecare."
+4. Click "Analizează"
+
+**Așteptat:**
+- Rezultate structurate cu red flags detectate ✅
+- Categorii, severitate, recomandări ✅
+- Referințe la decizii CNSC din database ✅
+
+### Test 5: RAG Memo (în Frontend)
+**Pași:**
+1. Click tab "RAG Memo"
+2. Topic: "experiență similară în achiziții publice"
+3. Max decisions: 5
+4. Click "Generează Memo"
+
+**Așteptat:**
+- Memo juridic generat ✅
+- Citări din decizii CNSC relevante ✅
+- Confidence score ✅
+
+### Test 6: Data Lake (în Frontend)
+**Pași:**
+1. Click tab "Data Lake"
+2. Verifică afișare decizii (ar trebui 7)
+3. Search: "CNSC"
+4. Verifică filter funcționează
+
+**Așteptat:**
+- Display cu toate cele 7 decizii ✅
+- Metadata: număr decizie, părți, soluție, CPV ✅
+- Search funcțional ✅
+
+---
+
+## 📋 Următorii Pași (După Verificare Funcționare)
+
+### P0 - Import Date Complete
+
+#### 1. Import Complet Decizii CNSC (~3000 decizii)
+
+**Timp estimat:** 10-15 minute
+
+```bash
+# 1. Pornește Cloud SQL Proxy (dacă nu rulează deja)
+cd ~/APP-AI
 ./cloud-sql-proxy gen-lang-client-0706147575:europe-west1:expertap-db &
 
-# Import TOATE deciziile (~3000)
+# 2. Verifică conexiune
+pg_isready -h localhost -p 5432
+
+# 3. Import TOATE deciziile
 DATABASE_URL="postgresql+asyncpg://expertap:ExpertAP2025Pass@localhost:5432/expertap" \
 python3 scripts/import_decisions_from_gcs.py
 
-# Verifică în frontend
+# 4. Verifică în database
+psql "postgresql://expertap:ExpertAP2025Pass@localhost:5432/expertap" \
+  -c "SELECT COUNT(*) FROM decizii_cnsc;"
+# Așteptat: ~3000 rows
+
+# 5. Verifică în frontend
 curl "https://expertap-api-850584928584.europe-west1.run.app/api/v1/decisions/?limit=5"
 ```
 
-### 2. Generează embeddings pentru semantic search
+#### 2. Generează Embeddings pentru Semantic Search
+
+**Timp estimat:** 15-20 minute (pentru ~3000 decizii)
 
 ```bash
+# Setup environment
 DATABASE_URL="postgresql+asyncpg://expertap:ExpertAP2025Pass@localhost:5432/expertap" \
 python3 scripts/generate_embeddings.py
+
+# Verifică embeddings create
+psql "postgresql://expertap:ExpertAP2025Pass@localhost:5432/expertap" \
+  -c "SELECT COUNT(*) FROM decizii_cnsc WHERE embedding IS NOT NULL;"
+# Așteptat: ~3000 rows
 ```
 
-### 3. Testează funcționalitățile
+---
 
-- ✅ Dashboard cu statistici complete
-- ✅ Search semantic (după embeddings)
-- ✅ Chatbot RAG cu date reale
-- ✅ Frontend complet funcțional
+## 📚 Documentație Sesiune Refactoring
+
+**Documentație completă:** `SESIUNE_REFACTORING_2025-12-30.md`
+
+### Ce s-a implementat în sesiunea de refactoring:
+
+✅ **Backend Services:**
+- `backend/app/services/rag.py` - RAG service pentru căutare și generare
+- `backend/app/services/document_processor.py` - Procesare PDF/TXT/MD
+- `backend/app/services/redflags_analyzer.py` - Detector clauze restrictive
+
+✅ **Backend API Endpoints:**
+- `POST /api/v1/documents/analyze` - Analizează document
+- `POST /api/v1/documents/upload` - Upload document
+- `POST /api/v1/redflags/` - Detectare red flags
+- `POST /api/v1/ragmemo/` - Generare memo juridic
+
+✅ **Frontend Refactoring:**
+- Data Lake: Transformare din file browser → database browser
+- Red Flags: Upload/paste documente pentru analiză
+- RAG Memo: Căutare automată în database (nu fișiere)
+- Chat: Actualizat pentru RAG service
+
+✅ **Fixes:**
+- SPA routing fix (API routes nu mai returnează HTML)
+- Circular import fix (Citation class)
+- Gemini model names (gemini-3-*-preview)
+
+⚠️ **Pending:**
+- GEMINI_API_KEY fix (remove newline character)
 
 ---
 
 ## 🔑 Credențiale & Config
 
 ### Database:
-- **Instance**: `gen-lang-client-0706147575:europe-west1:expertap-db`
-- **Database**: `expertap`
-- **User**: `expertap`
-- **Password**: `ExpertAP2025Pass`
-- **Secret Name**: `expertap-database-url` (în Secret Manager)
-- **DATABASE_URL (Cloud Run)**: Citit din Secret Manager ✅
-- **DATABASE_URL (Local/Proxy)**: `postgresql+asyncpg://expertap:ExpertAP2025Pass@localhost:5432/expertap`
+- **Instance:** `gen-lang-client-0706147575:europe-west1:expertap-db`
+- **Database:** `expertap`
+- **User:** `expertap`
+- **Password:** `ExpertAP2025Pass`
+- **Secret Name:** `expertap-database-url` (în Secret Manager)
+- **DATABASE_URL (Cloud Run):** Citit din Secret Manager ✅
+- **DATABASE_URL (Local/Proxy):** `postgresql+asyncpg://expertap:ExpertAP2025Pass@localhost:5432/expertap`
+
+### Gemini AI:
+- **Secret Name:** `expertap-gemini-api-key` (în Secret Manager)
+- **⚠️ Status:** INVALID (conține `\n`) - TREBUIE RECREAT!
+- **Models:** `gemini-3-flash-preview`, `gemini-3-pro-preview`
 
 ### GCS Bucket:
-- **Bucket**: `date-expert-app`
-- **Folder**: `decizii-cnsc`
-- **Fișiere**: ~3000 decizii CNSC
-- **Importate**: 7 (pentru test)
+- **Bucket:** `date-expert-app`
+- **Folder:** `decizii-cnsc`
+- **Fișiere:** ~3000 decizii CNSC
+- **Importate:** 7 (test dataset)
+
+### Deployment:
+- **URL:** https://expertap-api-850584928584.europe-west1.run.app/
+- **Cloud Run Service:** `expertap-api`
+- **Region:** `europe-west1`
+- **Branch pentru deploy:** `main` (după merge din `claude/fix-ai-assistant-frontend-mipdn`)
 
 ---
 
-## 📚 Documentație
+## 📊 Status Features
 
-**Vezi documentația completă în:**
-- ✅ **SESIUNE_REZUMAT_2025-12-30.md** - Prima sesiune (database setup)
-- ✅ **SESIUNE_REZUMAT_2025-12-30_P2.md** - Sesiunea curentă (API + Frontend)
-- ✅ **QUICKSTART.md** - Ghid rapid
-- ✅ **docs/SETUP_DATABASE.md** - Setup detaliat
-- ✅ **docs/CLOUD_RUN_DATABASE_CONFIG.md** - Configurare
+### ✅ Implementate și Funcționale (După fix GEMINI_API_KEY)
+- [x] Database Connection (PostgreSQL + Cloud SQL)
+- [x] API `/api/v1/decisions/` (7 decizii CNSC)
+- [x] Frontend Dashboard (conectat la API)
+- [x] Data Lake (database browser)
+- [x] Chat Assistant (RAG cu database)
+- [x] Red Flags Detector (upload + analiză)
+- [x] RAG Memo (generare automată)
+- [x] Clarifications (actualizat)
+- [x] Document Processor (PDF/TXT/MD)
 
----
-
-## Completed în Sesiunea 2 (2025-12-30) 🎉
-
-### ✅ API Implementation - Funcțional cu Date Reale
-- [x] **Endpoint `/api/v1/decisions/` implementat**
-  - Query PostgreSQL cu paginare
-  - Filtrare după ruling și year
-  - Mapare DecizieCNSC → DecisionSummary
-  - Returnează JSON cu 7 decizii ✅
-  - Commit: `ccc7222`
-
-- [x] **Endpoint `/api/v1/decisions/{id}` implementat**
-  - Query by ID
-  - Returnează detalii complete
-  - Mapare la Decision model
-  - Commit: `ccc7222`
-
-### ✅ Database Connection Fixes
-- [x] **RuntimeError: Database not initialized - REZOLVAT**
-  - Cauză: `async_session_factory` None la runtime
-  - Fix: Acces runtime la variabila globală (fără `global` keyword)
-  - Commits: `b20bac1`, `3809a61`
-
-- [x] **DATABASE_URL missing în Cloud Run - REZOLVAT**
-  - Cauză: Env var setat manual, șters la fiecare deploy
-  - Fix: `localhost:5432` → unix socket `/cloudsql/...`
-  - Setat manual în Console (temporar)
-
-- [x] **DATABASE_URL persistent - SECURIZAT**
-  - Implementat Secret Manager în `cloudbuild.yaml`
-  - `--set-secrets=DATABASE_URL=expertap-database-url:latest`
-  - Zero passwords hardcodate în cod ✅
-  - Commit: `1dc53da`
-
-### ✅ Import Script Improvements
-- [x] **Skip invalid decisions**
-  - Decizii cu `an_bo=0` sau `numar_bo=0` → skip cu warning
-  - Previne batch rollback din duplicate key
-  - 7 decizii importate cu succes ✅
-  - Commit: `54e1d0e`
-
-- [x] **Bucket actualizat**
-  - `date-ap-raw` → `date-expert-app`
-  - Commit anterior
-
-### ✅ Frontend Integration
-- [x] **Fetch decisions from API**
-  - `useEffect` pentru fetch on mount
-  - State management: `apiDecisions`, `isLoadingDecisions`
-  - Commit: `1dc53da`
-
-- [x] **Dashboard cu date reale**
-  - "Conectat: 7 decizii" (nu mai "Deconectat")
-  - Total Decizii CNSC: 7
-  - Decizii Rezultat, Admise, Respinse - calculat dinamic
-  - Commit: `1dc53da`
-
----
-
-## Completed în Sesiunea 1 (2025-12-30) 🎉
-
-### ✅ Database Connection - Cloud Run conectat cu succes!
-- [x] **Cloud SQL Instance creat manual**: `expertap-db`
-  - PostgreSQL 15 cu pgvector extension
-  - Database `expertap` + user `expertap`
-  - Password: `ExpertAP2025Pass`
-  - Extensions activate: vector, pg_trgm
-
-- [x] **Cloud Run conectat la database**:
-  - Format corect: `postgresql+asyncpg://...`
-  - DATABASE_URL cu unix socket `/cloudsql/...`
-  - `SKIP_DB=false` în cloudbuild.yaml
-  - Verificat: `database_connection_initialized` ✅
-
-- [x] **Import script reparat**:
-  - Fix "engine is None" AttributeError
-  - Folosește `db_session.engine`
-  - Verificare engine inițializat
-  - `text()` wrapper pentru SQL statements
-
-- [x] **Cloud SQL Proxy setup**:
-  - Pentru import local/Cloud Shell
-  - localhost:5432 connection
-
----
-
-## Completed în sesiunea 2025-12-25 🎉
-
-### ✅ Database Setup - Toate scripturile create!
-- [x] **Script automat Cloud SQL**: `scripts/setup_cloud_sql.sh`
-- [x] **Script import GCS**: `scripts/import_decisions_from_gcs.py`
-- [x] **Alembic configuration** cu async support
-- [x] **Migrații database**: `backend/alembic/versions/20251225_0001_initial_schema.py`
-- [x] **Documentație completă**: QUICKSTART.md, SETUP_DATABASE.md
-
----
-
-## Backlog
-
-### P0 - MVP Core (Must Have)
-
-#### 🟢 Baza de Date și Date Reale - API FUNCȚIONAL!
-- [x] **DONE**: API `/api/v1/decisions/` implementat
-- [x] **DONE**: Frontend conectat la API
-- [x] **DONE**: 7 decizii importate pentru test
-- [x] **DONE**: DATABASE_URL securizat prin Secret Manager
-- [ ] **NEXT**: Creează secret în Google Cloud (CRITICAL!)
+### ⏳ În Așteptare
+- [ ] GEMINI_API_KEY fix (CRITICAL!)
+- [ ] Deploy via GitHub workflow
+- [ ] Testing complet post-deploy
 - [ ] Import complet ~3000 decizii
-- [ ] Generare embeddings pentru semantic search
-- [ ] Testare frontend cu toate datele
+- [ ] Generare embeddings
 
-#### Frontend Funcțional
-- [x] Dashboard conectat la API ✅
-- [ ] Debugging și fix pentru orice erori
-- [ ] Testare end-to-end a tuturor funcțiilor
-- [ ] Search interface cu date reale
-
-#### Search (Chatbot Foundation)
-- [ ] Semantic search endpoint (după embeddings)
+### 🔮 Viitor (După MVP)
+- [ ] Semantic search (după embeddings)
 - [ ] Hybrid search (semantic + keyword)
-- [ ] Filter by metadata (CPV, critic codes, etc.)
-
-#### Chatbot "Intreaba ExpertAP"
-- [ ] RAG pipeline complet
-- [ ] Citation verification
-- [ ] Conversation history
-
-### P1 - MVP Features
-- [ ] Legal Drafter
-- [ ] Red Flags Detector
 - [ ] Authentication (Firebase)
+- [ ] Legal Drafter feature
+- [ ] Performance optimization
 
 ---
 
-_Last updated: 2025-12-30 - API funcțional! Frontend conectat! Database securizat! 🎉_
+## 🐛 Known Issues
+
+### 🔴 CRITICAL - GEMINI_API_KEY Invalid
+**Problema:** Conține caracter `\n` (newline) → "Illegal header value"
+
+**Status:** Identificată cauza, soluția pregătită
+
+**Fix:** Recreează cu `printf` (vezi secțiunea "PAȘI OBLIGATORII")
+
+### ⚠️ WARNING - Nu folosi manual deploy
+**Problema:** `gcloud builds submit` poate restaura versiune veche
+
+**Status:** Utilizator informat
+
+**Fix:** Folosește ÎNTOTDEAUNA GitHub workflow (merge PR → automatic trigger)
+
+---
+
+## 📖 Alte Documente Relevante
+
+- ✅ **SESIUNE_REFACTORING_2025-12-30.md** - Sesiune curentă (refactoring frontend → database)
+- ✅ **SESIUNE_REZUMAT_2025-12-30.md** - Prima sesiune (database setup)
+- ✅ **SESIUNE_REZUMAT_2025-12-30_P2.md** - Sesiunea 2 (API + Frontend)
+- ✅ **QUICKSTART.md** - Ghid rapid
+- ✅ **docs/SETUP_DATABASE.md** - Setup detaliat database
+- ✅ **docs/CLOUD_RUN_DATABASE_CONFIG.md** - Configurare Cloud Run
+
+---
+
+## 🎯 Definition of Done - Sesiunea Următoare
+
+Sesiunea următoare este considerată **SUCCESS** dacă:
+
+1. ✅ GEMINI_API_KEY recreat fără `\n`
+2. ✅ Deploy via GitHub merge PR successful
+3. ✅ Toate testele din secțiunea "TESTING POST-DEPLOY" trec
+4. ✅ Chat funcționează fără erori "Illegal header value"
+5. ✅ Red Flags poate analiza documente uploadate
+6. ✅ RAG Memo generează memo-uri din database
+7. ✅ Data Lake afișează toate cele 7 decizii
+
+**Bonus (optional):**
+8. ✅ Import complet ~3000 decizii
+9. ✅ Embeddings generate pentru semantic search
+
+---
+
+_Last updated: 2025-12-30 - Refactoring complet, pending GEMINI_API_KEY fix 🔑_
