@@ -60,7 +60,7 @@ steps:
       - '--set-env-vars'
       - 'ENVIRONMENT=production,SKIP_DB=false,DEBUG=false,LOG_LEVEL=INFO'
       - '--set-secrets'
-      - 'DATABASE_URL=expertap-database-url:latest'
+      - 'DATABASE_URL=expertap-database-url:latest,GEMINI_API_KEY=expertap-gemini-api-key:latest'
       - '--add-cloudsql-instances'
       - 'gen-lang-client-0706147575:europe-west1:expertap-db'
     waitFor: ['push']
