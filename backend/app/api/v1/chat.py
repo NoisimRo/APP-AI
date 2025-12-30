@@ -90,10 +90,18 @@ async def chat(
             confidence=confidence
         )
 
+        # Convert Citation objects to dicts for Pydantic validation
+        # RAG service returns Citation objects from rag.py, but ChatResponse
+        # expects Citation objects from chat.py (different classes)
+        citations_dicts = [
+            {"decision_id": c.decision_id, "text": c.text, "verified": c.verified}
+            for c in citations
+        ]
+
         return ChatResponse(
             message=response_text,
             conversation_id=conversation_id,
-            citations=citations,
+            citations=citations_dicts,
             confidence=confidence,
             suggested_questions=suggested,
         )
