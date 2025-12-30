@@ -9,13 +9,21 @@ This service handles:
 from typing import Optional
 from sqlalchemy import select, or_, func
 from sqlalchemy.ext.asyncio import AsyncSession
+from pydantic import BaseModel
 
 from app.core.logging import get_logger
 from app.models.decision import DecizieCNSC, ArgumentareCritica
 from app.services.llm.gemini import GeminiProvider
-from app.api.v1.chat import Citation
 
 logger = get_logger(__name__)
+
+
+class Citation(BaseModel):
+    """A citation from a CNSC decision."""
+
+    decision_id: str
+    text: str
+    verified: bool = True
 
 
 class RAGService:
