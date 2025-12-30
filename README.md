@@ -15,14 +15,17 @@ ExpertAP transforms unstructured CNSC (National Council for Solving Complaints) 
 
 **Live Application:** https://expertap-api-850584928584.europe-west1.run.app/
 
-The application is deployed on Google Cloud Platform (Cloud Run). To set up the database and import data:
+**Status (2025-12-30):**
+- ✅ Cloud Run deployed and running
+- ✅ Cloud SQL database connected (`expertap-db`)
+- ⏳ Ready to import ~3000 CNSC decisions
 
-**📖 See [QUICKSTART.md](QUICKSTART.md) for complete setup instructions (15-20 minutes)**
+**Next step:** Import data using `python scripts/import_decisions_from_gcs.py --create-tables`
 
-Quick overview:
-1. Run `./scripts/setup_cloud_sql.sh` to create Cloud SQL instance
-2. Connect Cloud Run to database
-3. Import ~3000 CNSC decisions: `python scripts/import_decisions_from_gcs.py`
+For complete setup history and instructions, see:
+- **[SESIUNE_REZUMAT_2025-12-30.md](SESIUNE_REZUMAT_2025-12-30.md)** - Latest session summary
+- [QUICKSTART.md](QUICKSTART.md) - Quick setup guide
+- [TODO.md](TODO.md) - Current status and next steps
 
 For detailed instructions, see:
 - [QUICKSTART.md](QUICKSTART.md) - Quick 3-step guide

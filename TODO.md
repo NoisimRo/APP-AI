@@ -1,43 +1,63 @@
 # ExpertAP - TODO
 
-## URGENT - READY TO DEPLOY! 🚀
+## URGENT - READY TO IMPORT DATA! 🚀
 
-### ✅ SCRIPTURILE SUNT GATA - Rulează manual (Vezi QUICKSTART.md)
+### ✅ DATABASE CONECTAT! - Gata pentru import date
 
-**Status:** Toate scripturile și documentația sunt create. Trebuie doar rulate manual!
+**Status:** Cloud SQL creat și conectat la Cloud Run! Import script reparat. Gata pentru import ~3000 decizii!
 
 **URL-uri:**
-- Frontend: https://expertap-api-850584928584.europe-west1.run.app/ (se afișează, dar fără date)
-- Health: https://expertap-api-850584928584.europe-west1.run.app/health ✅ (indică "healthy")
+- Frontend: https://expertap-api-850584928584.europe-west1.run.app/ (funcțional, dar fără date încă)
+- Health: https://expertap-api-850584928584.europe-west1.run.app/health ✅ (database: connected)
 - API Docs: https://expertap-api-850584928584.europe-west1.run.app/docs
 
-**Situație:** Aplicația rulează cu `SKIP_DB=true` - trebuie configurată baza de date.
+**Situație actuală (2025-12-30):**
+- ✅ Cloud SQL instance creat: `expertap-db`
+- ✅ Cloud Run conectat la database cu `postgresql+asyncpg://`
+- ✅ `SKIP_DB=false` configurat în cloudbuild.yaml
+- ✅ Import script reparat (engine reference fix)
+- ⏳ **NEXT:** Import ~3000 decizii CNSC din GCS
 
-**Soluție pregătită - Vezi QUICKSTART.md pentru instrucțiuni complete!**
+### 📋 Următorul pas (10-15 minute):
 
-### 📋 Pași pentru finalizare (MANUAL - 15-20 minute total):
+**IMPORTANT:** Vezi `SESIUNE_REZUMAT_2025-12-30.md` pentru detalii complete despre sesiunea anterioară!
 
-1. [ ] **Rulează setup Cloud SQL** (5 min) - Vezi QUICKSTART.md sau docs/SETUP_DATABASE.md
-   ```bash
-   ./scripts/setup_cloud_sql.sh
-   ```
+#### 1. Setup Cloud SQL Proxy (dacă nu rulează deja)
+```bash
+# Verifică dacă rulează:
+ps aux | grep cloud-sql-proxy
 
-2. [ ] **Conectează Cloud Run** (2 min) - Vezi docs/CLOUD_RUN_DATABASE_CONFIG.md
-   ```bash
-   gcloud run services update expertap-api \
-       --add-cloudsql-instances=CONNECTION_NAME \
-       --update-env-vars="DATABASE_URL=...,SKIP_DB=false"
-   ```
+# Dacă nu, pornește-l:
+./cloud-sql-proxy gen-lang-client-0706147575:europe-west1:expertap-db &
+```
 
-3. [ ] **Importă datele** (10-15 min)
-   ```bash
-   python scripts/import_decisions_from_gcs.py --create-tables
-   ```
+#### 2. Rulează import (TEST cu 10 fișiere mai întâi!)
+```bash
+# Test cu 10 fișiere:
+DATABASE_URL="postgresql+asyncpg://expertap:ExpertAP2025Pass@localhost:5432/expertap" \
+python3 scripts/import_decisions_from_gcs.py --create-tables --limit 10
 
-4. [ ] **Testare completă**
-   ```bash
-   curl https://expertap-api-850584928584.europe-west1.run.app/health
-   ```
+# Dacă testul merge, rulează pentru toate ~3000:
+DATABASE_URL="postgresql+asyncpg://expertap:ExpertAP2025Pass@localhost:5432/expertap" \
+python3 scripts/import_decisions_from_gcs.py --create-tables
+```
+
+#### 3. Verifică importul
+```bash
+# Check health
+curl https://expertap-api-850584928584.europe-west1.run.app/health
+
+# Test API - ar trebui să returneze decizii
+curl "https://expertap-api-850584928584.europe-west1.run.app/api/v1/decisions?limit=5"
+```
+
+### 🔑 Credențiale Database (pentru referință):
+- **Instance**: `gen-lang-client-0706147575:europe-west1:expertap-db`
+- **Database**: `expertap`
+- **User**: `expertap`
+- **Password**: `ExpertAP2025Pass`
+- **DATABASE_URL (Cloud Run)**: `postgresql+asyncpg://expertap:ExpertAP2025Pass@/expertap?host=/cloudsql/gen-lang-client-0706147575:europe-west1:expertap-db`
+- **DATABASE_URL (Local/Proxy)**: `postgresql+asyncpg://expertap:ExpertAP2025Pass@localhost:5432/expertap`
 
 ### 📚 Documentație completă creată:
 - ✅ **QUICKSTART.md** - Ghid rapid în 3 pași
@@ -55,7 +75,41 @@
 
 ---
 
-## Completed în sesiunea curentă (2025-12-25) 🎉
+## Completed în sesiunea curentă (2025-12-30) 🎉
+
+### ✅ Database Connection - Cloud Run conectat cu succes!
+- [x] **Cloud SQL Instance creat manual**: `expertap-db`
+  - PostgreSQL 15 cu pgvector extension
+  - Database `expertap` + user `expertap`
+  - Password: `ExpertAP2025Pass` (simplu, fără caractere speciale)
+  - Extensions activate: vector, pg_trgm
+- [x] **Cloud Run conectat la database**:
+  - Format corect descoperit: `postgresql+asyncpg://...` (nu `postgresql://`)
+  - DATABASE_URL configurat cu unix socket `/cloudsql/...`
+  - SKIP_DB=false în cloudbuild.yaml
+  - Verificat în logs: `database_connection_initialized` ✅
+- [x] **Import script reparat**: `scripts/import_decisions_from_gcs.py`
+  - Fix pentru "engine is None" AttributeError
+  - Modificat import să folosească `db_session.engine`
+  - Adăugată verificare pentru engine inițializat
+  - Commit: `18417de`
+- [x] **Cloud SQL Proxy setup**: Pentru import local/Cloud Shell
+  - Configurare pentru localhost:5432
+  - DATABASE_URL pentru conexiune locală
+- [x] **Documentation updated**:
+  - Creat SESIUNE_REZUMAT_2025-12-30.md
+  - Actualizat TODO.md cu status curent
+
+### 🔧 Probleme majore rezolvate:
+1. Bash special characters în password (`!` interpretat ca history expansion)
+2. cloudbuild.yaml override (SKIP_DB hardcodat la true)
+3. **CRITICAL:** Format DATABASE_URL greșit (`postgresql://` vs `postgresql+asyncpg://`)
+4. Unix socket vs TCP pentru Cloud Shell connections
+5. Engine reference issue în import script (captured None value)
+
+---
+
+## Completed în sesiunea 2025-12-25 🎉
 
 ### ✅ Database Setup - Toate scripturile create!
 - [x] **Script automat Cloud SQL**: `scripts/setup_cloud_sql.sh`
@@ -115,14 +169,15 @@
 
 ### P0 - MVP Core (Must Have)
 
-#### 🟢 Baza de Date și Date Reale - SCRIPTURILE SUNT GATA!
+#### 🟢 Baza de Date și Date Reale - DATABASE CONECTAT!
 - [x] **DONE**: Scripturile pentru Cloud SQL create (vezi QUICKSTART.md)
-- [x] **DONE**: Script import din GCS creat
+- [x] **DONE**: Script import din GCS creat și reparat
 - [x] **DONE**: Alembic migrations configurate
 - [x] **DONE**: Documentație completă
-- [ ] **MANUAL**: Rulare setup Cloud SQL (5 min) - Vezi QUICKSTART.md
-- [ ] **MANUAL**: Conectare Cloud Run (2 min) - Vezi docs/CLOUD_RUN_DATABASE_CONFIG.md
-- [ ] **MANUAL**: Import date (10-15 min) - Rulează `python scripts/import_decisions_from_gcs.py`
+- [x] **DONE**: Cloud SQL instance creat manual (expertap-db)
+- [x] **DONE**: Cloud Run conectat la database (postgresql+asyncpg)
+- [x] **DONE**: Import script reparat (engine reference fix)
+- [ ] **NEXT**: Import date (10-15 min) - Rulează `python scripts/import_decisions_from_gcs.py --create-tables`
 - [ ] Generare embeddings pentru semantic search
 - [ ] Testare frontend cu date reale
 
@@ -178,4 +233,4 @@
 
 ---
 
-_Last updated: 2025-12-25 - Database scripts completed! 🎉_
+_Last updated: 2025-12-30 - Database connected! Ready to import data! 🎉_
