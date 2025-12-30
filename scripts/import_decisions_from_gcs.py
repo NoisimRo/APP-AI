@@ -23,7 +23,7 @@ from typing import Optional
 sys.path.insert(0, str(Path(__file__).parent.parent / "backend"))
 
 from google.cloud import storage
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
@@ -268,8 +268,8 @@ async def create_tables():
 
     async with db_session.engine.begin() as conn:
         # Enable pgvector extension
-        await conn.execute("CREATE EXTENSION IF NOT EXISTS vector")
-        await conn.execute("CREATE EXTENSION IF NOT EXISTS pg_trgm")
+        await conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
+        await conn.execute(text("CREATE EXTENSION IF NOT EXISTS pg_trgm"))
 
         # Create all tables
         await conn.run_sync(Base.metadata.create_all)
