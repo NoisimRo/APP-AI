@@ -588,88 +588,82 @@ const App = () => {
         <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
            <div className="flex justify-between items-center mb-6">
               <h3 className="font-bold text-slate-800 flex items-center gap-2">
-                 <Cloud size={18} className="text-blue-500" />
-                 Conexiune Data Lake
+                 <Database size={18} className="text-blue-500" />
+                 Conexiune Database
               </h3>
               <span className="text-xs bg-slate-100 text-slate-600 px-2 py-1 rounded border border-slate-200 font-mono">
-                s3://date-ap-raw/decizii-cnsc
+                PostgreSQL Cloud SQL
               </span>
            </div>
-           
-           {files.length === 0 ? (
-             <div 
-                onClick={simulateSync}
-                className="block w-full border-2 border-dashed border-slate-300 rounded-lg p-10 text-center hover:bg-slate-50 transition cursor-pointer group"
-             >
-                <div className="flex flex-col items-center">
-                  <div className={`w-14 h-14 rounded-full flex items-center justify-center mb-3 transition ${isSyncing ? 'bg-blue-100' : 'bg-slate-50 group-hover:bg-blue-50'}`}>
-                     {isSyncing ? (
-                       <RefreshCw size={24} className="text-blue-600 animate-spin" />
-                     ) : (
-                       <Cloud size={24} className="text-slate-400 group-hover:text-blue-500" />
-                     )}
-                  </div>
-                  <span className="text-slate-700 font-medium">
-                    {isSyncing ? "Se stabilește conexiunea..." : "Conectare la Bucket"}
-                  </span>
-                  <span className="text-xs text-slate-500 mt-1 max-w-xs">
-                     Sincronizează datele locale cu instanța ExpertAP. Click pentru a selecta directorul sursă.
-                  </span>
+
+           {isLoadingDecisions ? (
+             <div className="flex flex-col items-center justify-center p-10">
+                <div className="w-14 h-14 rounded-full flex items-center justify-center mb-3 bg-blue-100">
+                   <RefreshCw size={24} className="text-blue-600 animate-spin" />
                 </div>
+                <span className="text-slate-700 font-medium">Se încarcă deciziile...</span>
+                <span className="text-xs text-slate-500 mt-1">Conectare la baza de date</span>
              </div>
-           ) : (
+           ) : apiDecisions.length > 0 ? (
              <div className="bg-green-50 border border-green-100 rounded-lg p-6 flex flex-col items-center text-center">
                 <CheckCircle size={32} className="text-green-500 mb-2" />
                 <h4 className="font-bold text-green-800">Conexiune Activă</h4>
                 <p className="text-sm text-green-700 mt-1">
-                   S-au încărcat {files.length} documente din bucket-ul <span className="font-mono text-xs">decizii-cnsc</span>.
+                   Conectat la baza de date. {apiDecisions.length} {apiDecisions.length === 1 ? 'decizie CNSC disponibilă' : 'decizii CNSC disponibile'}.
                 </p>
                 <button onClick={() => setMode('datalake')} className="mt-4 text-sm bg-white border border-green-200 text-green-700 px-4 py-2 rounded-lg hover:bg-green-100 transition shadow-sm font-medium">
-                   Vezi Fișierele
+                   Explorează Deciziile
                 </button>
              </div>
+           ) : (
+             <div className="bg-amber-50 border border-amber-100 rounded-lg p-6 flex flex-col items-center text-center">
+                <Database size={32} className="text-amber-500 mb-2" />
+                <h4 className="font-bold text-amber-800">Baza de Date Goală</h4>
+                <p className="text-sm text-amber-700 mt-1">
+                   Nu s-au găsit decizii în baza de date. Verifică conexiunea sau importă date.
+                </p>
+             </div>
            )}
-           
-           {/* Hidden Input specifically for Folder Upload */}
-           <input 
-              type="file" 
-              ref={fileInputRef}
-              className="hidden" 
-              onChange={handleFileUpload} 
-              accept=".txt,.pdf"
-              // @ts-ignore - React doesn't fully type webkitdirectory yet
-              webkitdirectory=""
-              directory=""
-              multiple 
-           />
         </div>
 
         <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
            <h3 className="font-bold text-slate-800 mb-4 flex items-center gap-2">
               <CheckSquare size={18} className="text-green-500" />
-              Status Context Activ
+              Jurisprudență Disponibilă
            </h3>
            <p className="text-sm text-slate-600 mb-4">
-             Fișierele active sunt trimise automat către modelele AI pentru analiză.
-             Gestionează selecția în secțiunea <strong>Data Lake</strong>.
+             Deciziile CNSC sunt disponibile pentru analiză AI în toate secțiunile aplicației.
+             Vezi detalii complete în <strong>Data Lake</strong>.
            </p>
-           
+
            <div className="space-y-3">
-              {activeFiles.slice(0, 5).map(f => (
-                <div key={f.id} className="flex items-center gap-2 text-sm text-slate-700 p-2 bg-slate-50 rounded">
-                   <FileText size={14} className="text-slate-400" />
-                   <span className="truncate flex-1">{f.name}</span>
-                   <span className="text-xs bg-green-100 text-green-700 px-1.5 rounded">Activ</span>
-                </div>
-              ))}
-              {activeFiles.length > 5 && (
-                <div className="text-xs text-center text-slate-500 pt-2">
-                   + încă {activeFiles.length - 5} fișiere active
-                </div>
-              )}
-              {activeFiles.length === 0 && (
+              {apiDecisions.length > 0 ? (
+                <>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="bg-blue-50 border border-blue-100 rounded-lg p-3">
+                      <div className="text-2xl font-bold text-blue-700">{apiDecisions.length}</div>
+                      <div className="text-xs text-blue-600 mt-1">Total Decizii</div>
+                    </div>
+                    <div className="bg-green-50 border border-green-100 rounded-lg p-3">
+                      <div className="text-2xl font-bold text-green-700">
+                        {apiDecisions.filter(d => d.solutie_contestatie?.includes('ADMIS')).length}
+                      </div>
+                      <div className="text-xs text-green-600 mt-1">Admise</div>
+                    </div>
+                  </div>
+                  <div className="bg-slate-50 border border-slate-100 rounded-lg p-3">
+                    <div className="flex items-center gap-2 text-sm text-slate-700">
+                      <Database size={14} className="text-slate-400" />
+                      <span>Toate deciziile sunt indexate pentru căutare semantică</span>
+                    </div>
+                  </div>
+                  <button onClick={() => setMode('datalake')} className="w-full text-sm bg-blue-500 text-white px-4 py-2 rounded-lg hover:bg-blue-600 transition shadow-sm font-medium">
+                    Explorează Database
+                  </button>
+                </>
+              ) : (
                 <div className="text-sm text-amber-600 bg-amber-50 p-3 rounded border border-amber-100">
-                   Niciun fișier activ. AI-ul va răspunde doar din cunoștințe generale.
+                   Nu există decizii în baza de date. AI-ul va răspunde doar din cunoștințe generale.
                 </div>
               )}
            </div>
