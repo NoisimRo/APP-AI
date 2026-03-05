@@ -325,3 +325,58 @@ class DecisionAnalysisService:
 
         logger.info("analysis_completed", **stats)
         return stats
+
+    async def analyze_all(
+        self,
+        session: AsyncSession,
+        limit: Optional[int] = None,
+        overwrite: bool = False,
+    ) -> dict:
+        """Analyze all decisions, optionally overwriting existing records.
+
+        Args:
+            session: Database session.
+            limit: Max number of decisions to process.
+            overwrite: If True, re-analyze even already-analyzed decisions.
+
+        Returns:
+            Stats dict with counts.
+        """
+        stmt = (
+            select(DecizieCNSC)
+            .order_by(DecizieCNSC.created_at.desc())
+        )
+        if limit:
+            stmt = stmt.limit(limit)
+
+        result = await session.execute(stmt)
+        decisions = list(result.scalars().all())
+
+        stats = {
+            "total": len(decisions),
+            "analyzed": 0,
+            "failed": 0,
+            "argumentari_created": 0,
+            "errors": [],
+        }
+
+        logger.info("analyzing_all_decisions", count=len(decisions), overwrite=overwrite)
+
+        for dec in decisions:
+            try:
+                count = await self.analyze_and_store(session, dec, overwrite=overwrite)
+                stats["analyzed"] += 1
+                stats["argumentari_created"] += count
+                await session.commit()
+            except Exception as e:
+                stats["failed"] += 1
+                stats["errors"].append(f"{dec.external_id}: {str(e)}")
+                logger.error(
+                    "decision_analysis_failed",
+                    external_id=dec.external_id,
+                    error=str(e),
+                )
+                await session.rollback()
+
+        logger.info("analysis_completed", **stats)
+        return stats

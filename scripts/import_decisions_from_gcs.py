@@ -377,6 +377,11 @@ async def main():
         action="store_true",
         help="Only analyze existing decisions (skip GCS import)",
     )
+    parser.add_argument(
+        "--overwrite",
+        action="store_true",
+        help="Re-analyze decisions that already have ArgumentareCritica records",
+    )
 
     args = parser.parse_args()
 
@@ -396,13 +401,20 @@ async def main():
 
     # Analyze-only mode: extract ArgumentareCritica from existing decisions
     if args.analyze_only:
-        logger.info("analyze_only_mode")
+        logger.info("analyze_only_mode", overwrite=args.overwrite)
         analysis_service = DecisionAnalysisService()
 
-        async with db_session.async_session_factory() as session:
-            stats = await analysis_service.analyze_all_unprocessed(
-                session, limit=args.limit
-            )
+        if args.overwrite:
+            # Re-analyze ALL decisions (including already analyzed ones)
+            async with db_session.async_session_factory() as session:
+                stats = await analysis_service.analyze_all(
+                    session, limit=args.limit, overwrite=True
+                )
+        else:
+            async with db_session.async_session_factory() as session:
+                stats = await analysis_service.analyze_all_unprocessed(
+                    session, limit=args.limit
+                )
 
         print("\n" + "=" * 60)
         print("ANALYSIS SUMMARY")
@@ -419,13 +431,13 @@ async def main():
 
         print("=" * 60)
 
-        # Generate embeddings for new argumentari
+        # Generate embeddings for new/updated argumentari
         if stats['argumentari_created'] > 0 and not args.skip_embeddings:
-            print("\nGenerating embeddings for new argumentari...")
+            print("\nGenerating embeddings for argumentari...")
             async with db_session.async_session_factory() as emb_session:
                 embedding_service = EmbeddingService()
                 emb_count = await embedding_service.generate_embeddings_for_argumentari(
-                    emb_session
+                    emb_session, force=args.overwrite
                 )
                 await emb_session.commit()
                 print(f"Embeddings generated: {emb_count}")
