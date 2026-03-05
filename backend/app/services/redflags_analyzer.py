@@ -129,10 +129,18 @@ class RedFlagsAnalyzer:
                 section.append(f"\n--- Critica {arg.cod_critica} (relevanță: {similarity:.2f}) ---")
                 if arg.argumente_contestator:
                     section.append(f"Argumente contestator: {arg.argumente_contestator[:500]}")
+                if arg.jurisprudenta_contestator:
+                    section.append(f"Jurisprudență contestator: {'; '.join(arg.jurisprudenta_contestator)}")
+                if arg.argumente_ac:
+                    section.append(f"Argumente AC: {arg.argumente_ac[:500]}")
+                if arg.jurisprudenta_ac:
+                    section.append(f"Jurisprudență AC: {'; '.join(arg.jurisprudenta_ac)}")
                 if arg.elemente_retinute_cnsc:
                     section.append(f"Elemente reținute CNSC: {arg.elemente_retinute_cnsc[:500]}")
                 if arg.argumentatie_cnsc:
                     section.append(f"Argumentație CNSC: {arg.argumentatie_cnsc[:500]}")
+                if arg.jurisprudenta_cnsc:
+                    section.append(f"Jurisprudență CNSC: {'; '.join(arg.jurisprudenta_cnsc)}")
                 if arg.castigator_critica and arg.castigator_critica != "unknown":
                     section.append(f"Câștigător: {arg.castigator_critica}")
 

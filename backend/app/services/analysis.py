@@ -25,18 +25,43 @@ logger = get_logger(__name__)
 
 ANALYSIS_SYSTEM_PROMPT = """Ești un analist juridic expert în achiziții publice românești, specializat în deciziile CNSC.
 
-Sarcina ta: Analizează textul integral al unei decizii CNSC și extrage argumentația structurată per critică.
+Sarcina ta: Analizează textul integral al unei decizii CNSC și extrage argumentația structurată per critică (per motiv de contestare).
 
 Returnează un JSON array cu obiectele de mai jos. Dacă decizia are o singură critică, returnează un singur obiect.
 
-IMPORTANT:
+REGULI CRITICE:
 - Extrage TOATE argumentele relevante, nu doar primele rânduri
-- Fiecare câmp trebuie să fie un rezumat substanțial (minim 200 de cuvinte dacă informația există)
-- Pentru argumente_contestator: include toate motivele de fapt și de drept invocate
-- Pentru argumente_ac: include toate apărările formulate
-- Pentru elemente_retinute_cnsc: include toate constatările și dovezile analizate
-- Pentru argumentatie_cnsc: include raționamentul complet al CNSC cu referiri la articole de lege
+- Fiecare câmp text trebuie să fie un rezumat substanțial (minim 200 de cuvinte dacă informația există)
 - castigator_critica trebuie să fie unul din: "contestator", "autoritate", "partial", "unknown"
+
+ARGUMENTELE CONTESTATORULUI (argumente_contestator):
+- Include TOATE motivele de fapt invocate de contestator
+- Include TOATE motivele de drept (articole de lege, directive europene)
+- Păstrează structura logică a argumentației
+
+JURISPRUDENȚA CONTESTATORULUI (jurisprudenta_contestator):
+- Extrage FIECARE referință la jurisprudență invocată de contestator
+- Include: decizii ale Curților de Apel, decizii CJUE, alte decizii CNSC, directive europene
+- Format exact cum apare în text (ex: "cauza C-927/19 CJUE", "Decizia nr. 506/2023 a Curții de Apel Alba Iulia")
+- Dacă nu există jurisprudență invocată, returnează array gol []
+
+ARGUMENTELE AUTORITĂȚII CONTRACTANTE (argumente_ac):
+- Include toate contra-argumentele AC
+- Include referințele la legislație pe care AC le invocă
+
+JURISPRUDENȚA AC (jurisprudenta_ac):
+- Extrage referințele la jurisprudență invocate de AC
+- Același format ca la contestator
+
+ARGUMENTE INTERVENIENȚI (argumente_intervenienti):
+- Dacă există intervenienți, pentru fiecare extrage argumentele și jurisprudența separată
+- Format: [{"nr": 1, "argumente": "...", "jurisprudenta": ["referință 1", "referință 2"]}]
+- Dacă nu există intervenienți, returnează null
+
+ANALIZA CNSC:
+- elemente_retinute_cnsc: Toate constatările, dovezile și elementele de fapt reținute de Consiliu
+- argumentatie_cnsc: Raționamentul COMPLET al CNSC, inclusiv articolele de lege aplicate
+- jurisprudenta_cnsc: Referințe la jurisprudență invocate de CNSC în motivarea sa (decizii instanțe, CJUE, etc.)
 
 Format JSON strict (fără alte texte înainte sau după JSON):
 [
@@ -44,9 +69,13 @@ Format JSON strict (fără alte texte înainte sau după JSON):
     "cod_critica": "R2",
     "ordine_in_decizie": 1,
     "argumente_contestator": "Rezumat detaliat al argumentelor contestatorului...",
+    "jurisprudenta_contestator": ["cauza C-927/19 CJUE", "Decizia Curții de Apel Alba Iulia nr. 506/2023"],
     "argumente_ac": "Rezumat detaliat al argumentelor autorității contractante...",
+    "jurisprudenta_ac": ["Decizia CNSC nr. 123/2024"],
+    "argumente_intervenienti": [{"nr": 1, "argumente": "...", "jurisprudenta": ["..."]}],
     "elemente_retinute_cnsc": "Elementele de fapt și de drept reținute de CNSC...",
     "argumentatie_cnsc": "Raționamentul și motivarea CNSC, cu referiri la articolele de lege...",
+    "jurisprudenta_cnsc": ["cauza C-285/18 CJUE", "Directiva 89/665/CEE"],
     "castigator_critica": "contestator"
   }
 ]"""
@@ -95,7 +124,7 @@ class DecisionAnalysisService:
                 prompt=prompt,
                 system_prompt=ANALYSIS_SYSTEM_PROMPT,
                 temperature=0.05,
-                max_tokens=8192,
+                max_tokens=16384,
             )
 
             # Parse JSON from response
@@ -193,14 +222,36 @@ class DecisionAnalysisService:
         # Create records
         created = 0
         for item in argumentari:
+            # Extract jurisprudence arrays (normalize to list of strings)
+            jp_contestator = item.get("jurisprudenta_contestator") or []
+            jp_ac = item.get("jurisprudenta_ac") or []
+            jp_cnsc = item.get("jurisprudenta_cnsc") or []
+
+            # Ensure they are lists of strings
+            if not isinstance(jp_contestator, list):
+                jp_contestator = []
+            if not isinstance(jp_ac, list):
+                jp_ac = []
+            if not isinstance(jp_cnsc, list):
+                jp_cnsc = []
+
+            # Extract intervenients (normalize to JSON-compatible dict/list)
+            intervenienti = item.get("argumente_intervenienti")
+            if intervenienti and not isinstance(intervenienti, list):
+                intervenienti = None
+
             arg = ArgumentareCritica(
                 decizie_id=decision.id,
                 cod_critica=item["cod_critica"],
                 ordine_in_decizie=item.get("ordine_in_decizie"),
                 argumente_contestator=item.get("argumente_contestator"),
+                jurisprudenta_contestator=jp_contestator if jp_contestator else None,
                 argumente_ac=item.get("argumente_ac"),
+                jurisprudenta_ac=jp_ac if jp_ac else None,
+                argumente_intervenienti=intervenienti,
                 elemente_retinute_cnsc=item.get("elemente_retinute_cnsc"),
                 argumentatie_cnsc=item.get("argumentatie_cnsc"),
+                jurisprudenta_cnsc=jp_cnsc if jp_cnsc else None,
                 castigator_critica=item.get("castigator_critica", "unknown"),
             )
             session.add(arg)
