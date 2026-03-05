@@ -155,9 +155,12 @@ class DecisionImporter:
                 )
                 return ("skipped", None, f"{filename}: {reason}")
 
-            # Check if already exists
+            # Check if already exists (by filename OR by BO number)
             result = await session.execute(
-                select(DecizieCNSC).where(DecizieCNSC.filename == filename)
+                select(DecizieCNSC).where(
+                    (DecizieCNSC.filename == filename) |
+                    ((DecizieCNSC.an_bo == parsed.an_bo) & (DecizieCNSC.numar_bo == parsed.numar_bo))
+                )
             )
             existing = result.scalar_one_or_none()
 
@@ -187,8 +190,10 @@ class DecisionImporter:
                 parse_warnings=parsed.parse_warnings,
             )
 
-            session.add(decision)
-            await session.flush()
+            # Use savepoint so a single failure doesn't poison the batch session
+            async with session.begin_nested():
+                session.add(decision)
+                await session.flush()
 
             logger.info(
                 "decision_imported",

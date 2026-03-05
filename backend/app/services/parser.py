@@ -238,14 +238,21 @@ class CNSCDecisionParser:
     """
 
     # Filename pattern: BO{AN}_{NR_BO}_{COD_CRITICI}_CPV_{COD_CPV}_{SOLUTIE}.txt
+    # Accepts dots, commas, and sub-points in criticism codes
     FILENAME_PATTERN = re.compile(
-        r"^BO(\d{4})_(\d+)_([A-Za-z0-9_]+?)(?:_CPV_(\d{8}(?:-\d)?))?_([ARX])\.txt$",
+        r"^BO(\d{4})_(\d+)_([A-Za-z0-9_.,-]+?)_CPV_(\d{8}(?:-\d)?)_([ARX])\.txt$",
+        re.IGNORECASE
+    )
+
+    # Pattern with CPV marker but no actual CPV code (e.g., _CPV_A.txt)
+    FILENAME_PATTERN_CPV_EMPTY = re.compile(
+        r"^BO(\d{4})_(\d+)_([A-Za-z0-9_.,-]+?)_CPV_([ARX])\.txt$",
         re.IGNORECASE
     )
 
     # Alternative pattern without CPV
     FILENAME_PATTERN_NO_CPV = re.compile(
-        r"^BO(\d{4})_(\d+)_([A-Za-z0-9_]+)_([ARX])\.txt$",
+        r"^BO(\d{4})_(\d+)_([A-Za-z0-9_.,-]+)_([ARX])\.txt$",
         re.IGNORECASE
     )
 
@@ -444,26 +451,35 @@ class CNSCDecisionParser:
             BO2025_1234_D1_D4_CPV_45233140-2_R.txt
             BO2024_5678_R3_R4_X.txt (no CPV)
         """
-        # Try main pattern with CPV
+        # Try main pattern with full CPV code
         match = self.FILENAME_PATTERN.match(filename)
 
-        if not match:
-            # Try pattern without CPV
-            match = self.FILENAME_PATTERN_NO_CPV.match(filename)
-            if not match:
-                raise ValueError(f"Filename doesn't match expected pattern: {filename}")
-
-            an_bo = int(match.group(1))
-            numar_bo = int(match.group(2))
-            critici_str = match.group(3)
-            cod_cpv = None
-            solutie_str = match.group(4).upper()
-        else:
+        if match:
             an_bo = int(match.group(1))
             numar_bo = int(match.group(2))
             critici_str = match.group(3)
             cod_cpv = match.group(4)
             solutie_str = match.group(5).upper()
+        else:
+            # Try pattern with CPV marker but no actual code (e.g., _CPV_A.txt)
+            match = self.FILENAME_PATTERN_CPV_EMPTY.match(filename)
+            if match:
+                an_bo = int(match.group(1))
+                numar_bo = int(match.group(2))
+                critici_str = match.group(3)
+                cod_cpv = None
+                solutie_str = match.group(4).upper()
+            else:
+                # Try pattern without CPV at all
+                match = self.FILENAME_PATTERN_NO_CPV.match(filename)
+                if not match:
+                    raise ValueError(f"Filename doesn't match expected pattern: {filename}")
+
+                an_bo = int(match.group(1))
+                numar_bo = int(match.group(2))
+                critici_str = match.group(3)
+                cod_cpv = None
+                solutie_str = match.group(4).upper()
 
         # Parse criticism codes (e.g., "D1_D4" -> ["D1", "D4"])
         coduri_critici = self._parse_criticism_codes_from_filename(critici_str)
@@ -490,20 +506,49 @@ class CNSCDecisionParser:
     def _parse_criticism_codes_from_filename(self, critici_str: str) -> list[str]:
         """Parse criticism codes from filename segment.
 
-        Examples:
+        Handles various formats found in real CNSC filenames:
             "R2" -> ["R2"]
             "D1_D4" -> ["D1", "D4"]
             "R3_R4" -> ["R3", "R4"]
+            "R2.2.2,R4" -> ["R2", "R4"]  (sub-points normalized to base code)
+            "R4.3" -> ["R4"]  (sub-point stripped)
+            "RA" -> ["RAL"]  (shorthand expanded)
+            "DA" -> ["DAL"]  (shorthand expanded)
         """
-        # Split by underscore
-        parts = critici_str.upper().split("_")
+        # Split by underscore first, then by comma
+        raw_parts = critici_str.upper().split("_")
+        parts = []
+        for raw in raw_parts:
+            parts.extend(raw.split(","))
 
-        # Filter valid codes
+        # Normalize and filter valid codes
         valid_codes = []
+        seen = set()
         for part in parts:
-            # Check if it's a valid criticism code
+            part = part.strip()
+            if not part:
+                continue
+
+            # Expand shorthands: RA -> RAL, DA -> DAL
+            if part == "RA":
+                part = "RAL"
+            elif part == "DA":
+                part = "DAL"
+
+            # Check for exact match first (D1-D8, R1-R8, DAL, RAL)
             if re.match(r"^[DR][1-8]$|^DAL$|^RAL$", part):
-                valid_codes.append(part)
+                if part not in seen:
+                    valid_codes.append(part)
+                    seen.add(part)
+                continue
+
+            # Handle sub-points: R2.2.2 -> R2, R4.3 -> R4, D1.1 -> D1
+            base_match = re.match(r"^([DR])(\d)", part)
+            if base_match:
+                base_code = base_match.group(1) + base_match.group(2)
+                if re.match(r"^[DR][1-8]$", base_code) and base_code not in seen:
+                    valid_codes.append(base_code)
+                    seen.add(base_code)
 
         return valid_codes
 
