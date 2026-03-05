@@ -31,6 +31,7 @@ from app.core.logging import get_logger
 from app.db.session import init_db, Base
 from app.db import session as db_session
 from app.models.decision import DecizieCNSC, ArgumentareCritica
+from app.services.analysis import DecisionAnalysisService
 from app.services.embedding import EmbeddingService
 from app.services.parser import parse_decision_text
 
@@ -366,6 +367,16 @@ async def main():
         action="store_true",
         help="Only generate embeddings (skip GCS import)",
     )
+    parser.add_argument(
+        "--analyze",
+        action="store_true",
+        help="After import, analyze decisions with LLM to extract ArgumentareCritica",
+    )
+    parser.add_argument(
+        "--analyze-only",
+        action="store_true",
+        help="Only analyze existing decisions (skip GCS import)",
+    )
 
     args = parser.parse_args()
 
@@ -382,6 +393,44 @@ async def main():
     # Create tables if requested
     if args.create_tables:
         await create_tables()
+
+    # Analyze-only mode: extract ArgumentareCritica from existing decisions
+    if args.analyze_only:
+        logger.info("analyze_only_mode")
+        analysis_service = DecisionAnalysisService()
+
+        async with db_session.async_session_factory() as session:
+            stats = await analysis_service.analyze_all_unprocessed(
+                session, limit=args.limit
+            )
+
+        print("\n" + "=" * 60)
+        print("ANALYSIS SUMMARY")
+        print("=" * 60)
+        print(f"Decisions to analyze: {stats['total']}")
+        print(f"Successfully analyzed: {stats['analyzed']}")
+        print(f"ArgumentareCritica created: {stats['argumentari_created']}")
+        print(f"Failed: {stats['failed']}")
+
+        if stats['errors']:
+            print(f"\nErrors:")
+            for error in stats['errors'][:10]:
+                print(f"  - {error}")
+
+        print("=" * 60)
+
+        # Generate embeddings for new argumentari
+        if stats['argumentari_created'] > 0 and not args.skip_embeddings:
+            print("\nGenerating embeddings for new argumentari...")
+            async with db_session.async_session_factory() as emb_session:
+                embedding_service = EmbeddingService()
+                emb_count = await embedding_service.generate_embeddings_for_argumentari(
+                    emb_session
+                )
+                await emb_session.commit()
+                print(f"Embeddings generated: {emb_count}")
+
+        return
 
     # Embeddings-only mode: skip GCS import, just generate embeddings
     if args.embeddings_only:
@@ -457,6 +506,34 @@ async def main():
         print(f"\nEmbedding error: {stats['embedding_error']}")
 
     print("=" * 60)
+
+    # Analyze decisions with LLM if requested
+    if args.analyze and stats['imported'] > 0:
+        print("\n>>> Analyzing decisions with LLM to extract ArgumentareCritica...")
+        analysis_service = DecisionAnalysisService()
+        async with db_session.async_session_factory() as session:
+            analysis_stats = await analysis_service.analyze_all_unprocessed(
+                session, limit=args.limit
+            )
+
+        print(f"\nAnalysis: {analysis_stats['analyzed']} decisions analyzed, "
+              f"{analysis_stats['argumentari_created']} argumentari created, "
+              f"{analysis_stats['failed']} failed")
+
+        if analysis_stats['errors']:
+            for error in analysis_stats['errors'][:5]:
+                print(f"  - {error}")
+
+        # Regenerate embeddings for newly created argumentari
+        if analysis_stats['argumentari_created'] > 0 and not args.skip_embeddings:
+            print("\n>>> Generating embeddings for new argumentari...")
+            async with db_session.async_session_factory() as emb_session:
+                embedding_service = EmbeddingService()
+                emb_count = await embedding_service.generate_embeddings_for_argumentari(
+                    emb_session
+                )
+                await emb_session.commit()
+                print(f"Embeddings generated: {emb_count}")
 
     # Exit with error code if there were hard failures (not skipped)
     if stats['failed'] > 0:
