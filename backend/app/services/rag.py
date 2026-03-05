@@ -11,6 +11,7 @@ argumentation flow), then loads the parent DecizieCNSC for metadata.
 Falls back to keyword ILIKE search when no embeddings are available.
 """
 
+import re
 from typing import Optional
 from sqlalchemy import select, or_, func
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -86,6 +87,39 @@ class RAGService:
 
         return [(row.ArgumentareCritica, row.distance) for row in rows]
 
+    def _extract_bo_references(self, query: str) -> list[tuple[int, int]]:
+        """Extract BO year/number references from query.
+
+        Matches patterns like BO2025_1011, BO2025-1011, BO2025 1011.
+
+        Returns:
+            List of (an_bo, numar_bo) tuples found in query.
+        """
+        pattern = r'BO(\d{4})[_\-\s](\d+)'
+        matches = re.findall(pattern, query, re.IGNORECASE)
+        return [(int(year), int(num)) for year, num in matches]
+
+    async def _lookup_by_bo(
+        self,
+        bo_refs: list[tuple[int, int]],
+        session: AsyncSession,
+    ) -> list[DecizieCNSC]:
+        """Directly look up decisions by BO year and number."""
+        if not bo_refs:
+            return []
+
+        conditions = [
+            (DecizieCNSC.an_bo == year) & (DecizieCNSC.numar_bo == num)
+            for year, num in bo_refs
+        ]
+
+        stmt = select(DecizieCNSC).where(or_(*conditions))
+        result = await session.execute(stmt)
+        decisions = list(result.scalars().all())
+
+        logger.info("bo_lookup_found", refs=bo_refs, count=len(decisions))
+        return decisions
+
     async def search_decisions(
         self,
         query: str,
@@ -94,8 +128,9 @@ class RAGService:
     ) -> tuple[list[DecizieCNSC], list[tuple[ArgumentareCritica, float]]]:
         """Search for relevant decisions based on query.
 
-        Uses vector search on ArgumentareCritica when embeddings are available,
-        falling back to keyword ILIKE search otherwise.
+        First checks for direct BO references (e.g. BO2025_1011).
+        Then uses vector search on ArgumentareCritica when embeddings are
+        available, falling back to keyword ILIKE search otherwise.
 
         Args:
             query: User's search query.
@@ -108,7 +143,31 @@ class RAGService:
         """
         logger.info("searching_decisions", query=query, limit=limit)
 
-        # Check if embeddings exist
+        # 1. Check for direct BO references first
+        bo_refs = self._extract_bo_references(query)
+        if bo_refs:
+            bo_decisions = await self._lookup_by_bo(bo_refs, session)
+            if bo_decisions:
+                # Load ArgumentareCritica for these decisions (for rich context)
+                bo_ids = [d.id for d in bo_decisions]
+                stmt = (
+                    select(ArgumentareCritica)
+                    .where(ArgumentareCritica.decizie_id.in_(bo_ids))
+                    .order_by(ArgumentareCritica.ordine_in_decizie)
+                )
+                result = await session.execute(stmt)
+                args = list(result.scalars().all())
+                # Create fake distance 0 (perfect match) for context building
+                matched_chunks = [(arg, 0.0) for arg in args]
+                logger.info(
+                    "bo_direct_lookup_success",
+                    refs=bo_refs,
+                    decisions=len(bo_decisions),
+                    chunks=len(matched_chunks),
+                )
+                return bo_decisions, matched_chunks
+
+        # 2. Check if embeddings exist for vector search
         has_embeddings = await session.scalar(
             select(func.count())
             .select_from(ArgumentareCritica)
@@ -151,7 +210,7 @@ class RAGService:
                 )
                 return decisions, matched_chunks
 
-        # Fallback: keyword ILIKE search
+        # 3. Fallback: keyword ILIKE search
         logger.info("falling_back_to_keyword_search", query=query)
         decisions = await self._keyword_search(query, session, limit)
         return decisions, []
@@ -171,6 +230,7 @@ class RAGService:
             conditions.append(DecizieCNSC.text_integral.ilike(keyword_pattern))
             conditions.append(DecizieCNSC.contestator.ilike(keyword_pattern))
             conditions.append(DecizieCNSC.autoritate_contractanta.ilike(keyword_pattern))
+            conditions.append(DecizieCNSC.filename.ilike(keyword_pattern))
 
         if not conditions:
             stmt = (
@@ -424,11 +484,18 @@ Sarcina ta este să răspunzi la întrebări despre deciziile CNSC folosind EXCL
 
 Reguli importante:
 1. Bazează-te DOAR pe informațiile din contextul furnizat
-2. Citează deciziile specifice când răspunzi (ex: "Conform deciziei BO2023_123...")
+2. Citează deciziile specifice când răspunzi (ex: "Conform deciziei **BO2023_123**...")
 3. Dacă informația nu este în context, spune clar că nu ai suficiente date
 4. Oferă răspunsuri clare, structurate și profesionale
 5. Folosește terminologie juridică corectă specifică achizițiilor publice
 6. Când discuți despre soluții, menționează argumentele CNSC
+
+Formatare:
+- Folosește **bold** pentru termeni cheie și referințe la decizii
+- Structurează răspunsul cu paragrafe clare, separate prin linii goale
+- Folosește liste numerotate (1. 2. 3.) pentru enumerări
+- Folosește titluri (## sau ###) pentru secțiuni distincte când răspunsul este lung
+- Fiecare argument sau decizie trebuie să fie pe un paragraf separat
 
 Răspunde în limba română, profesional și precis."""
 
