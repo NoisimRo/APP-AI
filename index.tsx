@@ -1,14 +1,14 @@
 import React, { useState, useRef, useEffect, useMemo } from "react";
 import { createRoot } from "react-dom/client";
 import { GoogleGenAI } from "@google/genai";
-import { 
-  Scale, 
-  AlertTriangle, 
-  MessageSquare, 
-  FileText, 
-  Search, 
-  Upload, 
-  CheckCircle, 
+import {
+  Scale,
+  AlertTriangle,
+  MessageSquare,
+  FileText,
+  Search,
+  Upload,
+  CheckCircle,
   XCircle,
   Gavel,
   BookOpen,
@@ -26,7 +26,9 @@ import {
   Cloud,
   Wifi,
   RefreshCw,
-  FolderInput
+  FolderInput,
+  X,
+  Eye
 } from "lucide-react";
 
 // --- Types ---
@@ -94,6 +96,8 @@ const formatMarkdown = (text: string): string => {
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
+    // Citation links: [[BO2025_1000]] -> clickable link
+    .replace(/\[\[(BO\d{4}_\d+)\]\]/g, '<a href="#" data-decision="$1" onclick="window.__openDecision && window.__openDecision(\'$1\'); return false;" style="color:#2563eb;font-weight:600;text-decoration:underline;cursor:pointer;font-family:monospace;font-size:0.85em">$1</a>')
     // Bold: **text**
     .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
     // Italic: *text*
@@ -189,6 +193,10 @@ const App = () => {
   const [redFlagsTab, setRedFlagsTab] = useState<'manual' | 'upload'>('manual');
   const [uploadedDocument, setUploadedDocument] = useState<{name: string, text: string} | null>(null);
 
+  // Decision Viewer State
+  const [viewingDecision, setViewingDecision] = useState<any | null>(null);
+  const [isLoadingDecision, setIsLoadingDecision] = useState(false);
+
   const chatEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -197,6 +205,14 @@ const App = () => {
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [chatMessages, generatedContent]);
+
+  // Register global handler for citation clicks
+  useEffect(() => {
+    (window as any).__openDecision = (decisionId: string) => {
+      openDecision(decisionId);
+    };
+    return () => { delete (window as any).__openDecision; };
+  }, []);
 
   useEffect(() => {
     setGeneratedContent("");
@@ -290,6 +306,26 @@ const App = () => {
     }, 1500);
   }
 
+  // --- Decision Viewer ---
+
+  const openDecision = async (decisionId: string) => {
+    setIsLoadingDecision(true);
+    try {
+      const response = await fetch(`/api/v1/decisions/${encodeURIComponent(decisionId)}`);
+      if (response.ok) {
+        const data = await response.json();
+        setViewingDecision(data);
+      } else {
+        alert('Nu s-a putut încărca decizia.');
+      }
+    } catch (error) {
+      console.error('Failed to fetch decision:', error);
+      alert('Eroare la încărcarea deciziei.');
+    } finally {
+      setIsLoadingDecision(false);
+    }
+  };
+
   // --- API Interaction Handlers ---
 
   const getActiveContextParts = () => {
@@ -330,9 +366,9 @@ const App = () => {
       // Add response with citations if available
       let responseText = data.message;
       if (data.citations && data.citations.length > 0) {
-        responseText += "\n\n📚 Surse:";
+        responseText += "\n\n📚 **Surse:**";
         data.citations.forEach((citation: any) => {
-          responseText += `\n- ${citation.decision_id}`;
+          responseText += `\n- [[${citation.decision_id}]]`;
         });
       }
 
@@ -817,6 +853,12 @@ const App = () => {
                           CPV: {dec.cod_cpv}
                         </span>
                       )}
+                      <button
+                        onClick={() => openDecision(`BO${dec.an_bo}_${dec.numar_bo}`)}
+                        className="ml-auto text-[10px] bg-blue-50 text-blue-700 px-3 py-1 rounded border border-blue-200 font-medium hover:bg-blue-100 transition flex items-center gap-1"
+                      >
+                        <Eye size={12} /> Vizualizează
+                      </button>
                     </div>
                   </div>
                 </div>
@@ -1265,6 +1307,79 @@ const App = () => {
            </div>
         )}
       </main>
+
+      {/* Decision Viewer Modal */}
+      {(viewingDecision || isLoadingDecision) && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={() => !isLoadingDecision && setViewingDecision(null)}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
+            {isLoadingDecision ? (
+              <div className="flex items-center justify-center p-20">
+                <Loader2 size={32} className="animate-spin text-blue-600" />
+                <span className="ml-3 text-slate-600">Se încarcă decizia...</span>
+              </div>
+            ) : viewingDecision && (
+              <>
+                {/* Header */}
+                <div className="flex items-start justify-between p-6 border-b border-slate-200 shrink-0">
+                  <div>
+                    <h2 className="text-xl font-bold text-slate-900">{viewingDecision.title}</h2>
+                    <div className="flex gap-2 mt-2 flex-wrap">
+                      <span className="text-xs bg-blue-50 text-blue-700 px-2 py-1 rounded border border-blue-200 font-mono">
+                        {viewingDecision.metadata?.case_number}
+                      </span>
+                      {viewingDecision.metadata?.date && (
+                        <span className="text-xs bg-slate-100 text-slate-600 px-2 py-1 rounded border border-slate-200">
+                          {new Date(viewingDecision.metadata.date).toLocaleDateString('ro-RO')}
+                        </span>
+                      )}
+                      {viewingDecision.metadata?.ruling && (
+                        <span className={`text-xs px-2 py-1 rounded border font-medium ${
+                          viewingDecision.metadata.ruling === 'ADMIS' ? 'bg-green-50 text-green-700 border-green-200' :
+                          viewingDecision.metadata.ruling === 'RESPINS' ? 'bg-red-50 text-red-700 border-red-200' :
+                          'bg-yellow-50 text-yellow-700 border-yellow-200'
+                        }`}>
+                          {viewingDecision.metadata.ruling}
+                        </span>
+                      )}
+                      {viewingDecision.metadata?.parties?.contestator && (
+                        <span className="text-xs bg-slate-50 text-slate-600 px-2 py-1 rounded border border-slate-200">
+                          Contestator: {viewingDecision.metadata.parties.contestator}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => setViewingDecision(null)}
+                    className="p-2 hover:bg-slate-100 rounded-lg transition text-slate-400 hover:text-slate-600"
+                  >
+                    <X size={20} />
+                  </button>
+                </div>
+
+                {/* Content */}
+                <div className="flex-1 overflow-y-auto p-6">
+                  <div className="prose prose-slate max-w-none text-sm leading-relaxed whitespace-pre-wrap font-mono bg-slate-50 p-6 rounded-lg border border-slate-200">
+                    {viewingDecision.content}
+                  </div>
+                </div>
+
+                {/* Footer */}
+                <div className="p-4 border-t border-slate-200 flex justify-between items-center shrink-0">
+                  <span className="text-xs text-slate-400">
+                    {viewingDecision.content?.length?.toLocaleString()} caractere
+                  </span>
+                  <button
+                    onClick={() => setViewingDecision(null)}
+                    className="px-4 py-2 bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200 transition text-sm font-medium"
+                  >
+                    Închide
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 };

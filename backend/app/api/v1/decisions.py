@@ -1,5 +1,7 @@
 """Decisions API endpoints."""
 
+import re
+
 from fastapi import APIRouter, HTTPException, UploadFile, File, Query, Depends
 from pydantic import BaseModel, Field
 from sqlalchemy import select, func
@@ -141,7 +143,7 @@ async def get_decision(
     session: AsyncSession = Depends(get_session),
 ) -> Decision:
     """
-    Get a specific CNSC decision by ID.
+    Get a specific CNSC decision by ID (UUID) or external ID (BO{year}_{number}).
     """
     logger.info("get_decision", decision_id=decision_id)
 
@@ -149,8 +151,20 @@ async def get_decision(
     if not is_db_available():
         raise HTTPException(status_code=503, detail="Database not available")
 
-    # Query decision
-    query = select(DecizieCNSC).where(DecizieCNSC.id == decision_id)
+    # Try external ID format first (BO2025_1000)
+    bo_match = re.match(r'^BO(\d{4})[_\-](\d+)$', decision_id, re.IGNORECASE)
+    if bo_match:
+        an_bo = int(bo_match.group(1))
+        numar_bo = int(bo_match.group(2))
+        query = (
+            select(DecizieCNSC)
+            .where(DecizieCNSC.an_bo == an_bo)
+            .where(DecizieCNSC.numar_bo == numar_bo)
+        )
+    else:
+        # Query by UUID
+        query = select(DecizieCNSC).where(DecizieCNSC.id == decision_id)
+
     result = await session.execute(query)
     decision_db = result.scalar_one_or_none()
 
