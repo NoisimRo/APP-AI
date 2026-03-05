@@ -2,7 +2,8 @@
 
 from typing import AsyncIterator
 
-import google.generativeai as genai
+from google import genai
+from google.genai import types
 
 from app.core.config import get_settings
 from app.core.logging import get_logger
@@ -20,8 +21,8 @@ class GeminiProvider(LLMProvider):
 
     def __init__(
         self,
-        model: str = "gemini-3-flash-preview",
-        embedding_model: str = "text-embedding-004",
+        model: str = "gemini-2.5-flash",
+        embedding_model: str = "gemini-embedding-001",
     ):
         self._model_name = model
         self._embedding_model = embedding_model
@@ -30,8 +31,7 @@ class GeminiProvider(LLMProvider):
         if not settings.gemini_api_key:
             raise ValueError("GEMINI_API_KEY is required for GeminiProvider")
 
-        genai.configure(api_key=settings.gemini_api_key)
-        self._model = genai.GenerativeModel(model)
+        self._client = genai.Client(api_key=settings.gemini_api_key)
 
         logger.info(
             "gemini_provider_initialized",
@@ -56,13 +56,13 @@ class GeminiProvider(LLMProvider):
         max_tokens: int = 4096,
     ) -> str:
         """Generate a completion using Gemini."""
-        # Build the full prompt with context
         full_prompt = self._build_prompt(prompt, context, system_prompt)
 
         try:
-            response = await self._model.generate_content_async(
-                full_prompt,
-                generation_config=genai.types.GenerationConfig(
+            response = await self._client.aio.models.generate_content(
+                model=self._model_name,
+                contents=full_prompt,
+                config=types.GenerateContentConfig(
                     temperature=temperature,
                     max_output_tokens=max_tokens,
                 ),
@@ -85,16 +85,14 @@ class GeminiProvider(LLMProvider):
         full_prompt = self._build_prompt(prompt, context, system_prompt)
 
         try:
-            response = await self._model.generate_content_async(
-                full_prompt,
-                generation_config=genai.types.GenerationConfig(
+            async for chunk in await self._client.aio.models.generate_content_stream(
+                model=self._model_name,
+                contents=full_prompt,
+                config=types.GenerateContentConfig(
                     temperature=temperature,
                     max_output_tokens=max_tokens,
                 ),
-                stream=True,
-            )
-
-            async for chunk in response:
+            ):
                 if chunk.text:
                     yield chunk.text
 
@@ -105,20 +103,16 @@ class GeminiProvider(LLMProvider):
     async def embed(
         self,
         texts: list[str],
-        task_type: str = "retrieval_document",
+        task_type: str = "RETRIEVAL_DOCUMENT",
     ) -> list[list[float]]:
         """Generate embeddings using Gemini embedding model."""
         try:
-            embeddings = []
-            for text in texts:
-                result = genai.embed_content(
-                    model=f"models/{self._embedding_model}",
-                    content=text,
-                    task_type=task_type,
-                )
-                embeddings.append(result["embedding"])
-
-            return embeddings
+            result = await self._client.aio.models.embed_content(
+                model=self._embedding_model,
+                contents=texts,
+                config=types.EmbedContentConfig(task_type=task_type),
+            )
+            return [e.values for e in result.embeddings]
 
         except Exception as e:
             logger.error("gemini_embed_error", error=str(e))
