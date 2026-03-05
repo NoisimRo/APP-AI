@@ -507,16 +507,21 @@ const App = () => {
     setIsLoading(true);
     setGeneratedContent("");
     try {
-      const response = await ai.models.generateContent({
-        model: 'gemini-3-flash-preview',
-        contents: `
-          Clientul vrea să conteste/clarifice această clauză: "${clarificationClause}".
-          Redactează o Cerere de Clarificare formală, politicoasă, dar care sugerează subtil nelegalitatea cerinței.
-        `
+      const response = await fetch('/api/v1/clarification/', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ clause: clarificationClause })
       });
-      setGeneratedContent(response.text || "");
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const data = await response.json();
+      setGeneratedContent(data.content || "");
     } catch (err) {
-      setGeneratedContent("Eroare la generare.");
+      console.error(err);
+      setGeneratedContent("Eroare la generare. Verifică că backend-ul este pornit.");
     } finally {
       setIsLoading(false);
     }
@@ -1254,9 +1259,7 @@ const App = () => {
                 </button>
              </div>
              {generatedContent && (
-               <div className="bg-white border border-slate-200 rounded-xl p-8 shadow-sm prose max-w-none whitespace-pre-wrap">
-                  {generatedContent}
-               </div>
+               <div className="bg-white border border-slate-200 rounded-xl p-8 shadow-sm prose prose-slate max-w-none" dangerouslySetInnerHTML={{ __html: formatMarkdown(generatedContent) }} />
              )}
           </div>
         )}
