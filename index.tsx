@@ -387,33 +387,27 @@ const App = () => {
   const handleDrafting = async () => {
     setIsLoading(true);
     setGeneratedContent("");
-    
-    try {
-      const prompt = `
-        Ești un avocat expert în achiziții publice. Redactează o contestație către CNSC.
-        
-        Detalii faptice: ${drafterContext.facts}
-        Argumente Autoritate: ${drafterContext.authorityArgs}
-        Temei legal: ${drafterContext.legalGrounds}
-        
-        Structura obligatorie:
-        1. Părți.
-        2. Situația de fapt.
-        3. Motivele contestației (Dezvoltare amplă).
-        4. Suspendare.
-        5. Dispozitiv.
-      `;
 
-      const response = await ai.models.generateContent({
-        model: 'gemini-3-pro-preview',
-        contents: prompt,
-        config: {
-          thinkingConfig: { thinkingBudget: 4096 }
-        }
+    try {
+      const response = await fetch('/api/v1/drafter/', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          facts: drafterContext.facts,
+          authority_args: drafterContext.authorityArgs,
+          legal_grounds: drafterContext.legalGrounds,
+        })
       });
-      setGeneratedContent(response.text || "");
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const data = await response.json();
+      setGeneratedContent(data.content || "");
     } catch (err) {
-      setGeneratedContent("Eroare la generare.");
+      console.error(err);
+      setGeneratedContent("Eroare la generare. Verifică că backend-ul este pornit.");
     } finally {
       setIsLoading(false);
     }
@@ -947,9 +941,7 @@ const App = () => {
              <div className="flex justify-end mb-4">
                 <button className="text-sm text-blue-600 font-medium hover:underline">Descarcă .DOCX</button>
              </div>
-             <div className="prose prose-slate max-w-none font-serif text-slate-800 leading-loose whitespace-pre-wrap bg-white">
-                {generatedContent}
-             </div>
+             <div className="prose prose-slate max-w-none font-serif text-slate-800 leading-loose bg-white" dangerouslySetInnerHTML={{ __html: formatMarkdown(generatedContent) }} />
           </div>
         ) : (
           <div className="h-full flex flex-col items-center justify-center text-slate-300">
