@@ -86,6 +86,37 @@ const fileToBase64 = (file: File): Promise<string> => {
   });
 };
 
+// --- Markdown Formatter ---
+
+const formatMarkdown = (text: string): string => {
+  return text
+    // Escape HTML
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    // Bold: **text**
+    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+    // Italic: *text*
+    .replace(/\*(.+?)\*/g, '<em>$1</em>')
+    // Headers: ### text
+    .replace(/^### (.+)$/gm, '<h3 style="font-size:1rem;font-weight:700;margin:1rem 0 0.5rem 0;color:#1e293b">$1</h3>')
+    .replace(/^## (.+)$/gm, '<h2 style="font-size:1.1rem;font-weight:700;margin:1.2rem 0 0.5rem 0;color:#1e293b">$1</h2>')
+    .replace(/^# (.+)$/gm, '<h1 style="font-size:1.25rem;font-weight:700;margin:1.2rem 0 0.5rem 0;color:#1e293b">$1</h1>')
+    // Numbered lists: 1. item
+    .replace(/^(\d+)\.\s+(.+)$/gm, '<div style="display:flex;gap:0.5rem;margin:0.25rem 0 0.25rem 1rem"><span style="color:#64748b;min-width:1.2rem">$1.</span><span>$2</span></div>')
+    // Bullet lists: - item
+    .replace(/^[-•]\s+(.+)$/gm, '<div style="display:flex;gap:0.5rem;margin:0.25rem 0 0.25rem 1rem"><span style="color:#3b82f6">•</span><span>$1</span></div>')
+    // Horizontal rules
+    .replace(/^---$/gm, '<hr style="border:none;border-top:1px solid #e2e8f0;margin:1rem 0"/>')
+    // Paragraphs: double newlines
+    .replace(/\n\n/g, '</p><p style="margin:0.75rem 0">')
+    // Single newlines within paragraphs
+    .replace(/\n/g, '<br/>')
+    // Wrap in paragraph
+    .replace(/^/, '<p style="margin:0 0 0.5rem 0">')
+    .replace(/$/, '</p>');
+};
+
 // --- Components ---
 
 const SidebarItem = ({ 
@@ -911,11 +942,13 @@ const App = () => {
         {chatMessages.map((msg, i) => (
           <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
             <div className={`max-w-[85%] rounded-2xl p-5 shadow-sm ${
-              msg.role === 'user' 
-                ? 'bg-slate-900 text-white rounded-br-none' 
-                : 'bg-white border border-slate-200 text-slate-800 rounded-bl-none'
+              msg.role === 'user'
+                ? 'bg-slate-900 text-white rounded-br-none'
+                : 'bg-white border border-slate-200 text-slate-800 rounded-bl-none prose prose-slate max-w-none'
             }`}>
-              {msg.text}
+              {msg.role === 'user' ? msg.text : (
+                <div dangerouslySetInnerHTML={{ __html: formatMarkdown(msg.text) }} />
+              )}
             </div>
           </div>
         ))}
@@ -1208,18 +1241,20 @@ const App = () => {
                           value={memoTopic}
                           onChange={(e) => setMemoTopic(e.target.value)}
                        />
-                       <button 
+                       <button
                           onClick={handleRAGMemo}
-                          disabled={isLoading || activeFiles.length === 0}
+                          disabled={isLoading || !memoTopic.trim()}
                           className="w-full bg-teal-600 text-white py-2.5 rounded-lg text-sm font-medium hover:bg-teal-700 transition disabled:opacity-50"
                        >
                           {isLoading ? "Analiză..." : "Generează Memo"}
                        </button>
-                       <p className="text-xs text-slate-400 mt-3 text-center">Analizează {activeFiles.length} fișiere active.</p>
+                       <p className="text-xs text-slate-400 mt-3 text-center">Căutare semantică în {apiDecisions.length} decizii din baza de date.</p>
                     </div>
                  </div>
-                 <div className="flex-1 bg-white border border-slate-200 rounded-xl shadow-sm p-8 overflow-y-auto whitespace-pre-wrap text-slate-800 leading-relaxed">
-                    {generatedContent || (
+                 <div className="flex-1 bg-white border border-slate-200 rounded-xl shadow-sm p-8 overflow-y-auto text-slate-800 leading-relaxed">
+                    {generatedContent ? (
+                       <div className="prose prose-slate max-w-none" dangerouslySetInnerHTML={{ __html: formatMarkdown(generatedContent) }} />
+                    ) : (
                        <div className="flex flex-col items-center justify-center h-full text-slate-300">
                           <BookOpen size={48} className="mb-4 opacity-20"/>
                           <p>Rezultatul RAG va apărea aici.</p>
