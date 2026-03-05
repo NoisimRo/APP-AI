@@ -37,6 +37,7 @@ class EmbeddingService:
 
         ArgumentareCritica rows are natural semantic chunks of a decision,
         each covering a single criticism with full argumentation flow.
+        Includes jurisprudence references for better semantic matching.
         """
         parts: list[str] = []
 
@@ -46,14 +47,31 @@ class EmbeddingService:
         if arg.argumente_contestator:
             parts.append(f"Argumente contestator: {arg.argumente_contestator}")
 
+        if arg.jurisprudenta_contestator:
+            parts.append(f"Jurisprudență contestator: {'; '.join(arg.jurisprudenta_contestator)}")
+
         if arg.argumente_ac:
             parts.append(f"Argumente autoritate contractantă: {arg.argumente_ac}")
+
+        if arg.jurisprudenta_ac:
+            parts.append(f"Jurisprudență AC: {'; '.join(arg.jurisprudenta_ac)}")
+
+        if arg.argumente_intervenienti:
+            for interv in arg.argumente_intervenienti:
+                nr = interv.get("nr", "?")
+                parts.append(f"Argumente intervenient #{nr}: {interv.get('argumente', '')}")
+                jp = interv.get("jurisprudenta", [])
+                if jp:
+                    parts.append(f"Jurisprudență intervenient #{nr}: {'; '.join(jp)}")
 
         if arg.elemente_retinute_cnsc:
             parts.append(f"Elemente reținute CNSC: {arg.elemente_retinute_cnsc}")
 
         if arg.argumentatie_cnsc:
             parts.append(f"Argumentație CNSC: {arg.argumentatie_cnsc}")
+
+        if arg.jurisprudenta_cnsc:
+            parts.append(f"Jurisprudență CNSC: {'; '.join(arg.jurisprudenta_cnsc)}")
 
         if arg.castigator_critica and arg.castigator_critica != "unknown":
             parts.append(f"Câștigător: {arg.castigator_critica}")

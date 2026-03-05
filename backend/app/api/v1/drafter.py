@@ -105,8 +105,12 @@ async def draft_complaint(
                     part += f"  Soluție: {dec.solutie_contestatie or 'N/A'}\n"
                     if arg.argumente_contestator:
                         part += f"  Argumente contestator: {arg.argumente_contestator[:400]}\n"
+                    if arg.jurisprudenta_contestator:
+                        part += f"  Jurisprudență contestator: {'; '.join(arg.jurisprudenta_contestator)}\n"
                     if arg.argumentatie_cnsc:
                         part += f"  Argumentație CNSC: {arg.argumentatie_cnsc[:400]}\n"
+                    if arg.jurisprudenta_cnsc:
+                        part += f"  Jurisprudență CNSC: {'; '.join(arg.jurisprudenta_cnsc)}\n"
                     if arg.castigator_critica and arg.castigator_critica != "unknown":
                         part += f"  Câștigător: {arg.castigator_critica}\n"
                     context_parts.append(part)

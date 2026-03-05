@@ -440,12 +440,25 @@ class RAGService:
                     )
                     if arg.argumente_contestator:
                         context_parts.append(f"Argumente contestator: {arg.argumente_contestator}")
+                    if arg.jurisprudenta_contestator:
+                        context_parts.append(f"Jurisprudență invocată de contestator: {'; '.join(arg.jurisprudenta_contestator)}")
                     if arg.argumente_ac:
                         context_parts.append(f"Argumente AC: {arg.argumente_ac}")
+                    if arg.jurisprudenta_ac:
+                        context_parts.append(f"Jurisprudență invocată de AC: {'; '.join(arg.jurisprudenta_ac)}")
+                    if arg.argumente_intervenienti:
+                        for interv in arg.argumente_intervenienti:
+                            nr = interv.get("nr", "?")
+                            context_parts.append(f"Argumente intervenient #{nr}: {interv.get('argumente', 'N/A')}")
+                            jp = interv.get("jurisprudenta", [])
+                            if jp:
+                                context_parts.append(f"Jurisprudență intervenient #{nr}: {'; '.join(jp)}")
                     if arg.elemente_retinute_cnsc:
                         context_parts.append(f"Elemente reținute CNSC: {arg.elemente_retinute_cnsc}")
                     if arg.argumentatie_cnsc:
                         context_parts.append(f"Argumentație CNSC: {arg.argumentatie_cnsc}")
+                    if arg.jurisprudenta_cnsc:
+                        context_parts.append(f"Jurisprudență invocată de CNSC: {'; '.join(arg.jurisprudenta_cnsc)}")
                     if arg.castigator_critica and arg.castigator_critica != "unknown":
                         context_parts.append(f"Câștigător: {arg.castigator_critica}")
                     context_parts.append("")
@@ -602,7 +615,7 @@ class RAGService:
         contexts = self._build_context(decisions, matched_chunks)
 
         # 3. Build system prompt
-        system_prompt = """Ești ExpertAP, un consultant senior în achiziții publice specializat în jurisprudența CNSC (Consiliul Național de Soluționare a Contestațiilor).
+        system_prompt = """Ești un consultant senior în achiziții publice specializat în jurisprudența CNSC (Consiliul Național de Soluționare a Contestațiilor).
 
 Sarcina ta este să răspunzi la întrebări despre deciziile CNSC folosind EXCLUSIV informațiile din documentele furnizate în contextul de mai jos.
 
@@ -613,6 +626,8 @@ Reguli importante:
 4. Oferă răspunsuri clare, structurate și profesionale
 5. Folosește terminologie juridică corectă specifică achizițiilor publice
 6. Când discuți despre soluții, menționează argumentele CNSC
+7. Când în context există referințe la jurisprudență (decizii ale instanțelor naționale, CJUE, directive europene), citează-le exact așa cum apar
+8. NU te prezenta și NU folosi formulări de genul "În calitate de..." - răspunde direct la întrebare
 
 Formatare:
 - Folosește **bold** pentru termeni cheie și referințe la decizii

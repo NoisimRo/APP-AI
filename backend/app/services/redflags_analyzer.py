@@ -129,10 +129,18 @@ class RedFlagsAnalyzer:
                 section.append(f"\n--- Critica {arg.cod_critica} (relevanță: {similarity:.2f}) ---")
                 if arg.argumente_contestator:
                     section.append(f"Argumente contestator: {arg.argumente_contestator[:500]}")
+                if arg.jurisprudenta_contestator:
+                    section.append(f"Jurisprudență contestator: {'; '.join(arg.jurisprudenta_contestator)}")
+                if arg.argumente_ac:
+                    section.append(f"Argumente AC: {arg.argumente_ac[:500]}")
+                if arg.jurisprudenta_ac:
+                    section.append(f"Jurisprudență AC: {'; '.join(arg.jurisprudenta_ac)}")
                 if arg.elemente_retinute_cnsc:
                     section.append(f"Elemente reținute CNSC: {arg.elemente_retinute_cnsc[:500]}")
                 if arg.argumentatie_cnsc:
                     section.append(f"Argumentație CNSC: {arg.argumentatie_cnsc[:500]}")
+                if arg.jurisprudenta_cnsc:
+                    section.append(f"Jurisprudență CNSC: {'; '.join(arg.jurisprudenta_cnsc)}")
                 if arg.castigator_critica and arg.castigator_critica != "unknown":
                     section.append(f"Câștigător: {arg.castigator_critica}")
 
@@ -266,18 +274,11 @@ Dacă nu identifici red flags, returnează: `{{"red_flags": []}}`"""
                 prompt=full_prompt,
                 system_prompt=system_prompt,
                 temperature=0.1,
-                max_tokens=4096,
+                max_tokens=16384,
             )
 
             # Parse JSON response
-            response_text = response.strip()
-            if "```json" in response_text:
-                response_text = response_text.split("```json")[1].split("```")[0].strip()
-            elif "```" in response_text:
-                response_text = response_text.split("```")[1].split("```")[0].strip()
-
-            result = json.loads(response_text)
-            red_flags = result.get("red_flags", [])
+            red_flags = self._parse_json_response(response)
 
             # Step 5: Verify decision refs - remove any that aren't in our actual DB
             valid_ids = set(available_decisions.keys())
@@ -297,18 +298,84 @@ Dacă nu identifici red flags, returnează: `{{"red_flags": []}}`"""
 
             return red_flags
 
-        except json.JSONDecodeError as e:
-            logger.error("red_flags_json_parse_error", error=str(e), response=response[:500])
-            return [{
-                "category": "Eroare",
-                "severity": "INFO",
-                "clause": "",
-                "issue": f"Nu s-a putut parsa răspunsul AI: {str(e)}",
-                "legal_reference": "",
-                "recommendation": "Verifică manual documentația.",
-                "decision_refs": []
-            }]
-
         except Exception as e:
             logger.error("red_flags_analysis_error", error=str(e))
             raise
+
+    @staticmethod
+    def _parse_json_response(response: str) -> list[dict]:
+        """Parse JSON from LLM response with repair for truncated output.
+
+        The LLM sometimes returns truncated JSON (hitting token limit) or
+        wraps JSON in markdown code fences. This method handles both cases.
+        """
+        response_text = response.strip()
+
+        # Strip markdown code fences
+        if "```json" in response_text:
+            response_text = response_text.split("```json")[1].split("```")[0].strip()
+        elif "```" in response_text:
+            response_text = response_text.split("```")[1].split("```")[0].strip()
+
+        # Try direct parse first
+        try:
+            result = json.loads(response_text)
+            return result.get("red_flags", [])
+        except json.JSONDecodeError:
+            pass
+
+        # Repair truncated JSON: extract complete objects from the red_flags array
+        # Find the start of the array
+        array_start = response_text.find('"red_flags"')
+        if array_start == -1:
+            logger.error("red_flags_no_array_found", response_preview=response_text[:300])
+            return []
+
+        # Find the opening bracket of the array
+        bracket_start = response_text.find("[", array_start)
+        if bracket_start == -1:
+            return []
+
+        # Extract individual complete JSON objects using brace matching
+        red_flags = []
+        i = bracket_start + 1
+        text = response_text
+
+        while i < len(text):
+            # Find start of next object
+            obj_start = text.find("{", i)
+            if obj_start == -1:
+                break
+
+            # Match braces to find end of object
+            depth = 0
+            obj_end = -1
+            for j in range(obj_start, len(text)):
+                if text[j] == "{":
+                    depth += 1
+                elif text[j] == "}":
+                    depth -= 1
+                    if depth == 0:
+                        obj_end = j
+                        break
+
+            if obj_end == -1:
+                # Truncated object - skip it
+                logger.warning(
+                    "red_flags_truncated_object",
+                    position=obj_start,
+                    complete_flags=len(red_flags),
+                )
+                break
+
+            obj_str = text[obj_start:obj_end + 1]
+            try:
+                flag = json.loads(obj_str)
+                red_flags.append(flag)
+            except json.JSONDecodeError:
+                logger.warning("red_flags_invalid_object", obj_preview=obj_str[:200])
+
+            i = obj_end + 1
+
+        logger.info("red_flags_json_repaired", extracted_count=len(red_flags))
+        return red_flags
