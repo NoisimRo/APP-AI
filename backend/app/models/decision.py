@@ -188,8 +188,8 @@ class SectiuneDecizie(Base):
     # Embedding for RAG
     embedding_id: Mapped[Optional[str]] = mapped_column(UUID(as_uuid=False))
 
-    # Vector embedding (3072 dimensions for gemini-embedding-001)
-    embedding: Mapped[Optional[list]] = mapped_column(Vector(3072))
+    # Vector embedding (2000 dimensions - max for pgvector HNSW index)
+    embedding: Mapped[Optional[list]] = mapped_column(Vector(2000))
 
     # Timestamps
     created_at: Mapped[datetime] = mapped_column(
@@ -284,8 +284,8 @@ class ArgumentareCritica(Base):
     # Embedding for RAG semantic search
     embedding_id: Mapped[Optional[str]] = mapped_column(UUID(as_uuid=False))
 
-    # Vector embedding (3072 dimensions for gemini-embedding-001)
-    embedding: Mapped[Optional[list]] = mapped_column(Vector(3072))
+    # Vector embedding (2000 dimensions - max for pgvector HNSW index)
+    embedding: Mapped[Optional[list]] = mapped_column(Vector(2000))
 
     # Timestamps
     created_at: Mapped[datetime] = mapped_column(
@@ -364,7 +364,7 @@ class CitatVerbatim(Base):
 
     # Embedding for search
     embedding_id: Mapped[Optional[str]] = mapped_column(UUID(as_uuid=False))
-    embedding: Mapped[Optional[list]] = mapped_column(Vector(3072))
+    embedding: Mapped[Optional[list]] = mapped_column(Vector(2000))
 
     # Timestamps
     created_at: Mapped[datetime] = mapped_column(

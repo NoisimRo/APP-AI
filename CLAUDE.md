@@ -61,9 +61,10 @@ DATABASE_URL="postgresql+asyncpg://..." python scripts/generate_embeddings.py
 
 ### Embedding Dimensions
 
-- **Model:** `gemini-embedding-001` (native output: 3072 dimensions)
-- **DB columns:** `Vector(3072)` on `argumentare_critica`, `sectiuni_decizie`, `citate_verbatim`
-- **History:** Initially used 768 dimensions (text-embedding-004 convention). Migrated to 3072 in March 2025 for higher semantic fidelity.
+- **Model:** `gemini-embedding-001` (native output: 3072 dimensions, capped to 2000)
+- **DB columns:** `Vector(2000)` on `argumentare_critica`, `sectiuni_decizie`, `citate_verbatim`
+- **Why 2000?** pgvector HNSW indexes have a 2000 dimension limit. We use `output_dimensionality=2000` in the Gemini API call. This is 2.6x better than the original 768 while keeping HNSW index support.
+- **History:** Started at 768 (text-embedding-004 convention) → tried 3072 (native) but hit pgvector HNSW limit → settled on 2000.
 - **Migration SQL** (run once, then regenerate all embeddings):
   ```sql
   -- Drop old HNSW indexes
@@ -71,10 +72,10 @@ DATABASE_URL="postgresql+asyncpg://..." python scripts/generate_embeddings.py
   DROP INDEX IF EXISTS ix_sectiuni_embedding_hnsw;
   DROP INDEX IF EXISTS ix_citate_embedding_hnsw;
 
-  -- Alter columns to 3072
-  ALTER TABLE argumentare_critica ALTER COLUMN embedding TYPE vector(3072);
-  ALTER TABLE sectiuni_decizie ALTER COLUMN embedding TYPE vector(3072);
-  ALTER TABLE citate_verbatim ALTER COLUMN embedding TYPE vector(3072);
+  -- Alter columns to 2000
+  ALTER TABLE argumentare_critica ALTER COLUMN embedding TYPE vector(2000);
+  ALTER TABLE sectiuni_decizie ALTER COLUMN embedding TYPE vector(2000);
+  ALTER TABLE citate_verbatim ALTER COLUMN embedding TYPE vector(2000);
 
   -- Recreate HNSW indexes
   CREATE INDEX ix_arg_embedding_hnsw ON argumentare_critica
@@ -91,9 +92,9 @@ DATABASE_URL="postgresql+asyncpg://..." python scripts/generate_embeddings.py
 | Table | Purpose | RAG? |
 |-------|---------|------|
 | `decizii_cnsc` | Main decision table | No |
-| `argumentare_critica` | Per-criticism argumentation (PRIMARY RAG unit) | Yes (3072-dim) |
-| `sectiuni_decizie` | Decision sections | Yes (3072-dim) |
-| `citate_verbatim` | Verbatim quotes | Yes (3072-dim) |
+| `argumentare_critica` | Per-criticism argumentation (PRIMARY RAG unit) | Yes (2000-dim) |
+| `sectiuni_decizie` | Decision sections | Yes (2000-dim) |
+| `citate_verbatim` | Verbatim quotes | Yes (2000-dim) |
 | `referinte_articole` | Legal article references | No |
 | `nomenclator_cpv` | CPV codes nomenclator | No |
 
