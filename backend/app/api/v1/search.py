@@ -24,7 +24,7 @@ class SearchFilters(BaseModel):
 
     cpv_codes: list[str] | None = Field(None, description="Filter by CPV codes")
     criticism_codes: list[str] | None = Field(
-        None, description="Filter by criticism codes (D1-D7, R1-R7)"
+        None, description="Filter by criticism codes (D1-D8, R1-R8)"
     )
     ruling: str | None = Field(None, description="Filter by ruling: ADMIS or RESPINS")
     year_from: int | None = Field(None, ge=2000, le=2100)

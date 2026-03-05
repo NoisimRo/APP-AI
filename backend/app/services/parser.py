@@ -29,8 +29,8 @@ logger = get_logger(__name__)
 
 class CriticismCodeType(str, Enum):
     """Type of criticism - determines contest type."""
-    DOCUMENTATION = "documentatie"  # D1-D7, DAL
-    RESULT = "rezultat"  # R1-R7, RAL
+    DOCUMENTATION = "documentatie"  # D1-D8, DAL
+    RESULT = "rezultat"  # R1-R8, RAL
 
 
 CRITICISM_CODES_LEGEND = {
@@ -42,6 +42,7 @@ CRITICISM_CODES_LEGEND = {
     "D5": "Forma de constituire a garanției de participare",
     "D6": "Clauze contractuale inechitabile sau excesive",
     "D7": "Nedivizarea achiziției pe loturi (produse/lucrări similare)",
+    "D8": "Alte critici la documentația de atribuire",
     "DAL": "Altele (documentație) - necesită extragere din text",
 
     # Critici la Rezultatul Procedurii (R)
@@ -52,6 +53,7 @@ CRITICISM_CODES_LEGEND = {
     "R5": "Lipsa precizării motivelor de respingere în comunicare",
     "R6": "Lipsa solicitare clarificări propunere tehnică/preț sau apreciere incorectă răspunsuri",
     "R7": "Anularea fără temei legal a procedurii de către AC",
+    "R8": "Alte critici la rezultatul procedurii",
     "RAL": "Altele (rezultat) - necesită extragere din text",
 }
 
@@ -295,7 +297,7 @@ class CNSCDecisionParser:
         ),
 
         # Criticism codes in text
-        "criticism": re.compile(r"\b([DR][1-7]|DAL|RAL)\b", re.IGNORECASE),
+        "criticism": re.compile(r"\b([DR][1-8]|DAL|RAL)\b", re.IGNORECASE),
 
         # Legal articles
         "article": re.compile(
@@ -500,7 +502,7 @@ class CNSCDecisionParser:
         valid_codes = []
         for part in parts:
             # Check if it's a valid criticism code
-            if re.match(r"^[DR][1-7]$|^DAL$|^RAL$", part):
+            if re.match(r"^[DR][1-8]$|^DAL$|^RAL$", part):
                 valid_codes.append(part)
 
         return valid_codes
