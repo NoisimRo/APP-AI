@@ -59,6 +59,57 @@ DATABASE_URL="postgresql+asyncpg://..." python scripts/generate_embeddings.py
 - HNSW indexes on embedding columns for fast vector search
 - Decision lookup supports: direct BO reference, vector search, keyword ILIKE fallback
 
+### Embedding Dimensions
+
+- **Model:** `gemini-embedding-001` (native output: 3072 dimensions, capped to 2000)
+- **DB columns:** `Vector(2000)` on `argumentare_critica`, `sectiuni_decizie`, `citate_verbatim`
+- **Why 2000?** pgvector HNSW indexes have a 2000 dimension limit. We use `output_dimensionality=2000` in the Gemini API call. This is 2.6x better than the original 768 while keeping HNSW index support.
+- **History:** Started at 768 (text-embedding-004 convention) → tried 3072 (native) but hit pgvector HNSW limit → settled on 2000.
+- **Migration SQL** (run once, then regenerate all embeddings):
+  ```sql
+  -- Drop old HNSW indexes
+  DROP INDEX IF EXISTS ix_arg_embedding_hnsw;
+  DROP INDEX IF EXISTS ix_sectiuni_embedding_hnsw;
+  DROP INDEX IF EXISTS ix_citate_embedding_hnsw;
+
+  -- Alter columns to 2000
+  ALTER TABLE argumentare_critica ALTER COLUMN embedding TYPE vector(2000);
+  ALTER TABLE sectiuni_decizie ALTER COLUMN embedding TYPE vector(2000);
+  ALTER TABLE citate_verbatim ALTER COLUMN embedding TYPE vector(2000);
+
+  -- Recreate HNSW indexes
+  CREATE INDEX ix_arg_embedding_hnsw ON argumentare_critica
+    USING hnsw (embedding vector_cosine_ops) WITH (m = 16, ef_construction = 64);
+  CREATE INDEX ix_sectiuni_embedding_hnsw ON sectiuni_decizie
+    USING hnsw (embedding vector_cosine_ops) WITH (m = 16, ef_construction = 64);
+  CREATE INDEX ix_citate_embedding_hnsw ON citate_verbatim
+    USING hnsw (embedding vector_cosine_ops) WITH (m = 16, ef_construction = 64);
+  ```
+- After migration, regenerate embeddings: `python scripts/generate_embeddings.py --force`
+
+### Key Tables
+
+| Table | Purpose | RAG? |
+|-------|---------|------|
+| `decizii_cnsc` | Main decision table | No |
+| `argumentare_critica` | Per-criticism argumentation (PRIMARY RAG unit) | Yes (2000-dim) |
+| `sectiuni_decizie` | Decision sections | Yes (2000-dim) |
+| `citate_verbatim` | Verbatim quotes | Yes (2000-dim) |
+| `referinte_articole` | Legal article references | No |
+| `nomenclator_cpv` | CPV codes nomenclator | No |
+
+### ArgumentareCritica Fields (populated by LLM analysis)
+
+- `argumente_contestator` - contestant's arguments (text)
+- `jurisprudenta_contestator` - court decisions invoked by contestant (ARRAY)
+- `argumente_ac` - contracting authority's arguments (text)
+- `jurisprudenta_ac` - court decisions invoked by AC (ARRAY)
+- `argumente_intervenienti` - intervenient arguments (JSON: `[{"nr": 1, "argumente": "...", "jurisprudenta": [...]}]`)
+- `elemente_retinute_cnsc` - facts retained by CNSC (text)
+- `argumentatie_cnsc` - CNSC reasoning (text)
+- `jurisprudenta_cnsc` - court decisions cited by CNSC (ARRAY)
+- `castigator_critica` - winner: `contestator`, `autoritate`, `partial`, `unknown`
+
 ## Deployment
 
 - Push to `main` branch triggers Cloud Build → Cloud Run
