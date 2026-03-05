@@ -1,9 +1,19 @@
 """Search API endpoints."""
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel, Field
+from sqlalchemy import select, func, extract
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.logging import get_logger
+from app.db.session import get_session
+from app.models.decision import (
+    ArgumentareCritica,
+    CitatVerbatim,
+    DecizieCNSC,
+    ReferintaArticol,
+)
+from app.services.embedding import EmbeddingService
 
 router = APIRouter()
 logger = get_logger(__name__)
@@ -50,6 +60,7 @@ async def semantic_search(
     filters: SearchFilters | None = None,
     page: int = Query(1, ge=1),
     page_size: int = Query(10, ge=1, le=100),
+    session: AsyncSession = Depends(get_session),
 ) -> SearchResponse:
     """
     Perform semantic search across CNSC decisions.
@@ -64,16 +75,105 @@ async def semantic_search(
         page=page,
     )
 
-    # TODO: Implement semantic search
-    # 1. Generate embedding for query
-    # 2. Search vector database
-    # 3. Apply filters
-    # 4. Return results with pagination
+    embedding_service = EmbeddingService()
+
+    # Embed the query
+    query_vector = await embedding_service.embed_query(query)
+
+    # Base query: cosine distance search on ArgumentareCritica
+    stmt = (
+        select(
+            ArgumentareCritica,
+            ArgumentareCritica.embedding.cosine_distance(query_vector).label("distance"),
+            DecizieCNSC,
+        )
+        .join(DecizieCNSC, ArgumentareCritica.decizie_id == DecizieCNSC.id)
+        .where(ArgumentareCritica.embedding.isnot(None))
+    )
+
+    # Apply filters
+    if filters:
+        if filters.cpv_codes:
+            stmt = stmt.where(DecizieCNSC.cod_cpv.in_(filters.cpv_codes))
+        if filters.criticism_codes:
+            stmt = stmt.where(
+                DecizieCNSC.coduri_critici.overlap(filters.criticism_codes)
+            )
+        if filters.ruling:
+            stmt = stmt.where(DecizieCNSC.solutie_contestatie == filters.ruling)
+        if filters.year_from:
+            stmt = stmt.where(
+                extract("year", DecizieCNSC.data_decizie) >= filters.year_from
+            )
+        if filters.year_to:
+            stmt = stmt.where(
+                extract("year", DecizieCNSC.data_decizie) <= filters.year_to
+            )
+        if filters.legal_article:
+            stmt = stmt.join(
+                ReferintaArticol,
+                ReferintaArticol.decizie_id == DecizieCNSC.id,
+            ).where(ReferintaArticol.articol.ilike(f"%{filters.legal_article}%"))
+
+    stmt = stmt.order_by("distance")
+
+    # Get total count (without pagination)
+    count_stmt = select(func.count()).select_from(stmt.subquery())
+    total = await session.scalar(count_stmt) or 0
+
+    # Apply pagination
+    offset = (page - 1) * page_size
+    stmt = stmt.offset(offset).limit(page_size)
+
+    result = await session.execute(stmt)
+    rows = result.all()
+
+    # Deduplicate by decision and build results
+    seen_decisions: set[str] = set()
+    results: list[SearchResult] = []
+
+    for row in rows:
+        arg = row.ArgumentareCritica
+        dec = row.DecizieCNSC
+        distance = row.distance
+        similarity = max(0.0, min(1.0, 1.0 - distance))
+
+        if dec.id in seen_decisions:
+            continue
+        seen_decisions.add(dec.id)
+
+        # Build excerpt from the matched chunk
+        excerpt_parts = []
+        if arg.argumentatie_cnsc:
+            excerpt_parts.append(arg.argumentatie_cnsc[:300])
+        elif arg.elemente_retinute_cnsc:
+            excerpt_parts.append(arg.elemente_retinute_cnsc[:300])
+        elif arg.argumente_contestator:
+            excerpt_parts.append(arg.argumente_contestator[:300])
+        excerpt = " ".join(excerpt_parts)[:400] + "..." if excerpt_parts else ""
+
+        results.append(SearchResult(
+            decision_id=dec.external_id,
+            title=f"Decizia {dec.external_id} - {dec.solutie_contestatie or 'N/A'}",
+            excerpt=excerpt,
+            score=similarity,
+            metadata={
+                "numar_decizie": dec.numar_decizie,
+                "data_decizie": dec.data_decizie.isoformat() if dec.data_decizie else None,
+                "tip_contestatie": dec.tip_contestatie,
+                "coduri_critici": dec.coduri_critici,
+                "solutie": dec.solutie_contestatie,
+                "cod_cpv": dec.cod_cpv,
+                "contestator": dec.contestator,
+                "autoritate_contractanta": dec.autoritate_contractanta,
+                "critica_matched": arg.cod_critica,
+            },
+        ))
 
     return SearchResponse(
         query=query,
-        results=[],
-        total=0,
+        results=results,
+        total=total,
         page=page,
         page_size=page_size,
     )
@@ -87,6 +187,7 @@ async def search_by_article(
     ),
     page: int = Query(1, ge=1),
     page_size: int = Query(10, ge=1, le=100),
+    session: AsyncSession = Depends(get_session),
 ) -> SearchResponse:
     """
     Search decisions by legal article.
@@ -96,12 +197,58 @@ async def search_by_article(
     """
     logger.info("search_by_article", article=article, act=act)
 
-    # TODO: Implement article-based search
+    # Query ReferintaArticol joined with DecizieCNSC
+    stmt = (
+        select(
+            DecizieCNSC,
+            func.count(ReferintaArticol.id).label("ref_count"),
+        )
+        .join(ReferintaArticol, ReferintaArticol.decizie_id == DecizieCNSC.id)
+        .where(ReferintaArticol.act_normativ == act)
+        .where(ReferintaArticol.articol.ilike(f"%{article}%"))
+        .group_by(DecizieCNSC.id)
+        .order_by(func.count(ReferintaArticol.id).desc())
+    )
+
+    # Get total count
+    count_stmt = select(func.count()).select_from(stmt.subquery())
+    total = await session.scalar(count_stmt) or 0
+
+    # Apply pagination
+    offset = (page - 1) * page_size
+    stmt = stmt.offset(offset).limit(page_size)
+
+    result = await session.execute(stmt)
+    rows = result.all()
+
+    results: list[SearchResult] = []
+    max_refs = rows[0].ref_count if rows else 1
+
+    for row in rows:
+        dec = row.DecizieCNSC
+        ref_count = row.ref_count
+        score = min(1.0, ref_count / max_refs)
+
+        results.append(SearchResult(
+            decision_id=dec.external_id,
+            title=f"Decizia {dec.external_id} - {dec.solutie_contestatie or 'N/A'}",
+            excerpt=dec.text_integral[:300] + "...",
+            score=score,
+            metadata={
+                "numar_decizie": dec.numar_decizie,
+                "data_decizie": dec.data_decizie.isoformat() if dec.data_decizie else None,
+                "tip_contestatie": dec.tip_contestatie,
+                "solutie": dec.solutie_contestatie,
+                "reference_count": ref_count,
+                "article": article,
+                "act": act,
+            },
+        ))
 
     return SearchResponse(
         query=f"{article} din {act}",
-        results=[],
-        total=0,
+        results=results,
+        total=total,
         page=page,
         page_size=page_size,
     )
@@ -111,6 +258,7 @@ async def search_by_article(
 async def find_similar(
     decision_id: str,
     limit: int = Query(5, ge=1, le=20),
+    session: AsyncSession = Depends(get_session),
 ) -> SearchResponse:
     """
     Find decisions similar to a given decision.
@@ -120,12 +268,116 @@ async def find_similar(
     """
     logger.info("find_similar", decision_id=decision_id, limit=limit)
 
-    # TODO: Implement similar decision search
+    # Find the source decision
+    stmt = select(DecizieCNSC).where(DecizieCNSC.filename.ilike(f"%{decision_id}%"))
+    result = await session.execute(stmt)
+    source_decision = result.scalar_one_or_none()
+
+    if not source_decision:
+        # Try by external_id pattern (BO{year}_{number})
+        parts = decision_id.replace("BO", "").split("_")
+        if len(parts) == 2:
+            stmt = (
+                select(DecizieCNSC)
+                .where(DecizieCNSC.an_bo == int(parts[0]))
+                .where(DecizieCNSC.numar_bo == int(parts[1]))
+            )
+            result = await session.execute(stmt)
+            source_decision = result.scalar_one_or_none()
+
+    if not source_decision:
+        return SearchResponse(
+            query=f"similar to {decision_id}",
+            results=[],
+            total=0,
+            page=1,
+            page_size=limit,
+        )
+
+    # Get embeddings for the source decision's ArgumentareCritica
+    stmt = (
+        select(ArgumentareCritica)
+        .where(ArgumentareCritica.decizie_id == source_decision.id)
+        .where(ArgumentareCritica.embedding.isnot(None))
+    )
+    result = await session.execute(stmt)
+    source_args = list(result.scalars().all())
+
+    if not source_args:
+        return SearchResponse(
+            query=f"similar to {decision_id}",
+            results=[],
+            total=0,
+            page=1,
+            page_size=limit,
+        )
+
+    # Compute centroid (average) of all the decision's chunk embeddings
+    centroid = [0.0] * len(source_args[0].embedding)
+    for arg in source_args:
+        for i, val in enumerate(arg.embedding):
+            centroid[i] += val
+    centroid = [v / len(source_args) for v in centroid]
+
+    # Find nearest neighbors excluding the source decision
+    stmt = (
+        select(
+            ArgumentareCritica,
+            ArgumentareCritica.embedding.cosine_distance(centroid).label("distance"),
+            DecizieCNSC,
+        )
+        .join(DecizieCNSC, ArgumentareCritica.decizie_id == DecizieCNSC.id)
+        .where(ArgumentareCritica.embedding.isnot(None))
+        .where(ArgumentareCritica.decizie_id != source_decision.id)
+        .order_by("distance")
+        .limit(limit * 3)  # Fetch extra for deduplication
+    )
+
+    result = await session.execute(stmt)
+    rows = result.all()
+
+    # Deduplicate by decision
+    seen_decisions: set[str] = set()
+    results: list[SearchResult] = []
+
+    for row in rows:
+        arg = row.ArgumentareCritica
+        dec = row.DecizieCNSC
+        distance = row.distance
+        similarity = max(0.0, min(1.0, 1.0 - distance))
+
+        if dec.id in seen_decisions:
+            continue
+        seen_decisions.add(dec.id)
+
+        excerpt_parts = []
+        if arg.argumentatie_cnsc:
+            excerpt_parts.append(arg.argumentatie_cnsc[:300])
+        elif arg.elemente_retinute_cnsc:
+            excerpt_parts.append(arg.elemente_retinute_cnsc[:300])
+        excerpt = " ".join(excerpt_parts)[:400] + "..." if excerpt_parts else ""
+
+        results.append(SearchResult(
+            decision_id=dec.external_id,
+            title=f"Decizia {dec.external_id} - {dec.solutie_contestatie or 'N/A'}",
+            excerpt=excerpt,
+            score=similarity,
+            metadata={
+                "numar_decizie": dec.numar_decizie,
+                "data_decizie": dec.data_decizie.isoformat() if dec.data_decizie else None,
+                "tip_contestatie": dec.tip_contestatie,
+                "coduri_critici": dec.coduri_critici,
+                "solutie": dec.solutie_contestatie,
+            },
+        ))
+
+        if len(results) >= limit:
+            break
 
     return SearchResponse(
         query=f"similar to {decision_id}",
-        results=[],
-        total=0,
+        results=results,
+        total=len(results),
         page=1,
         page_size=limit,
     )

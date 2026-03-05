@@ -31,6 +31,7 @@ from app.core.logging import get_logger
 from app.db.session import init_db, Base
 from app.db import session as db_session
 from app.models.decision import DecizieCNSC, ArgumentareCritica
+from app.services.embedding import EmbeddingService
 from app.services.parser import parse_decision_text
 
 logger = get_logger(__name__)
@@ -267,6 +268,22 @@ class DecisionImporter:
                     logger.error("batch_commit_failed", error=str(e))
                     stats["failed"] += len(batch)
 
+        # Generate embeddings if not skipped
+        if not self.skip_embeddings:
+            logger.info("generating_embeddings_post_import")
+            try:
+                async with db_session.async_session_factory() as emb_session:
+                    embedding_service = EmbeddingService()
+                    emb_count = await embedding_service.generate_embeddings_for_argumentari(
+                        emb_session
+                    )
+                    await emb_session.commit()
+                    stats["embeddings_generated"] = emb_count
+                    logger.info("embeddings_generated", count=emb_count)
+            except Exception as e:
+                logger.error("embedding_generation_failed", error=str(e))
+                stats["embedding_error"] = str(e)
+
         logger.info("import_completed", **stats)
         return stats
 
@@ -329,6 +346,11 @@ async def main():
         action="store_true",
         help="Create database tables before importing",
     )
+    parser.add_argument(
+        "--embeddings-only",
+        action="store_true",
+        help="Only generate embeddings (skip GCS import)",
+    )
 
     args = parser.parse_args()
 
@@ -345,6 +367,24 @@ async def main():
     # Create tables if requested
     if args.create_tables:
         await create_tables()
+
+    # Embeddings-only mode: skip GCS import, just generate embeddings
+    if args.embeddings_only:
+        logger.info("embeddings_only_mode")
+        async with db_session.async_session_factory() as session:
+            embedding_service = EmbeddingService()
+            stats = await embedding_service.get_embedding_stats(session)
+            print(f"\nCurrent coverage: {stats['argumentari']['embedded']}/{stats['argumentari']['total']} argumentari")
+
+            count = await embedding_service.generate_embeddings_for_argumentari(
+                session, limit=args.limit
+            )
+            await session.commit()
+
+            stats = await embedding_service.get_embedding_stats(session)
+            print(f"Generated {count} embeddings")
+            print(f"Updated coverage: {stats['argumentari']['embedded']}/{stats['argumentari']['total']} argumentari")
+        return
 
     # Initialize importer
     importer = DecisionImporter(
