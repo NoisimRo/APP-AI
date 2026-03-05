@@ -102,7 +102,11 @@ class GeminiProvider(LLMProvider):
             logger.error("gemini_stream_error", error=str(e))
             raise
 
-    async def embed(self, texts: list[str]) -> list[list[float]]:
+    async def embed(
+        self,
+        texts: list[str],
+        task_type: str = "retrieval_document",
+    ) -> list[list[float]]:
         """Generate embeddings using Gemini embedding model."""
         try:
             embeddings = []
@@ -110,7 +114,7 @@ class GeminiProvider(LLMProvider):
                 result = genai.embed_content(
                     model=f"models/{self._embedding_model}",
                     content=text,
-                    task_type="retrieval_document",
+                    task_type=task_type,
                 )
                 embeddings.append(result["embedding"])
 

@@ -188,6 +188,9 @@ class SectiuneDecizie(Base):
     # Embedding for RAG
     embedding_id: Mapped[Optional[str]] = mapped_column(UUID(as_uuid=False))
 
+    # Vector embedding (768 dimensions for text-embedding-004)
+    embedding: Mapped[Optional[list]] = mapped_column(Vector(768))
+
     # Timestamps
     created_at: Mapped[datetime] = mapped_column(
         DateTime, server_default=func.now(), nullable=False
@@ -201,6 +204,13 @@ class SectiuneDecizie(Base):
     __table_args__ = (
         Index("ix_sectiuni_decizie", decizie_id),
         Index("ix_sectiuni_tip", tip_sectiune),
+        Index(
+            "ix_sectiuni_embedding_hnsw",
+            embedding,
+            postgresql_using="hnsw",
+            postgresql_ops={"embedding": "vector_cosine_ops"},
+            postgresql_with={"m": 16, "ef_construction": 64},
+        ),
     )
 
     def __repr__(self) -> str:
@@ -295,10 +305,11 @@ class ArgumentareCritica(Base):
         Index("ix_arg_critica", cod_critica),
         Index("ix_arg_castigator", castigator_critica),
         Index(
-            "ix_arg_embedding",
+            "ix_arg_embedding_hnsw",
             embedding,
-            postgresql_using="ivfflat",
+            postgresql_using="hnsw",
             postgresql_ops={"embedding": "vector_cosine_ops"},
+            postgresql_with={"m": 16, "ef_construction": 64},
         ),
     )
 
@@ -368,6 +379,13 @@ class CitatVerbatim(Base):
     __table_args__ = (
         Index("ix_citate_decizie", decizie_id),
         Index("ix_citate_tip", tip_citat),
+        Index(
+            "ix_citate_embedding_hnsw",
+            embedding,
+            postgresql_using="hnsw",
+            postgresql_ops={"embedding": "vector_cosine_ops"},
+            postgresql_with={"m": 16, "ef_construction": 64},
+        ),
     )
 
     def __repr__(self) -> str:

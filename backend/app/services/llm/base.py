@@ -59,11 +59,17 @@ class LLMProvider(ABC):
         pass
 
     @abstractmethod
-    async def embed(self, texts: list[str]) -> list[list[float]]:
+    async def embed(
+        self,
+        texts: list[str],
+        task_type: str = "retrieval_document",
+    ) -> list[list[float]]:
         """Generate embeddings for the given texts.
 
         Args:
             texts: List of strings to embed.
+            task_type: Embedding task type. Use "retrieval_document" for stored
+                documents and "retrieval_query" for search queries.
 
         Returns:
             List of embedding vectors (one per input text).
