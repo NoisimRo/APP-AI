@@ -107,7 +107,7 @@ class GeminiProvider(LLMProvider):
     ) -> list[list[float]]:
         """Generate embeddings using Gemini embedding model.
 
-        Returns 768-dimensional vectors (matching pgvector column definition).
+        Returns 3072-dimensional vectors (gemini-embedding-001 native output).
         """
         try:
             result = await self._client.aio.models.embed_content(
@@ -115,7 +115,6 @@ class GeminiProvider(LLMProvider):
                 contents=texts,
                 config=types.EmbedContentConfig(
                     task_type=task_type,
-                    output_dimensionality=768,
                 ),
             )
             return [e.values for e in result.embeddings]
