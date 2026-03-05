@@ -268,8 +268,13 @@ class RAGService:
 
                 contexts.append("\n".join(context_parts))
         else:
-            # Fallback: use truncated text_integral
+            # Fallback: use text_integral (up to 15000 chars per decision,
+            # reduced proportionally when multiple decisions to stay within
+            # LLM context limits)
+            max_chars_per_decision = max(4000, 60000 // max(len(decisions), 1))
             for dec in decisions:
+                text = dec.text_integral
+                truncated = len(text) > max_chars_per_decision
                 context_parts = [
                     f"=== Decizia {dec.external_id} ===",
                     f"Număr decizie: {dec.numar_decizie or 'N/A'}",
@@ -281,8 +286,8 @@ class RAGService:
                     f"Contestator: {dec.contestator or 'N/A'}",
                     f"Autoritate contractantă: {dec.autoritate_contractanta or 'N/A'}",
                     "",
-                    "Text integral (fragment):",
-                    dec.text_integral[:1500] + ("..." if len(dec.text_integral) > 1500 else ""),
+                    "Text integral:" if not truncated else "Text integral (fragment):",
+                    text[:max_chars_per_decision] + ("..." if truncated else ""),
                 ]
                 contexts.append("\n".join(context_parts))
 

@@ -31,6 +31,7 @@ from app.core.logging import get_logger
 from app.db.session import init_db, Base
 from app.db import session as db_session
 from app.models.decision import DecizieCNSC, ArgumentareCritica
+from app.services.analysis import DecisionAnalysisService
 from app.services.embedding import EmbeddingService
 from app.services.parser import parse_decision_text
 
@@ -119,7 +120,7 @@ class DecisionImporter:
         session: AsyncSession,
         blob_name: str,
         content: str,
-    ) -> Optional[str]:
+    ) -> tuple[str, Optional[str], Optional[str]]:
         """Parse and import a single decision.
 
         Args:
@@ -128,7 +129,8 @@ class DecisionImporter:
             content: File content
 
         Returns:
-            Decision ID if successful, None otherwise
+            Tuple of (status, decision_id, error_message) where status is one of:
+            "imported", "already_existed", "skipped", "failed"
         """
         filename = Path(blob_name).name
 
@@ -139,14 +141,19 @@ class DecisionImporter:
             # Skip decisions with invalid parsing (an_bo=0 or numar_bo=0)
             # These would violate the unique constraint ix_decizii_bo_unique
             if parsed.an_bo == 0 or parsed.numar_bo == 0:
+                reason = (
+                    f"Invalid BO metadata: an_bo={parsed.an_bo}, numar_bo={parsed.numar_bo}"
+                )
+                if parsed.parse_warnings:
+                    reason += f" ({parsed.parse_warnings[0]})"
                 logger.warning(
                     "decision_skipped_invalid_parsing",
                     filename=filename,
                     an_bo=parsed.an_bo,
                     numar_bo=parsed.numar_bo,
-                    reason="Invalid BO metadata (would violate unique constraint)",
+                    reason=reason,
                 )
-                return None
+                return ("skipped", None, f"{filename}: {reason}")
 
             # Check if already exists
             result = await session.execute(
@@ -156,7 +163,7 @@ class DecisionImporter:
 
             if existing:
                 logger.info("decision_already_exists", filename=filename, id=existing.id)
-                return existing.id
+                return ("already_existed", existing.id, None)
 
             # Create database record
             decision = DecizieCNSC(
@@ -190,7 +197,7 @@ class DecisionImporter:
                 external_id=decision.external_id,
             )
 
-            return decision.id
+            return ("imported", decision.id, None)
 
         except Exception as e:
             logger.error(
@@ -198,7 +205,7 @@ class DecisionImporter:
                 filename=filename,
                 error=str(e),
             )
-            return None
+            return ("failed", None, f"{filename}: {str(e)}")
 
     async def import_all(
         self,
@@ -218,8 +225,10 @@ class DecisionImporter:
             "total_files": 0,
             "imported": 0,
             "already_existed": 0,
+            "skipped": 0,
             "failed": 0,
             "errors": [],
+            "skipped_files": [],
         }
 
         # Get list of files
@@ -239,14 +248,21 @@ class DecisionImporter:
                         content = self.download_file(blob_name)
 
                         # Import to database
-                        decision_id = await self.import_decision(
+                        status, decision_id, error_msg = await self.import_decision(
                             session, blob_name, content
                         )
 
-                        if decision_id:
+                        if status == "imported":
                             stats["imported"] += 1
-                        else:
+                        elif status == "already_existed":
+                            stats["already_existed"] += 1
+                        elif status == "skipped":
+                            stats["skipped"] += 1
+                            stats["skipped_files"].append(error_msg)
+                        else:  # failed
                             stats["failed"] += 1
+                            if error_msg:
+                                stats["errors"].append(error_msg)
 
                     except Exception as e:
                         stats["failed"] += 1
@@ -351,6 +367,16 @@ async def main():
         action="store_true",
         help="Only generate embeddings (skip GCS import)",
     )
+    parser.add_argument(
+        "--analyze",
+        action="store_true",
+        help="After import, analyze decisions with LLM to extract ArgumentareCritica",
+    )
+    parser.add_argument(
+        "--analyze-only",
+        action="store_true",
+        help="Only analyze existing decisions (skip GCS import)",
+    )
 
     args = parser.parse_args()
 
@@ -367,6 +393,44 @@ async def main():
     # Create tables if requested
     if args.create_tables:
         await create_tables()
+
+    # Analyze-only mode: extract ArgumentareCritica from existing decisions
+    if args.analyze_only:
+        logger.info("analyze_only_mode")
+        analysis_service = DecisionAnalysisService()
+
+        async with db_session.async_session_factory() as session:
+            stats = await analysis_service.analyze_all_unprocessed(
+                session, limit=args.limit
+            )
+
+        print("\n" + "=" * 60)
+        print("ANALYSIS SUMMARY")
+        print("=" * 60)
+        print(f"Decisions to analyze: {stats['total']}")
+        print(f"Successfully analyzed: {stats['analyzed']}")
+        print(f"ArgumentareCritica created: {stats['argumentari_created']}")
+        print(f"Failed: {stats['failed']}")
+
+        if stats['errors']:
+            print(f"\nErrors:")
+            for error in stats['errors'][:10]:
+                print(f"  - {error}")
+
+        print("=" * 60)
+
+        # Generate embeddings for new argumentari
+        if stats['argumentari_created'] > 0 and not args.skip_embeddings:
+            print("\nGenerating embeddings for new argumentari...")
+            async with db_session.async_session_factory() as emb_session:
+                embedding_service = EmbeddingService()
+                emb_count = await embedding_service.generate_embeddings_for_argumentari(
+                    emb_session
+                )
+                await emb_session.commit()
+                print(f"Embeddings generated: {emb_count}")
+
+        return
 
     # Embeddings-only mode: skip GCS import, just generate embeddings
     if args.embeddings_only:
@@ -419,7 +483,15 @@ async def main():
     print(f"Total files found: {stats['total_files']}")
     print(f"Successfully imported: {stats['imported']}")
     print(f"Already existed: {stats['already_existed']}")
+    print(f"Skipped (invalid filename/metadata): {stats.get('skipped', 0)}")
     print(f"Failed: {stats['failed']}")
+
+    if stats.get('skipped_files'):
+        print(f"\nSkipped files ({len(stats['skipped_files'])}):")
+        for skipped in stats['skipped_files'][:10]:
+            print(f"  - {skipped}")
+        if len(stats['skipped_files']) > 10:
+            print(f"  ... and {len(stats['skipped_files']) - 10} more")
 
     if stats['errors']:
         print(f"\nErrors ({len(stats['errors'])}):")
@@ -428,9 +500,42 @@ async def main():
         if len(stats['errors']) > 10:
             print(f"  ... and {len(stats['errors']) - 10} more")
 
+    if 'embeddings_generated' in stats:
+        print(f"\nEmbeddings generated: {stats['embeddings_generated']}")
+    if 'embedding_error' in stats:
+        print(f"\nEmbedding error: {stats['embedding_error']}")
+
     print("=" * 60)
 
-    # Exit with error code if there were failures
+    # Analyze decisions with LLM if requested
+    if args.analyze and stats['imported'] > 0:
+        print("\n>>> Analyzing decisions with LLM to extract ArgumentareCritica...")
+        analysis_service = DecisionAnalysisService()
+        async with db_session.async_session_factory() as session:
+            analysis_stats = await analysis_service.analyze_all_unprocessed(
+                session, limit=args.limit
+            )
+
+        print(f"\nAnalysis: {analysis_stats['analyzed']} decisions analyzed, "
+              f"{analysis_stats['argumentari_created']} argumentari created, "
+              f"{analysis_stats['failed']} failed")
+
+        if analysis_stats['errors']:
+            for error in analysis_stats['errors'][:5]:
+                print(f"  - {error}")
+
+        # Regenerate embeddings for newly created argumentari
+        if analysis_stats['argumentari_created'] > 0 and not args.skip_embeddings:
+            print("\n>>> Generating embeddings for new argumentari...")
+            async with db_session.async_session_factory() as emb_session:
+                embedding_service = EmbeddingService()
+                emb_count = await embedding_service.generate_embeddings_for_argumentari(
+                    emb_session
+                )
+                await emb_session.commit()
+                print(f"Embeddings generated: {emb_count}")
+
+    # Exit with error code if there were hard failures (not skipped)
     if stats['failed'] > 0:
         sys.exit(1)
 
