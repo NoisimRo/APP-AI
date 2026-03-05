@@ -105,12 +105,18 @@ class GeminiProvider(LLMProvider):
         texts: list[str],
         task_type: str = "RETRIEVAL_DOCUMENT",
     ) -> list[list[float]]:
-        """Generate embeddings using Gemini embedding model."""
+        """Generate embeddings using Gemini embedding model.
+
+        Returns 768-dimensional vectors (matching pgvector column definition).
+        """
         try:
             result = await self._client.aio.models.embed_content(
                 model=self._embedding_model,
                 contents=texts,
-                config=types.EmbedContentConfig(task_type=task_type),
+                config=types.EmbedContentConfig(
+                    task_type=task_type,
+                    output_dimensionality=768,
+                ),
             )
             return [e.values for e in result.embeddings]
 
