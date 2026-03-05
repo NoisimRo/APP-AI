@@ -1,134 +1,144 @@
 """Red flags detection service for procurement documents.
 
 Analyzes procurement documents (tenders, specifications) to identify
-potentially illegal or restrictive clauses.
+potentially illegal or restrictive clauses. Uses RAG vector search
+to ground jurisprudence references in actual CNSC decisions.
 """
 
+import json
 from typing import Optional
-from sqlalchemy import select
+from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.logging import get_logger
-from app.models.decision import DecizieCNSC
+from app.models.decision import ArgumentareCritica, DecizieCNSC
+from app.services.embedding import EmbeddingService
 from app.services.llm.gemini import GeminiProvider
 
 logger = get_logger(__name__)
-
-
-class RedFlag:
-    """A detected red flag in procurement documents."""
-
-    def __init__(
-        self,
-        category: str,
-        severity: str,
-        clause: str,
-        issue: str,
-        legal_reference: str,
-        recommendation: str,
-        decision_refs: list[str] | None = None
-    ):
-        self.category = category
-        self.severity = severity
-        self.clause = clause
-        self.issue = issue
-        self.legal_reference = legal_reference
-        self.recommendation = recommendation
-        self.decision_refs = decision_refs or []
 
 
 class RedFlagsAnalyzer:
     """Service for analyzing procurement documents for red flags."""
 
     def __init__(self, llm_provider: Optional[GeminiProvider] = None):
-        """Initialize red flags analyzer.
+        self.llm = llm_provider or GeminiProvider(model="gemini-2.5-flash")
+        self.embedding_service = EmbeddingService(llm_provider=self.llm)
 
-        Args:
-            llm_provider: Optional LLM provider for analysis
-        """
-        self.llm = llm_provider or GeminiProvider(model="gemini-3-pro-preview")
-
-    async def search_related_decisions(
+    async def _vector_search_jurisprudence(
         self,
-        text: str,
+        query_text: str,
         session: AsyncSession,
-        limit: int = 3
-    ) -> list[DecizieCNSC]:
-        """Search for CNSC decisions related to the text.
+        limit: int = 5,
+    ) -> tuple[list[DecizieCNSC], list[tuple[ArgumentareCritica, float]]]:
+        """Search CNSC decisions by vector similarity.
 
         Args:
-            text: Document text to analyze
-            session: Database session
-            limit: Maximum number of decisions to return
+            query_text: Text to search for (clause or issue description).
+            session: Database session.
+            limit: Maximum number of chunks to return.
 
         Returns:
-            List of related decisions
+            Tuple of (decisions, matched_chunks with distances).
         """
-        # Extract key terms for search
-        keywords = []
+        # Check if embeddings exist
+        has_embeddings = await session.scalar(
+            select(func.count())
+            .select_from(ArgumentareCritica)
+            .where(ArgumentareCritica.embedding.isnot(None))
+        )
 
-        # Common red flag terms
-        red_flag_terms = [
-            'experiență similară', 'cifră afaceri', 'certificare',
-            'personal', 'referințe', 'clauză restrictivă'
-        ]
+        if not has_embeddings or has_embeddings == 0:
+            logger.warning("no_embeddings_available_for_redflags")
+            return [], []
 
-        text_lower = text.lower()
-        for term in red_flag_terms:
-            if term in text_lower:
-                keywords.append(term)
+        # Generate query embedding
+        query_vector = await self.embedding_service.embed_query(query_text)
 
-        if not keywords:
-            return []
-
-        # Search in database (simple ILIKE search)
-        # TODO: Replace with vector similarity search
-        conditions = []
-        for keyword in keywords[:3]:  # Limit to 3 keywords
-            pattern = f"%{keyword}%"
-            conditions.append(DecizieCNSC.text_integral.ilike(pattern))
-
-        if not conditions:
-            return []
-
-        from sqlalchemy import or_
+        # Vector similarity search
         stmt = (
-            select(DecizieCNSC)
-            .where(or_(*conditions))
+            select(
+                ArgumentareCritica,
+                ArgumentareCritica.embedding.cosine_distance(query_vector).label("distance"),
+            )
+            .where(ArgumentareCritica.embedding.isnot(None))
+            .order_by("distance")
             .limit(limit)
         )
 
         result = await session.execute(stmt)
+        rows = result.all()
+
+        if not rows:
+            return [], []
+
+        matched_chunks = [(row.ArgumentareCritica, row.distance) for row in rows]
+
+        # Filter by relevance threshold (cosine distance < 0.5 means similarity > 0.5)
+        relevant_chunks = [(arg, dist) for arg, dist in matched_chunks if dist < 0.5]
+
+        if not relevant_chunks:
+            logger.info("no_relevant_chunks_found", top_distance=rows[0].distance if rows else None)
+            return [], []
+
+        # Load parent decisions
+        dec_ids = list({arg.decizie_id for arg, _ in relevant_chunks})
+        stmt = select(DecizieCNSC).where(DecizieCNSC.id.in_(dec_ids))
+        result = await session.execute(stmt)
         decisions = list(result.scalars().all())
 
-        logger.info("related_decisions_found", count=len(decisions), keywords=keywords)
-        return decisions
+        logger.info(
+            "vector_search_jurisprudence",
+            query_preview=query_text[:80],
+            chunks_found=len(relevant_chunks),
+            decisions_found=len(decisions),
+            top_similarity=1.0 - relevant_chunks[0][1] if relevant_chunks else 0,
+        )
 
-    def _build_context_from_decisions(
+        return decisions, relevant_chunks
+
+    def _build_jurisprudence_context(
         self,
-        decisions: list[DecizieCNSC]
+        decisions: list[DecizieCNSC],
+        matched_chunks: list[tuple[ArgumentareCritica, float]],
     ) -> str:
-        """Build context string from decisions for LLM.
-
-        Args:
-            decisions: List of CNSC decisions
-
-        Returns:
-            Formatted context string
-        """
-        if not decisions:
+        """Build rich context from matched CNSC decisions and chunks."""
+        if not decisions or not matched_chunks:
             return ""
 
-        contexts = []
-        for dec in decisions:
-            context = (
-                f"Decizia {dec.external_id}: {dec.solutie_contestatie}\n"
-                f"Critici: {', '.join(dec.coduri_critici or [])}\n"
-                f"Fragmentcheie: {dec.text_integral[:500]}...\n"
-            )
-            contexts.append(context)
+        decision_map = {d.id: d for d in decisions}
+        chunks_by_decision: dict[str, list[tuple[ArgumentareCritica, float]]] = {}
+        for arg, dist in matched_chunks:
+            chunks_by_decision.setdefault(arg.decizie_id, []).append((arg, dist))
 
-        return "\n---\n".join(contexts)
+        parts = []
+        for decizie_id, chunks in chunks_by_decision.items():
+            dec = decision_map.get(decizie_id)
+            if not dec:
+                continue
+
+            section = [
+                f"=== Decizia {dec.external_id} ===",
+                f"Soluție: {dec.solutie_contestatie or 'N/A'}",
+                f"Contestator: {dec.contestator or 'N/A'}",
+                f"Autoritate contractantă: {dec.autoritate_contractanta or 'N/A'}",
+            ]
+
+            for arg, dist in chunks:
+                similarity = 1.0 - dist
+                section.append(f"\n--- Critica {arg.cod_critica} (relevanță: {similarity:.2f}) ---")
+                if arg.argumente_contestator:
+                    section.append(f"Argumente contestator: {arg.argumente_contestator[:500]}")
+                if arg.elemente_retinute_cnsc:
+                    section.append(f"Elemente reținute CNSC: {arg.elemente_retinute_cnsc[:500]}")
+                if arg.argumentatie_cnsc:
+                    section.append(f"Argumentație CNSC: {arg.argumentatie_cnsc[:500]}")
+                if arg.castigator_critica and arg.castigator_critica != "unknown":
+                    section.append(f"Câștigător: {arg.castigator_critica}")
+
+            parts.append("\n".join(section))
+
+        return "\n\n---\n\n".join(parts)
 
     async def analyze(
         self,
@@ -136,36 +146,61 @@ class RedFlagsAnalyzer:
         session: Optional[AsyncSession] = None,
         use_jurisprudence: bool = True
     ) -> list[dict]:
-        """Analyze document for red flags.
+        """Analyze document for red flags with RAG-grounded jurisprudence.
 
         Args:
-            document_text: Text of procurement document
-            session: Optional database session for jurisprudence lookup
-            use_jurisprudence: Whether to include CNSC jurisprudence
+            document_text: Text of procurement document.
+            session: Database session for jurisprudence lookup.
+            use_jurisprudence: Whether to search and include CNSC jurisprudence.
 
         Returns:
-            List of detected red flags with details
+            List of detected red flags with details and verified decision refs.
         """
         logger.info(
             "analyzing_red_flags",
             text_length=len(document_text),
-            use_jurisprudence=use_jurisprudence
+            use_jurisprudence=use_jurisprudence,
         )
 
-        # Search for related decisions if requested
-        context_parts = []
-        decision_refs = []
+        # Step 1: Search for relevant CNSC jurisprudence via vector search
+        jurisprudence_context = ""
+        available_decisions: dict[str, DecizieCNSC] = {}
 
         if use_jurisprudence and session:
-            decisions = await self.search_related_decisions(
-                document_text, session, limit=3
+            # Use a summary of the document as the search query
+            # (truncate to reasonable length for embedding)
+            search_query = document_text[:3000]
+            decisions, matched_chunks = await self._vector_search_jurisprudence(
+                search_query, session, limit=10
             )
             if decisions:
-                context_parts.append(self._build_context_from_decisions(decisions))
-                decision_refs = [dec.external_id for dec in decisions]
+                jurisprudence_context = self._build_jurisprudence_context(
+                    decisions, matched_chunks
+                )
+                available_decisions = {d.external_id: d for d in decisions}
 
-        # Build system prompt
-        system_prompt = """Ești un expert în achiziții publice din România, specializat în identificarea clauzelor restrictive și ilegale.
+        # Step 2: Build system prompt
+        decision_ids_list = list(available_decisions.keys())
+        decisions_instruction = ""
+        if decision_ids_list:
+            decisions_instruction = f"""
+
+IMPORTANT - Jurisprudență CNSC disponibilă:
+Ai la dispoziție următoarele decizii CNSC reale: {', '.join(decision_ids_list)}
+Contextul complet al acestor decizii este furnizat mai jos.
+
+Reguli stricte pentru jurisprudență:
+- Poți cita DOAR deciziile din lista de mai sus
+- NU inventa și NU hallucina alte numere de decizii
+- Pentru fiecare red flag, dacă una din deciziile disponibile este relevantă, include-o în "decision_refs"
+- Dacă NICIO decizie disponibilă nu este relevantă pentru un anumit red flag, lasă "decision_refs" ca listă goală []
+- Verifică că decizia chiar se referă la o problemă similară înainte de a o cita"""
+        else:
+            decisions_instruction = """
+
+Nu ai la dispoziție jurisprudență CNSC. Lasă câmpul "decision_refs" ca listă goală [] pentru fiecare red flag."""
+
+        system_prompt = f"""Ești un expert în achiziții publice din România, specializat în identificarea clauzelor restrictive și ilegale.
 
 Sarcina ta este să analizezi documentația de achiziție și să identifici "red flags" - clauze problematice care ar putea fi ilegale sau discriminatorii.
 
@@ -177,63 +212,64 @@ Categorii de red flags:
 5. **Clauze discriminatorii** - Criterii care favorizează anumiți operatori
 6. **Termene nerealiste** - Termene prea scurte pentru pregătirea ofertei
 7. **Criterii tehnice restrictive** - Specificații prea detaliate care limitează concurența
+{decisions_instruction}
 
-Pentru fiecare red flag identificat, furnizează:
-- **Categoria**: Din lista de mai sus
-- **Severitate**: CRITICĂ, MEDIE, SCĂZUTĂ
-- **Clauza problematică**: Textul exact din document
-- **Problema**: Ce este ilegal/problematic
-- **Referință legală**: Articolul din Legea 98/2016 sau HG 395/2016
-- **Recomandare**: Cum ar trebui modificată clauza
+Pentru fiecare red flag, furnizează:
+- **category**: Categoria din lista de mai sus
+- **severity**: CRITICĂ, MEDIE, sau SCĂZUTĂ
+- **clause**: Textul exact din document
+- **issue**: Descrierea detaliată a problemei
+- **legal_reference**: Articolul din Legea 98/2016 sau HG 395/2016
+- **recommendation**: Cum ar trebui modificată clauza
+- **decision_refs**: Lista de ID-uri de decizii CNSC relevante (DOAR din cele disponibile!) sau [] dacă nicio decizie nu e relevantă
 
-Răspunde EXCLUSIV în format JSON cu următoarea structură:
+Răspunde EXCLUSIV în format JSON:
 ```json
-{
+{{
   "red_flags": [
-    {
-      "category": "Experiență similară excesivă",
+    {{
+      "category": "...",
       "severity": "CRITICĂ",
-      "clause": "textul exact al clauzei",
+      "clause": "textul exact",
       "issue": "descrierea problemei",
-      "legal_reference": "art. 170 alin. (1) din Legea 98/2016",
-      "recommendation": "recomandarea de modificare"
-    }
+      "legal_reference": "art. ... din Legea 98/2016",
+      "recommendation": "recomandarea",
+      "decision_refs": ["BO2025_1000"]
+    }}
   ]
-}
+}}
 ```
 
-Dacă nu identifici red flags, returnează: `{"red_flags": []}`
-"""
+Dacă nu identifici red flags, returnează: `{{"red_flags": []}}`"""
 
-        # Build prompt
+        # Step 3: Build the full prompt with jurisprudence context
         prompt_parts = [
             "Analizează următoarea documentație de achiziție publică și identifică toate clauzele problematice (red flags):\n"
         ]
 
-        if context_parts:
+        if jurisprudence_context:
             prompt_parts.append(
-                "\n=== JURISPRUDENȚĂ CNSC RELEVANTĂ ===\n"
-                + "\n".join(context_parts) +
-                "\n=== SFÂRȘIT JURISPRUDENȚĂ ===\n\n"
+                "\n=== JURISPRUDENȚĂ CNSC RELEVANTĂ (din baza de date) ===\n"
+                + jurisprudence_context
+                + "\n=== SFÂRȘIT JURISPRUDENȚĂ ===\n\n"
             )
 
-        prompt_parts.append(f"=== DOCUMENTAȚIE ACHIZIȚIE ===\n{document_text}\n=== SFÂRȘIT DOCUMENTAȚIE ===")
+        prompt_parts.append(
+            f"=== DOCUMENTAȚIE ACHIZIȚIE ===\n{document_text}\n=== SFÂRȘIT DOCUMENTAȚIE ==="
+        )
 
         full_prompt = "\n".join(prompt_parts)
 
-        # Call LLM
+        # Step 4: Call LLM
         try:
             response = await self.llm.complete(
                 prompt=full_prompt,
                 system_prompt=system_prompt,
                 temperature=0.1,
-                max_tokens=4096
+                max_tokens=4096,
             )
 
             # Parse JSON response
-            import json
-
-            # Extract JSON from response (handle markdown code blocks)
             response_text = response.strip()
             if "```json" in response_text:
                 response_text = response_text.split("```json")[1].split("```")[0].strip()
@@ -243,21 +279,26 @@ Dacă nu identifici red flags, returnează: `{"red_flags": []}`
             result = json.loads(response_text)
             red_flags = result.get("red_flags", [])
 
-            # Add decision references if available
+            # Step 5: Verify decision refs - remove any that aren't in our actual DB
+            valid_ids = set(available_decisions.keys())
             for flag in red_flags:
-                flag["decision_refs"] = decision_refs
+                refs = flag.get("decision_refs", [])
+                if isinstance(refs, list):
+                    flag["decision_refs"] = [r for r in refs if r in valid_ids]
+                else:
+                    flag["decision_refs"] = []
 
             logger.info(
                 "red_flags_analyzed",
                 count=len(red_flags),
-                has_jurisprudence=len(decision_refs) > 0
+                has_jurisprudence=bool(available_decisions),
+                verified_refs=sum(len(f.get("decision_refs", [])) for f in red_flags),
             )
 
             return red_flags
 
         except json.JSONDecodeError as e:
             logger.error("red_flags_json_parse_error", error=str(e), response=response[:500])
-            # Return generic error response
             return [{
                 "category": "Eroare",
                 "severity": "INFO",

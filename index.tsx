@@ -181,6 +181,7 @@ const App = () => {
   const [chatInput, setChatInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [generatedContent, setGeneratedContent] = useState<string>("");
+  const [generatedDecisionRefs, setGeneratedDecisionRefs] = useState<string[]>([]);
 
   // Specialized Input States
   const [drafterContext, setDrafterContext] = useState({ facts: "", authorityArgs: "", legalGrounds: "" });
@@ -216,6 +217,7 @@ const App = () => {
 
   useEffect(() => {
     setGeneratedContent("");
+    setGeneratedDecisionRefs([]);
   }, [mode]);
 
   // Fetch decisions from API on mount
@@ -387,6 +389,7 @@ const App = () => {
   const handleDrafting = async () => {
     setIsLoading(true);
     setGeneratedContent("");
+    setGeneratedDecisionRefs([]);
 
     try {
       const response = await fetch('/api/v1/drafter/', {
@@ -405,6 +408,7 @@ const App = () => {
 
       const data = await response.json();
       setGeneratedContent(data.content || "");
+      setGeneratedDecisionRefs(data.decision_refs || []);
     } catch (err) {
       console.error(err);
       setGeneratedContent("Eroare la generare. Verifică că backend-ul este pornit.");
@@ -506,6 +510,7 @@ const App = () => {
   const handleClarification = async () => {
     setIsLoading(true);
     setGeneratedContent("");
+    setGeneratedDecisionRefs([]);
     try {
       const response = await fetch('/api/v1/clarification/', {
         method: 'POST',
@@ -519,6 +524,7 @@ const App = () => {
 
       const data = await response.json();
       setGeneratedContent(data.content || "");
+      setGeneratedDecisionRefs(data.decision_refs || []);
     } catch (err) {
       console.error(err);
       setGeneratedContent("Eroare la generare. Verifică că backend-ul este pornit.");
@@ -947,6 +953,16 @@ const App = () => {
                 <button className="text-sm text-blue-600 font-medium hover:underline">Descarcă .DOCX</button>
              </div>
              <div className="prose prose-slate max-w-none font-serif text-slate-800 leading-loose bg-white" dangerouslySetInnerHTML={{ __html: formatMarkdown(generatedContent) }} />
+             {generatedDecisionRefs.length > 0 && (
+               <div className="mt-6 p-4 bg-blue-50 border border-blue-200 rounded-xl">
+                 <p className="font-semibold text-slate-700 mb-2 text-sm">📚 Jurisprudență CNSC utilizată:</p>
+                 <div className="flex flex-wrap gap-2">
+                   {generatedDecisionRefs.map((ref: string) => (
+                     <span key={ref} className="text-xs bg-white text-blue-700 px-3 py-1.5 rounded-lg border border-blue-200 font-mono cursor-pointer hover:bg-blue-100 transition" onClick={() => openDecision(ref)}>{ref}</span>
+                   ))}
+                 </div>
+               </div>
+             )}
           </div>
         ) : (
           <div className="h-full flex flex-col items-center justify-center text-slate-300">
@@ -1259,7 +1275,19 @@ const App = () => {
                 </button>
              </div>
              {generatedContent && (
-               <div className="bg-white border border-slate-200 rounded-xl p-8 shadow-sm prose prose-slate max-w-none" dangerouslySetInnerHTML={{ __html: formatMarkdown(generatedContent) }} />
+               <div>
+                 <div className="bg-white border border-slate-200 rounded-xl p-8 shadow-sm prose prose-slate max-w-none" dangerouslySetInnerHTML={{ __html: formatMarkdown(generatedContent) }} />
+                 {generatedDecisionRefs.length > 0 && (
+                   <div className="mt-4 p-4 bg-purple-50 border border-purple-200 rounded-xl">
+                     <p className="font-semibold text-slate-700 mb-2 text-sm">📚 Jurisprudență CNSC utilizată:</p>
+                     <div className="flex flex-wrap gap-2">
+                       {generatedDecisionRefs.map((ref: string) => (
+                         <span key={ref} className="text-xs bg-white text-purple-700 px-3 py-1.5 rounded-lg border border-purple-200 font-mono cursor-pointer hover:bg-purple-100 transition" onClick={() => openDecision(ref)}>{ref}</span>
+                       ))}
+                     </div>
+                   </div>
+                 )}
+               </div>
              )}
           </div>
         )}
