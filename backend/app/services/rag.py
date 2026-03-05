@@ -18,7 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from pydantic import BaseModel
 
 from app.core.logging import get_logger
-from app.models.decision import DecizieCNSC, ArgumentareCritica
+from app.models.decision import DecizieCNSC, ArgumentareCritica, ReferintaArticol
 from app.services.embedding import EmbeddingService
 from app.services.llm.gemini import GeminiProvider
 
@@ -120,6 +120,119 @@ class RAGService:
         logger.info("bo_lookup_found", refs=bo_refs, count=len(decisions))
         return decisions
 
+    def _extract_legal_references(self, query: str) -> list[str]:
+        """Extract legal article references from query.
+
+        Matches patterns like:
+        - art. 57 alin. (1) din Legea 98/2016
+        - art. 210
+        - Hotărârea nr. 506/2023
+        - HG 395/2016
+        - OUG 34/2006
+
+        Returns:
+            List of reference strings found in query for text search.
+        """
+        patterns = [
+            # Full article with law reference
+            r'art(?:icolul|\.)\s*\d+(?:\s*alin(?:eat(?:ul)?)?\.?\s*\(?\d+\)?)?'
+            r'(?:\s*(?:din|al)\s+(?:Legea|L\.?|HG|OUG|OG)\s*(?:nr\.?\s*)?\d+/\d+)?',
+            # Standalone article
+            r'art(?:icolul|\.)\s*\d+(?:\s*alin(?:eat(?:ul)?)?\.?\s*\(?\d+\)?)?',
+            # Court decisions / HG references
+            r'[Hh]otăr[âa]rea\s+(?:nr\.?\s*)?\d+/\d+(?:\s+din\s+\d{2}\.\d{2}\.\d{4})?',
+            # Laws by number
+            r'(?:Legea|L\.?)\s*(?:nr\.?\s*)?\d+/\d+',
+            r'(?:HG|OUG|OG)\s*(?:nr\.?\s*)?\d+/\d+',
+        ]
+
+        references = []
+        for pattern in patterns:
+            matches = re.findall(pattern, query, re.IGNORECASE)
+            references.extend(matches)
+
+        # Deduplicate while preserving order
+        seen = set()
+        unique = []
+        for ref in references:
+            ref_lower = ref.lower().strip()
+            if ref_lower not in seen:
+                seen.add(ref_lower)
+                unique.append(ref.strip())
+
+        logger.debug("extracted_legal_references", references=unique)
+        return unique
+
+    async def _search_by_legal_reference(
+        self,
+        references: list[str],
+        query: str,
+        session: AsyncSession,
+        limit: int,
+    ) -> tuple[list[DecizieCNSC], list[tuple[ArgumentareCritica, float]]]:
+        """Search decisions by legal article references in text_integral.
+
+        Searches both the ReferintaArticol table and text_integral for
+        mentions of specific legal articles or court decisions.
+        """
+        if not references:
+            return [], []
+
+        # Search text_integral for any of the references
+        conditions = []
+        for ref in references:
+            conditions.append(DecizieCNSC.text_integral.ilike(f"%{ref}%"))
+
+        stmt = (
+            select(DecizieCNSC)
+            .where(or_(*conditions))
+            .order_by(DecizieCNSC.data_decizie.desc().nulls_last())
+            .limit(limit)
+        )
+        result = await session.execute(stmt)
+        decisions = list(result.scalars().all())
+
+        if not decisions:
+            return [], []
+
+        # Load ArgumentareCritica for matched decisions
+        dec_ids = [d.id for d in decisions]
+        stmt = (
+            select(ArgumentareCritica)
+            .where(ArgumentareCritica.decizie_id.in_(dec_ids))
+            .order_by(ArgumentareCritica.ordine_in_decizie)
+        )
+        result = await session.execute(stmt)
+        all_args = list(result.scalars().all())
+
+        # Filter chunks that contain the reference text (prioritize relevant chunks)
+        relevant_chunks = []
+        other_chunks = []
+        for arg in all_args:
+            arg_text = " ".join(filter(None, [
+                arg.argumente_contestator,
+                arg.argumente_ac,
+                arg.elemente_retinute_cnsc,
+                arg.argumentatie_cnsc,
+            ]))
+            is_relevant = any(ref.lower() in arg_text.lower() for ref in references)
+            if is_relevant:
+                relevant_chunks.append((arg, 0.0))
+            else:
+                other_chunks.append((arg, 0.3))
+
+        matched_chunks = relevant_chunks + other_chunks
+
+        logger.info(
+            "legal_reference_search_found",
+            references=references,
+            decisions=len(decisions),
+            relevant_chunks=len(relevant_chunks),
+            total_chunks=len(matched_chunks),
+        )
+
+        return decisions, matched_chunks
+
     async def search_decisions(
         self,
         query: str,
@@ -128,9 +241,11 @@ class RAGService:
     ) -> tuple[list[DecizieCNSC], list[tuple[ArgumentareCritica, float]]]:
         """Search for relevant decisions based on query.
 
-        First checks for direct BO references (e.g. BO2025_1011).
-        Then uses vector search on ArgumentareCritica when embeddings are
-        available, falling back to keyword ILIKE search otherwise.
+        Search strategy (in order of priority):
+        1. Direct BO references (e.g. BO2025_1011)
+        2. Legal article/reference search (e.g. art. 57 din Legea 98/2016)
+        3. Vector search on ArgumentareCritica embeddings
+        4. Keyword ILIKE fallback
 
         Args:
             query: User's search query.
@@ -167,7 +282,16 @@ class RAGService:
                 )
                 return bo_decisions, matched_chunks
 
-        # 2. Check if embeddings exist for vector search
+        # 2. Check for legal article/reference queries
+        legal_refs = self._extract_legal_references(query)
+        if legal_refs:
+            ref_decisions, ref_chunks = await self._search_by_legal_reference(
+                legal_refs, query, session, limit=limit
+            )
+            if ref_decisions:
+                return ref_decisions, ref_chunks
+
+        # 3. Check if embeddings exist for vector search
         has_embeddings = await session.scalar(
             select(func.count())
             .select_from(ArgumentareCritica)
@@ -210,7 +334,7 @@ class RAGService:
                 )
                 return decisions, matched_chunks
 
-        # 3. Fallback: keyword ILIKE search
+        # 4. Fallback: keyword ILIKE search
         logger.info("falling_back_to_keyword_search", query=query)
         decisions = await self._keyword_search(query, session, limit)
         return decisions, []
@@ -506,7 +630,7 @@ Răspunde în limba română, profesional și precis."""
                 context=contexts,
                 system_prompt=system_prompt,
                 temperature=0.1,
-                max_tokens=2048,
+                max_tokens=8192,
             )
 
             # 5. Extract citations
