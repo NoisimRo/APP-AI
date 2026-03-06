@@ -47,9 +47,13 @@ async def analyze_with_retry(
     analysis_service: DecisionAnalysisService,
     session,
     decision: DecizieCNSC,
+    external_id: str,
     overwrite: bool = False,
 ) -> tuple[int, str | None]:
     """Analyze a single decision with retry logic.
+
+    Args:
+        external_id: Pre-captured external_id string (safe to use after rollback).
 
     Returns:
         Tuple of (argumentari_created, error_message_or_none)
@@ -63,25 +67,28 @@ async def analyze_with_retry(
             return (count, None)
         except Exception as e:
             error_msg = str(e)
+            await session.rollback()
             if attempt < MAX_RETRIES:
                 delay = RETRY_BASE_DELAY ** attempt
                 logger.warning(
                     "analysis_retry",
-                    external_id=decision.external_id,
+                    external_id=external_id,
                     attempt=attempt,
                     delay=delay,
                     error=error_msg,
                 )
-                await session.rollback()
+                # Re-fetch the decision after rollback (ORM state is expired)
+                decision = await session.get(DecizieCNSC, decision.id)
+                if not decision:
+                    return (0, f"{external_id}: decision disappeared after rollback")
                 await asyncio.sleep(delay)
             else:
                 logger.error(
                     "analysis_failed_all_retries",
-                    external_id=decision.external_id,
+                    external_id=external_id,
                     error=error_msg,
                 )
-                await session.rollback()
-                return (0, f"{decision.external_id}: {error_msg}")
+                return (0, f"{external_id}: {error_msg}")
 
 
 async def main():
@@ -189,22 +196,27 @@ async def main():
         elapsed = time.time() - start_time
         rate = stats["analyzed"] / elapsed * 60 if elapsed > 0 and stats["analyzed"] > 0 else 0
 
+        # Capture identifiers as plain strings BEFORE any DB work
+        # (safe to use after session rollback, when ORM objects are expired)
+        ext_id = decision.external_id
+        dec_id = decision.id
+
         print(
-            f"[{i}/{len(decisions)}] Analyzing {decision.external_id}... ",
+            f"[{i}/{len(decisions)}] Analyzing {ext_id}... ",
             end="",
             flush=True,
         )
 
         async with db_session.async_session_factory() as session:
             # Re-attach decision to this session
-            dec = await session.get(DecizieCNSC, decision.id)
+            dec = await session.get(DecizieCNSC, dec_id)
             if not dec:
                 print("NOT FOUND (deleted?)")
                 stats["failed"] += 1
                 continue
 
             count, error = await analyze_with_retry(
-                analysis_service, session, dec, overwrite=args.force
+                analysis_service, session, dec, external_id=ext_id, overwrite=args.force
             )
 
         if error:
