@@ -46,13 +46,14 @@ RATE_LIMIT_DELAY = 1.0  # seconds between decisions
 async def analyze_with_retry(
     analysis_service: DecisionAnalysisService,
     session,
-    decision: DecizieCNSC,
+    decision_id: str,
     external_id: str,
     overwrite: bool = False,
 ) -> tuple[int, str | None]:
     """Analyze a single decision with retry logic.
 
     Args:
+        decision_id: Pre-captured UUID string (safe to use after rollback).
         external_id: Pre-captured external_id string (safe to use after rollback).
 
     Returns:
@@ -60,6 +61,10 @@ async def analyze_with_retry(
     """
     for attempt in range(1, MAX_RETRIES + 1):
         try:
+            # Always fetch a fresh decision object for each attempt
+            decision = await session.get(DecizieCNSC, decision_id)
+            if not decision:
+                return (0, f"{external_id}: decision not found")
             count = await analysis_service.analyze_and_store(
                 session, decision, overwrite=overwrite
             )
@@ -77,10 +82,6 @@ async def analyze_with_retry(
                     delay=delay,
                     error=error_msg,
                 )
-                # Re-fetch the decision after rollback (ORM state is expired)
-                decision = await session.get(DecizieCNSC, decision.id)
-                if not decision:
-                    return (0, f"{external_id}: decision disappeared after rollback")
                 await asyncio.sleep(delay)
             else:
                 logger.error(
@@ -208,15 +209,9 @@ async def main():
         )
 
         async with db_session.async_session_factory() as session:
-            # Re-attach decision to this session
-            dec = await session.get(DecizieCNSC, dec_id)
-            if not dec:
-                print("NOT FOUND (deleted?)")
-                stats["failed"] += 1
-                continue
-
             count, error = await analyze_with_retry(
-                analysis_service, session, dec, external_id=ext_id, overwrite=args.force
+                analysis_service, session, decision_id=dec_id,
+                external_id=ext_id, overwrite=args.force
             )
 
         if error:
