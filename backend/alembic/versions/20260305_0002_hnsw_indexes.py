@@ -34,7 +34,7 @@ def upgrade() -> None:
     # Add embedding column to sectiuni_decizie
     op.add_column(
         'sectiuni_decizie',
-        sa.Column('embedding', Vector(768), nullable=True),
+        sa.Column('embedding', Vector(2000), nullable=True),
     )
 
     # Create HNSW index on sectiuni_decizie

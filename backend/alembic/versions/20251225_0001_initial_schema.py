@@ -114,7 +114,7 @@ def upgrade() -> None:
         sa.Column('jurisprudenta_cnsc', postgresql.ARRAY(sa.Text()), nullable=True),
         sa.Column('castigator_critica', sa.String(length=20), nullable=False),
         sa.Column('embedding_id', postgresql.UUID(as_uuid=False), nullable=True),
-        sa.Column('embedding', Vector(768), nullable=True),
+        sa.Column('embedding', Vector(2000), nullable=True),
         sa.Column('created_at', sa.DateTime(), server_default=sa.text('now()'), nullable=False),
         sa.ForeignKeyConstraint(['decizie_id'], ['decizii_cnsc.id'], ondelete='CASCADE'),
         sa.PrimaryKeyConstraint('id')
@@ -136,7 +136,7 @@ def upgrade() -> None:
         sa.Column('pozitie_end', sa.Integer(), nullable=True),
         sa.Column('tip_citat', sa.String(length=30), nullable=True),
         sa.Column('embedding_id', postgresql.UUID(as_uuid=False), nullable=True),
-        sa.Column('embedding', Vector(768), nullable=True),
+        sa.Column('embedding', Vector(2000), nullable=True),
         sa.Column('created_at', sa.DateTime(), server_default=sa.text('now()'), nullable=False),
         sa.ForeignKeyConstraint(['argumentare_id'], ['argumentare_critica.id'], ondelete='SET NULL'),
         sa.ForeignKeyConstraint(['decizie_id'], ['decizii_cnsc.id'], ondelete='CASCADE'),

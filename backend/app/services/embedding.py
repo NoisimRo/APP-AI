@@ -8,7 +8,7 @@ over CNSC decisions. Uses ArgumentareCritica as the primary semantic chunk
 import asyncio
 from typing import Optional
 
-from sqlalchemy import select, func
+from sqlalchemy import select, func, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.logging import get_logger
@@ -174,6 +174,44 @@ class EmbeddingService:
             return 0
 
         logger.info("generating_argumentari_embeddings", count=len(rows))
+
+        # Diagnostic: check actual column typmod from this connection
+        diag = await session.execute(text(
+            "SELECT a.atttypmod, format_type(a.atttypid, a.atttypmod) "
+            "FROM pg_attribute a JOIN pg_class c ON a.attrelid = c.oid "
+            "WHERE c.relname = 'argumentare_critica' AND a.attname = 'embedding'"
+        ))
+        typmod_row = diag.first()
+        if typmod_row:
+            raw_typmod, fmt = typmod_row
+            logger.info(
+                "embedding_column_diagnostic",
+                raw_typmod=raw_typmod,
+                format_type=fmt,
+            )
+            if raw_typmod != -1 and raw_typmod != 2000:
+                logger.warning(
+                    "embedding_column_wrong_dimension",
+                    expected=2000,
+                    actual=raw_typmod,
+                    message="Fixing column dimension via DROP+ADD",
+                )
+                await session.execute(text("DROP INDEX IF EXISTS ix_arg_embedding_hnsw"))
+                await session.execute(text("ALTER TABLE argumentare_critica DROP COLUMN embedding"))
+                await session.execute(text("ALTER TABLE argumentare_critica ADD COLUMN embedding vector(2000)"))
+                await session.execute(text(
+                    "CREATE INDEX ix_arg_embedding_hnsw ON argumentare_critica "
+                    "USING hnsw (embedding vector_cosine_ops) WITH (m = 16, ef_construction = 64)"
+                ))
+                await session.commit()
+                logger.info("embedding_column_fixed", new_typmod=2000)
+                # Re-query rows since column was recreated
+                result = await session.execute(
+                    select(ArgumentareCritica).where(ArgumentareCritica.embedding.is_(None))
+                )
+                rows = list(result.scalars().all())
+                if not rows:
+                    return 0
 
         # Compose texts
         texts = [self.compose_text_for_argumentare(row) for row in rows]
