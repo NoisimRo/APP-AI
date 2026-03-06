@@ -88,7 +88,7 @@ class DecisionImporter:
             List of blob names (file paths in GCS)
         """
         prefix = f"{self.folder_name}/" if self.folder_name else ""
-        blobs = self.bucket.list_blobs(prefix=prefix)
+        blobs = self.bucket.list_blobs(prefix=prefix, timeout=300)
 
         files = []
         skipped = 0
@@ -122,10 +122,10 @@ class DecisionImporter:
         blob = self.bucket.blob(blob_name)
 
         try:
-            content = blob.download_as_text(encoding='utf-8')
+            content = blob.download_as_text(encoding='utf-8', timeout=120)
         except UnicodeDecodeError:
             # Fallback to latin-1
-            content = blob.download_as_text(encoding='latin-1')
+            content = blob.download_as_text(encoding='latin-1', timeout=120)
 
         return content
 
