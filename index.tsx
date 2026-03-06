@@ -239,11 +239,15 @@ const App = () => {
     fetchStats();
   }, []);
 
-  // Fetch decisions for Data Lake (paginated)
-  const fetchDecisions = async (page: number = 1) => {
+  // Fetch decisions for Data Lake (paginated + search)
+  const fetchDecisions = async (page: number = 1, search?: string) => {
     setIsLoadingDecisions(true);
     try {
-      const response = await fetch(`/api/v1/decisions/?page=${page}&page_size=20`);
+      const params = new URLSearchParams({ page: String(page), page_size: '20' });
+      if (search && search.trim()) {
+        params.set('search', search.trim());
+      }
+      const response = await fetch(`/api/v1/decisions/?${params}`);
       if (response.ok) {
         const data = await response.json();
         setApiDecisions(data.decisions || []);
@@ -260,6 +264,14 @@ const App = () => {
   useEffect(() => {
     fetchDecisions(1);
   }, []);
+
+  // Debounced search for Data Lake
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      fetchDecisions(1, fileSearch);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [fileSearch]);
 
   // --- File Management ---
 
@@ -784,7 +796,7 @@ const App = () => {
 
     const goToPage = (page: number) => {
       if (page >= 1 && page <= totalPages) {
-        fetchDecisions(page);
+        fetchDecisions(page, fileSearch);
       }
     };
 

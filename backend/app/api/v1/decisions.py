@@ -4,7 +4,7 @@ import re
 
 from fastapi import APIRouter, HTTPException, UploadFile, File, Query, Depends
 from pydantic import BaseModel, Field
-from sqlalchemy import select, func
+from sqlalchemy import select, func, or_, cast, String
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.logging import get_logger
@@ -72,12 +72,13 @@ async def list_decisions(
     page_size: int = Query(20, ge=1, le=100),
     ruling: str | None = Query(None, description="Filter by ruling"),
     year: int | None = Query(None, ge=2000, le=2100),
+    search: str | None = Query(None, description="Search by BO number, contestator, autoritate, CPV, or criticism codes"),
     session: AsyncSession = Depends(get_session),
 ) -> DecisionListResponse:
     """
-    List CNSC decisions with pagination and filters.
+    List CNSC decisions with pagination, filters, and search.
     """
-    logger.info("list_decisions", page=page, ruling=ruling, year=year)
+    logger.info("list_decisions", page=page, ruling=ruling, year=year, search=search)
 
     # Check if database is available
     if not is_db_available():
@@ -96,6 +97,18 @@ async def list_decisions(
         query = query.where(DecizieCNSC.solutie_contestatie == ruling)
     if year:
         query = query.where(DecizieCNSC.an_bo == year)
+    if search:
+        search_term = f"%{search.strip()}%"
+        query = query.where(
+            or_(
+                cast(DecizieCNSC.numar_bo, String).ilike(search_term),
+                DecizieCNSC.contestator.ilike(search_term),
+                DecizieCNSC.autoritate_contractanta.ilike(search_term),
+                DecizieCNSC.cod_cpv.ilike(search_term),
+                DecizieCNSC.cpv_descriere.ilike(search_term),
+                DecizieCNSC.filename.ilike(search_term),
+            )
+        )
 
     # Order by date descending
     query = query.order_by(DecizieCNSC.data_decizie.desc().nullslast())
