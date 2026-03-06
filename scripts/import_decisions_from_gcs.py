@@ -226,6 +226,14 @@ class DecisionImporter:
             )
             return ("failed", None, f"{filename}: {str(e)}")
 
+    async def _load_existing_filenames(self) -> set[str]:
+        """Pre-load all existing filenames from DB for fast skip checks."""
+        async with db_session.async_session_factory() as session:
+            result = await session.execute(
+                select(DecizieCNSC.filename)
+            )
+            return {row[0] for row in result.all()}
+
     async def import_all(
         self,
         limit: Optional[int] = None,
@@ -252,15 +260,33 @@ class DecisionImporter:
             "skipped_files": [],
         }
 
+        # Pre-load existing filenames to skip without downloading
+        existing_filenames = await self._load_existing_filenames()
+        logger.info("existing_filenames_loaded", count=len(existing_filenames))
+
         # Get list of files
         files = self.list_decision_files(limit=limit, offset=offset)
         stats["total_files"] = len(files)
 
-        logger.info("import_starting", total_files=len(files))
+        # Filter out already-imported files before downloading
+        new_files = []
+        for blob_name in files:
+            fname = Path(blob_name).name
+            if fname in existing_filenames:
+                stats["already_existed"] += 1
+            else:
+                new_files.append(blob_name)
 
-        # Process in batches
-        for i in range(0, len(files), batch_size):
-            batch = files[i:i + batch_size]
+        logger.info(
+            "import_starting",
+            total_files=len(files),
+            already_existed=stats["already_existed"],
+            new_files=len(new_files),
+        )
+
+        # Process only new files in batches
+        for i in range(0, len(new_files), batch_size):
+            batch = new_files[i:i + batch_size]
 
             async with db_session.async_session_factory() as session:
                 for blob_name in batch:
