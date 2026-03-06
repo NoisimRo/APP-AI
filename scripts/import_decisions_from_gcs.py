@@ -16,6 +16,7 @@ Usage:
 import asyncio
 import argparse
 import sys
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Optional
 
@@ -284,16 +285,36 @@ class DecisionImporter:
             new_files=len(new_files),
         )
 
-        # Process only new files in batches
+        # Process only new files in batches with parallel downloads
+        loop = asyncio.get_event_loop()
         for i in range(0, len(new_files), batch_size):
             batch = new_files[i:i + batch_size]
 
-            async with db_session.async_session_factory() as session:
-                for blob_name in batch:
+            # Download all files in this batch concurrently (10 threads)
+            with ThreadPoolExecutor(max_workers=10) as executor:
+                download_futures = {
+                    blob_name: loop.run_in_executor(executor, self.download_file, blob_name)
+                    for blob_name in batch
+                }
+                downloaded = {}
+                for blob_name, future in download_futures.items():
                     try:
-                        # Download file
-                        content = self.download_file(blob_name)
+                        downloaded[blob_name] = await future
+                    except Exception as e:
+                        stats["failed"] += 1
+                        stats["errors"].append(f"{blob_name}: download failed: {e}")
+                        logger.error("download_failed", file=blob_name, error=str(e))
 
+            logger.info(
+                "batch_downloaded",
+                batch_num=i // batch_size + 1,
+                downloaded=len(downloaded),
+                failed=len(batch) - len(downloaded),
+            )
+
+            async with db_session.async_session_factory() as session:
+                for blob_name, content in downloaded.items():
+                    try:
                         # Import to database
                         status, decision_id, error_msg = await self.import_decision(
                             session, blob_name, content

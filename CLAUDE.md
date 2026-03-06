@@ -118,7 +118,36 @@ DATABASE_URL="postgresql+asyncpg://..." python scripts/generate_embeddings.py
 
 ## Testing Considerations
 
-- 10 test decisions currently imported (of ~3000 total in GCS)
+- ~2014 decisions imported so far (of ~3000 total in GCS), ~1000 remaining
 - Check both vector search and keyword fallback paths
 - Verify direct BO lookup works (e.g., "analizeaza BO2025_1011")
 - Frontend changes: test in Vite dev server before deploying
+
+## Current Progress & Next Steps (2026-03-06)
+
+### What's been done
+1. **Import script optimized** (`scripts/import_decisions_from_gcs.py`):
+   - Pre-loads existing filenames from DB to skip already-imported files instantly (no GCS download)
+   - Parallel GCS downloads using ThreadPoolExecutor (10 concurrent threads per batch)
+   - ~2014 of ~3000 decisions imported so far
+
+2. **Backend `/stats/overview` endpoint** implemented (`backend/app/api/v1/decisions.py`):
+   - Returns real DB counts: total_decisions, by_ruling (ADMIS/RESPINS/etc.), by_type (rezultat/documentatie), last_updated
+   - Used by frontend Dashboard + Data Lake for global stats
+
+3. **Backend `DecisionSummary`** now includes `cpv_descriere` and `contestator` fields
+
+4. **Frontend Dashboard** (`index.tsx`): uses `/stats/overview` API for all stat cards (not `apiDecisions.length`)
+
+5. **Frontend Data Lake** (`index.tsx`) redesigned:
+   - Global stats bar from `/stats/overview` (Total, Documentație, Rezultat, Ultima actualizare)
+   - Server-side pagination (20/page with prev/next + page numbers)
+   - Tile redesign: BO reference as title, CPV + description, contestator vs. autoritate, ruling badge
+
+### What still needs to be done
+1. **Finish importing remaining ~1000 decisions**: Run `python scripts/import_decisions_from_gcs.py --skip-embeddings` (no --limit, let it run for all)
+2. **Run LLM analysis** on imported decisions (populates ArgumentareCritica): This is needed for RAG search to work
+3. **Generate embeddings** for all decisions: `python scripts/generate_embeddings.py`
+4. **CPV descriptions**: `cpv_descriere` column is currently NULL for most decisions — need to populate from `nomenclator_cpv` table or during import
+5. **Data Lake search**: Current search box does client-side filtering on 20 items — should be moved to server-side search (API query param)
+6. **Deploy**: Push to `main` to trigger Cloud Build → Cloud Run

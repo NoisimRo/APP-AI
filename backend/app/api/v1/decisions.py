@@ -51,7 +51,9 @@ class DecisionSummary(BaseModel):
     tip_contestatie: str
     coduri_critici: list[str]
     cod_cpv: str | None
+    cpv_descriere: str | None
     solutie_contestatie: str | None
+    contestator: str | None
     autoritate_contractanta: str | None
 
 
@@ -123,7 +125,9 @@ async def list_decisions(
             tip_contestatie=d.tip_contestatie,
             coduri_critici=d.coduri_critici or [],
             cod_cpv=d.cod_cpv,
+            cpv_descriere=d.cpv_descriere,
             solutie_contestatie=d.solutie_contestatie,
+            contestator=d.contestator,
             autoritate_contractanta=d.autoritate_contractanta,
         )
         for d in decisions_db
@@ -229,16 +233,47 @@ async def upload_decision(
 
 
 @router.get("/stats/overview")
-async def get_stats():
+async def get_stats(
+    session: AsyncSession = Depends(get_session),
+):
     """
     Get statistics overview for the decision database.
     """
-    # TODO: Implement stats calculation
+    if not is_db_available():
+        return {
+            "total_decisions": 0,
+            "by_ruling": {},
+            "by_type": {},
+            "last_updated": None,
+        }
+
+    # Total count
+    total_result = await session.execute(select(func.count()).select_from(DecizieCNSC))
+    total = total_result.scalar() or 0
+
+    # Count by ruling (solutie_contestatie)
+    ruling_result = await session.execute(
+        select(DecizieCNSC.solutie_contestatie, func.count())
+        .group_by(DecizieCNSC.solutie_contestatie)
+    )
+    by_ruling = {row[0] or "NECUNOSCUT": row[1] for row in ruling_result.all()}
+
+    # Count by type (tip_contestatie)
+    type_result = await session.execute(
+        select(DecizieCNSC.tip_contestatie, func.count())
+        .group_by(DecizieCNSC.tip_contestatie)
+    )
+    by_type = {row[0] or "necunoscut": row[1] for row in type_result.all()}
+
+    # Last updated
+    last_result = await session.execute(
+        select(func.max(DecizieCNSC.created_at))
+    )
+    last_updated = last_result.scalar()
 
     return {
-        "total_decisions": 0,
-        "by_ruling": {"ADMIS": 0, "RESPINS": 0, "PARTIAL": 0},
-        "by_year": {},
-        "by_criticism": {},
-        "last_updated": None,
+        "total_decisions": total,
+        "by_ruling": by_ruling,
+        "by_type": by_type,
+        "last_updated": last_updated.isoformat() if last_updated else None,
     }
