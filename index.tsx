@@ -174,7 +174,10 @@ const App = () => {
   const [isUploading, setIsUploading] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
   const [apiDecisions, setApiDecisions] = useState<any[]>([]);
+  const [apiDecisionsTotal, setApiDecisionsTotal] = useState(0);
+  const [apiDecisionsPage, setApiDecisionsPage] = useState(1);
   const [isLoadingDecisions, setIsLoadingDecisions] = useState(false);
+  const [dbStats, setDbStats] = useState<any>(null);
   
   // Chat/Interaction States
   const [chatMessages, setChatMessages] = useState<Message[]>([]);
@@ -220,23 +223,42 @@ const App = () => {
     setGeneratedDecisionRefs([]);
   }, [mode]);
 
-  // Fetch decisions from API on mount
+  // Fetch global stats from API on mount
   useEffect(() => {
-    const fetchDecisions = async () => {
-      setIsLoadingDecisions(true);
+    const fetchStats = async () => {
       try {
-        const response = await fetch('/api/v1/decisions/?limit=100');
+        const response = await fetch('/api/v1/decisions/stats/overview');
         if (response.ok) {
           const data = await response.json();
-          setApiDecisions(data.decisions || []);
+          setDbStats(data);
         }
       } catch (error) {
-        console.error('Failed to fetch decisions:', error);
-      } finally {
-        setIsLoadingDecisions(false);
+        console.error('Failed to fetch stats:', error);
       }
     };
-    fetchDecisions();
+    fetchStats();
+  }, []);
+
+  // Fetch decisions for Data Lake (paginated)
+  const fetchDecisions = async (page: number = 1) => {
+    setIsLoadingDecisions(true);
+    try {
+      const response = await fetch(`/api/v1/decisions/?page=${page}&page_size=20`);
+      if (response.ok) {
+        const data = await response.json();
+        setApiDecisions(data.decisions || []);
+        setApiDecisionsTotal(data.total || 0);
+        setApiDecisionsPage(data.page || 1);
+      }
+    } catch (error) {
+      console.error('Failed to fetch decisions:', error);
+    } finally {
+      setIsLoadingDecisions(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchDecisions(1);
   }, []);
 
   // --- File Management ---
@@ -614,7 +636,14 @@ const App = () => {
     </div>
   );
 
-  const renderDashboard = () => (
+  const renderDashboard = () => {
+    const totalDecisions = dbStats?.total_decisions || 0;
+    const admisCount = (dbStats?.by_ruling?.['ADMIS'] || 0) + (dbStats?.by_ruling?.['ADMIS_PARTIAL'] || 0);
+    const respinsCount = dbStats?.by_ruling?.['RESPINS'] || 0;
+    const rezultatCount = dbStats?.by_type?.['rezultat'] || 0;
+    const isConnected = dbStats !== null && totalDecisions > 0;
+
+    return (
     <div className="p-8 max-w-6xl mx-auto animate-in fade-in duration-500">
       <header className="mb-8 flex justify-between items-center">
         <div>
@@ -622,9 +651,9 @@ const App = () => {
            <p className="text-slate-500">Bine ai venit în centrul de comandă ExpertAP.</p>
         </div>
         <div className="flex items-center gap-2 bg-white border border-slate-200 px-3 py-1.5 rounded-full shadow-sm">
-           <div className={`w-2.5 h-2.5 rounded-full ${apiDecisions.length > 0 ? 'bg-green-500 animate-pulse' : isLoadingDecisions ? 'bg-yellow-500 animate-pulse' : 'bg-slate-300'}`}></div>
+           <div className={`w-2.5 h-2.5 rounded-full ${isConnected ? 'bg-green-500 animate-pulse' : dbStats === null ? 'bg-yellow-500 animate-pulse' : 'bg-slate-300'}`}></div>
            <span className="text-xs font-medium text-slate-600">
-              {apiDecisions.length > 0 ? `Conectat: ${apiDecisions.length} decizii` : isLoadingDecisions ? "Conectare..." : "Deconectat"}
+              {isConnected ? `Conectat: ${totalDecisions} decizii` : dbStats === null ? "Conectare..." : "Deconectat"}
            </span>
         </div>
       </header>
@@ -632,25 +661,25 @@ const App = () => {
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-10">
          <StatCard
             label="Total Decizii CNSC"
-            value={apiDecisions.length}
+            value={totalDecisions}
             icon={FileText}
             color="bg-blue-500 text-blue-600"
          />
          <StatCard
             label="Decizii Rezultat"
-            value={apiDecisions.filter(d => d.tip_contestatie === 'rezultat').length}
+            value={rezultatCount}
             icon={Database}
             color="bg-purple-500 text-purple-600"
          />
          <StatCard
             label="Admise/Admis Parțial"
-            value={apiDecisions.filter(d => d.solutie_contestatie?.includes('ADMIS')).length}
+            value={admisCount}
             icon={CheckCircle}
             color="bg-teal-500 text-teal-600"
          />
          <StatCard
             label="Respinse"
-            value={apiDecisions.filter(d => d.solutie_contestatie === 'RESPINS').length}
+            value={respinsCount}
             icon={XCircle}
             color="bg-red-500 text-red-600"
          />
@@ -668,20 +697,20 @@ const App = () => {
               </span>
            </div>
 
-           {isLoadingDecisions ? (
+           {dbStats === null ? (
              <div className="flex flex-col items-center justify-center p-10">
                 <div className="w-14 h-14 rounded-full flex items-center justify-center mb-3 bg-blue-100">
                    <RefreshCw size={24} className="text-blue-600 animate-spin" />
                 </div>
-                <span className="text-slate-700 font-medium">Se încarcă deciziile...</span>
+                <span className="text-slate-700 font-medium">Se încarcă statisticile...</span>
                 <span className="text-xs text-slate-500 mt-1">Conectare la baza de date</span>
              </div>
-           ) : apiDecisions.length > 0 ? (
+           ) : isConnected ? (
              <div className="bg-green-50 border border-green-100 rounded-lg p-6 flex flex-col items-center text-center">
                 <CheckCircle size={32} className="text-green-500 mb-2" />
                 <h4 className="font-bold text-green-800">Conexiune Activă</h4>
                 <p className="text-sm text-green-700 mt-1">
-                   Conectat la baza de date. {apiDecisions.length} {apiDecisions.length === 1 ? 'decizie CNSC disponibilă' : 'decizii CNSC disponibile'}.
+                   Conectat la baza de date. {totalDecisions} decizii CNSC disponibile.
                 </p>
                 <button onClick={() => setMode('datalake')} className="mt-4 text-sm bg-white border border-green-200 text-green-700 px-4 py-2 rounded-lg hover:bg-green-100 transition shadow-sm font-medium">
                    Explorează Deciziile
@@ -709,24 +738,26 @@ const App = () => {
            </p>
 
            <div className="space-y-3">
-              {apiDecisions.length > 0 ? (
+              {isConnected ? (
                 <>
                   <div className="grid grid-cols-2 gap-3">
                     <div className="bg-blue-50 border border-blue-100 rounded-lg p-3">
-                      <div className="text-2xl font-bold text-blue-700">{apiDecisions.length}</div>
+                      <div className="text-2xl font-bold text-blue-700">{totalDecisions}</div>
                       <div className="text-xs text-blue-600 mt-1">Total Decizii</div>
                     </div>
                     <div className="bg-green-50 border border-green-100 rounded-lg p-3">
-                      <div className="text-2xl font-bold text-green-700">
-                        {apiDecisions.filter(d => d.solutie_contestatie?.includes('ADMIS')).length}
-                      </div>
+                      <div className="text-2xl font-bold text-green-700">{admisCount}</div>
                       <div className="text-xs text-green-600 mt-1">Admise</div>
                     </div>
                   </div>
-                  <div className="bg-slate-50 border border-slate-100 rounded-lg p-3">
-                    <div className="flex items-center gap-2 text-sm text-slate-700">
-                      <Database size={14} className="text-slate-400" />
-                      <span>Toate deciziile sunt indexate pentru căutare semantică</span>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="bg-red-50 border border-red-100 rounded-lg p-3">
+                      <div className="text-2xl font-bold text-red-700">{respinsCount}</div>
+                      <div className="text-xs text-red-600 mt-1">Respinse</div>
+                    </div>
+                    <div className="bg-purple-50 border border-purple-100 rounded-lg p-3">
+                      <div className="text-2xl font-bold text-purple-700">{rezultatCount}</div>
+                      <div className="text-xs text-purple-600 mt-1">Rezultat</div>
                     </div>
                   </div>
                   <button onClick={() => setMode('datalake')} className="w-full text-sm bg-blue-500 text-white px-4 py-2 rounded-lg hover:bg-blue-600 transition shadow-sm font-medium">
@@ -742,20 +773,20 @@ const App = () => {
         </div>
       </div>
     </div>
-  );
+    );
+  };
 
   const renderDataLake = () => {
-    // Filter decisions based on search query
-    const filteredDecisions = apiDecisions.filter(dec => {
-      const searchLower = fileSearch.toLowerCase();
-      return (
-        dec.filename?.toLowerCase().includes(searchLower) ||
-        dec.numar_decizie?.toString().includes(searchLower) ||
-        dec.contestator?.toLowerCase().includes(searchLower) ||
-        dec.autoritate_contractanta?.toLowerCase().includes(searchLower) ||
-        dec.coduri_critici?.some((c: string) => c.toLowerCase().includes(searchLower))
-      );
-    });
+    const totalDecisions = dbStats?.total_decisions || 0;
+    const documentatieCount = dbStats?.by_type?.['documentatie'] || 0;
+    const rezultatCount = dbStats?.by_type?.['rezultat'] || 0;
+    const totalPages = Math.ceil(apiDecisionsTotal / 20);
+
+    const goToPage = (page: number) => {
+      if (page >= 1 && page <= totalPages) {
+        fetchDecisions(page);
+      }
+    };
 
     return (
       <div className="h-full flex flex-col bg-slate-50">
@@ -777,12 +808,24 @@ const App = () => {
             </div>
           </div>
 
-          {/* Status Bar */}
-          <div className="bg-slate-50 rounded-lg p-3 text-xs text-slate-500 flex gap-4 border border-slate-100">
-            <span>Total Decizii: <span className="font-bold text-slate-700">{apiDecisions.length}</span></span>
-            <span>Documentație: <span className="font-bold text-slate-700">{apiDecisions.filter((d: any) => d.tip_contestatie === 'documentatie').length}</span></span>
-            <span>Rezultat: <span className="font-bold text-slate-700">{apiDecisions.filter((d: any) => d.tip_contestatie === 'rezultat').length}</span></span>
-            <span>Actualizat: <span className="font-bold text-slate-700">Live</span></span>
+          {/* Global Stats Bar */}
+          <div className="grid grid-cols-4 gap-3">
+            <div className="bg-blue-50 rounded-lg p-3 border border-blue-100">
+              <div className="text-lg font-bold text-blue-700">{totalDecisions}</div>
+              <div className="text-[10px] text-blue-600 font-medium">Total Decizii</div>
+            </div>
+            <div className="bg-purple-50 rounded-lg p-3 border border-purple-100">
+              <div className="text-lg font-bold text-purple-700">{documentatieCount}</div>
+              <div className="text-[10px] text-purple-600 font-medium">Documentație</div>
+            </div>
+            <div className="bg-orange-50 rounded-lg p-3 border border-orange-100">
+              <div className="text-lg font-bold text-orange-700">{rezultatCount}</div>
+              <div className="text-[10px] text-orange-600 font-medium">Rezultat</div>
+            </div>
+            <div className="bg-green-50 rounded-lg p-3 border border-green-100">
+              <div className="text-lg font-bold text-green-700">{dbStats?.last_updated ? new Date(dbStats.last_updated).toLocaleDateString('ro-RO') : '-'}</div>
+              <div className="text-[10px] text-green-600 font-medium">Ultima actualizare</div>
+            </div>
           </div>
         </div>
 
@@ -800,96 +843,139 @@ const App = () => {
         </div>
 
         <div className="flex-1 overflow-y-auto p-6">
+          {isLoadingDecisions ? (
+            <div className="flex flex-col items-center justify-center py-20">
+              <Loader2 size={32} className="text-blue-500 animate-spin mb-3" />
+              <span className="text-sm text-slate-500">Se încarcă deciziile...</span>
+            </div>
+          ) : (
           <div className="grid grid-cols-1 gap-2">
-            {filteredDecisions.map((dec: any) => (
-              <div key={dec.id} className="group flex items-start justify-between p-4 rounded-lg border bg-white border-slate-200 hover:border-blue-300 hover:shadow-sm transition-all">
+            {apiDecisions.map((dec: any) => (
+              <div key={dec.id} className="group flex items-start justify-between p-4 rounded-lg border bg-white border-slate-200 hover:border-blue-300 hover:shadow-sm transition-all cursor-pointer"
+                   onClick={() => openDecision(`BO${dec.an_bo}_${dec.numar_bo}`)}>
                 <div className="flex items-start gap-4 flex-1 min-w-0">
-                  <div className="p-2 rounded bg-blue-50 text-blue-600 shrink-0">
+                  <div className={`p-2 rounded shrink-0 ${
+                    dec.solutie_contestatie === 'ADMIS' ? 'bg-green-50 text-green-600' :
+                    dec.solutie_contestatie === 'RESPINS' ? 'bg-red-50 text-red-600' :
+                    dec.solutie_contestatie === 'ADMIS_PARTIAL' ? 'bg-yellow-50 text-yellow-600' :
+                    'bg-blue-50 text-blue-600'
+                  }`}>
                     <FileText size={20} />
                   </div>
                   <div className="min-w-0 flex-1">
-                    <div className="flex items-start justify-between gap-4">
-                      <div className="min-w-0">
-                        <p className="text-sm font-bold text-slate-800 mb-1">
-                          Decizia nr. {dec.numar_decizie || 'N/A'} / {dec.an_bo}
-                        </p>
-                        <p className="text-xs text-slate-600 mb-2">
-                          <span className="font-medium">Contestator:</span> {dec.contestator || 'N/A'}
-                        </p>
-                        <p className="text-xs text-slate-600 mb-2 truncate">
-                          <span className="font-medium">Autoritate:</span> {dec.autoritate_contractanta || 'N/A'}
-                        </p>
-                      </div>
-                    </div>
-
-                    <div className="flex gap-2 mt-3 flex-wrap items-center">
-                      <span className="text-[10px] bg-slate-100 px-2 py-1 rounded text-slate-600 border border-slate-200 font-mono">
+                    <div className="flex items-center gap-3 mb-1">
+                      <span className="text-sm font-bold text-slate-800 font-mono">
                         BO{dec.an_bo}_{dec.numar_bo}
                       </span>
-                      <span className={`text-[10px] px-2 py-1 rounded font-medium border ${
+                      <span className={`text-[10px] px-2 py-0.5 rounded font-medium border ${
+                        dec.solutie_contestatie === 'ADMIS' ? 'bg-green-100 text-green-700 border-green-200' :
+                        dec.solutie_contestatie === 'ADMIS_PARTIAL' ? 'bg-yellow-100 text-yellow-700 border-yellow-200' :
+                        dec.solutie_contestatie === 'RESPINS' ? 'bg-red-100 text-red-700 border-red-200' :
+                        'bg-slate-100 text-slate-600 border-slate-200'
+                      }`}>
+                        {dec.solutie_contestatie === 'ADMIS' ? 'Admis' :
+                         dec.solutie_contestatie === 'ADMIS_PARTIAL' ? 'Admis Parțial' :
+                         dec.solutie_contestatie === 'RESPINS' ? 'Respins' : dec.solutie_contestatie || 'N/A'}
+                      </span>
+                      <span className={`text-[10px] px-2 py-0.5 rounded font-medium border ${
                         dec.tip_contestatie === 'documentatie'
                           ? 'bg-purple-50 text-purple-700 border-purple-200'
                           : 'bg-orange-50 text-orange-700 border-orange-200'
                       }`}>
                         {dec.tip_contestatie === 'documentatie' ? 'Documentație' : 'Rezultat'}
                       </span>
-                      {dec.solutie_contestatie === 'ADMIS' && (
-                        <span className="text-[10px] bg-green-100 text-green-700 px-2 py-1 rounded border border-green-200 font-medium">
-                          Admis
-                        </span>
-                      )}
-                      {dec.solutie_contestatie === 'ADMIS_PARTIAL' && (
-                        <span className="text-[10px] bg-yellow-100 text-yellow-700 px-2 py-1 rounded border border-yellow-200 font-medium">
-                          Admis Parțial
-                        </span>
-                      )}
-                      {dec.solutie_contestatie === 'RESPINS' && (
-                        <span className="text-[10px] bg-red-100 text-red-700 px-2 py-1 rounded border border-red-200 font-medium">
-                          Respins
-                        </span>
-                      )}
+                    </div>
+
+                    <p className="text-xs text-slate-600 mb-1">
+                      <span className="font-medium text-slate-500">CPV:</span>{' '}
+                      {dec.cod_cpv || 'N/A'}{dec.cpv_descriere ? ` — ${dec.cpv_descriere}` : ''}
+                    </p>
+
+                    <p className="text-xs text-slate-500 truncate">
+                      {dec.contestator && dec.autoritate_contractanta
+                        ? `${dec.contestator} vs. ${dec.autoritate_contractanta}`
+                        : dec.contestator || dec.autoritate_contractanta || 'Părți necunoscute'}
+                    </p>
+
+                    <div className="flex gap-1.5 mt-2 flex-wrap">
                       {dec.coduri_critici?.map((cod: string) => (
-                        <span key={cod} className="text-[10px] bg-blue-50 text-blue-700 px-2 py-1 rounded border border-blue-200 font-mono">
+                        <span key={cod} className="text-[10px] bg-blue-50 text-blue-700 px-1.5 py-0.5 rounded border border-blue-200 font-mono">
                           {cod}
                         </span>
                       ))}
-                      {dec.cod_cpv && (
-                        <span className="text-[10px] bg-slate-50 text-slate-600 px-2 py-1 rounded border border-slate-200 font-mono">
-                          CPV: {dec.cod_cpv}
+                      {dec.data_decizie && (
+                        <span className="text-[10px] bg-slate-50 text-slate-500 px-1.5 py-0.5 rounded border border-slate-200">
+                          {new Date(dec.data_decizie).toLocaleDateString('ro-RO')}
                         </span>
                       )}
-                      <button
-                        onClick={() => openDecision(`BO${dec.an_bo}_${dec.numar_bo}`)}
-                        className="ml-auto text-[10px] bg-blue-50 text-blue-700 px-3 py-1 rounded border border-blue-200 font-medium hover:bg-blue-100 transition flex items-center gap-1"
-                      >
-                        <Eye size={12} /> Vizualizează
-                      </button>
                     </div>
                   </div>
                 </div>
               </div>
             ))}
 
-            {filteredDecisions.length === 0 && (
+            {apiDecisions.length === 0 && (
               <div className="text-center py-20 text-slate-400 flex flex-col items-center">
                 <div className="w-20 h-20 bg-slate-100 rounded-full flex items-center justify-center mb-4">
                   <Database size={32} className="text-slate-300" />
                 </div>
                 <h3 className="text-lg font-medium text-slate-600 mb-1">
-                  {apiDecisions.length === 0 ? 'Baza de date este goală' : 'Nu s-au găsit rezultate'}
+                  {totalDecisions === 0 ? 'Baza de date este goală' : 'Nu s-au găsit rezultate'}
                 </h3>
                 <p className="max-w-md mx-auto text-sm">
-                  {apiDecisions.length === 0
+                  {totalDecisions === 0
                     ? 'Nu există decizii CNSC în baza de date. Importă decizii pentru a începe.'
                     : 'Încearcă o altă căutare sau modifică filtrele.'}
                 </p>
               </div>
             )}
           </div>
+          )}
         </div>
 
-        <div className="bg-white p-3 border-t border-slate-200 text-xs text-slate-500 flex justify-between px-6">
-          <span>Afișate: {filteredDecisions.length} din {apiDecisions.length} decizii</span>
+        <div className="bg-white p-3 border-t border-slate-200 text-xs text-slate-500 flex justify-between items-center px-6">
+          <span>Pagina {apiDecisionsPage} din {totalPages || 1} ({apiDecisionsTotal} decizii total)</span>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => goToPage(apiDecisionsPage - 1)}
+              disabled={apiDecisionsPage <= 1}
+              className="px-3 py-1 rounded border border-slate-200 hover:bg-slate-50 disabled:opacity-30 disabled:cursor-not-allowed text-xs font-medium"
+            >
+              Anterior
+            </button>
+            {totalPages > 0 && Array.from({length: Math.min(5, totalPages)}, (_, i) => {
+              let page: number;
+              if (totalPages <= 5) {
+                page = i + 1;
+              } else if (apiDecisionsPage <= 3) {
+                page = i + 1;
+              } else if (apiDecisionsPage >= totalPages - 2) {
+                page = totalPages - 4 + i;
+              } else {
+                page = apiDecisionsPage - 2 + i;
+              }
+              return (
+                <button
+                  key={page}
+                  onClick={() => goToPage(page)}
+                  className={`w-7 h-7 rounded text-xs font-medium ${
+                    page === apiDecisionsPage
+                      ? 'bg-blue-500 text-white'
+                      : 'border border-slate-200 hover:bg-slate-50'
+                  }`}
+                >
+                  {page}
+                </button>
+              );
+            })}
+            <button
+              onClick={() => goToPage(apiDecisionsPage + 1)}
+              disabled={apiDecisionsPage >= totalPages}
+              className="px-3 py-1 rounded border border-slate-200 hover:bg-slate-50 disabled:opacity-30 disabled:cursor-not-allowed text-xs font-medium"
+            >
+              Următor
+            </button>
+          </div>
           <span className="text-green-600 font-medium">
             Database: Connected
           </span>
@@ -1313,7 +1399,7 @@ const App = () => {
                        >
                           {isLoading ? "Analiză..." : "Generează Memo"}
                        </button>
-                       <p className="text-xs text-slate-400 mt-3 text-center">Căutare semantică în {apiDecisions.length} decizii din baza de date.</p>
+                       <p className="text-xs text-slate-400 mt-3 text-center">Căutare semantică în {dbStats?.total_decisions || 0} decizii din baza de date.</p>
                     </div>
                  </div>
                  <div className="flex-1 bg-white border border-slate-200 rounded-xl shadow-sm p-8 overflow-y-auto text-slate-800 leading-relaxed">
