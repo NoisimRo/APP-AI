@@ -15,7 +15,7 @@ logger = get_logger(__name__)
 class LegalReference(BaseModel):
     """A verified legal article reference from the legislation database."""
 
-    articol: str  # "art. 178"
+    citare: str  # "art. 2 alin. (2) lit. a) și b)"
     act_normativ: str  # "Legea 98/2016"
     text_extras: str = ""  # excerpt from the real article text
 
@@ -95,7 +95,7 @@ async def analyze_red_flags(
             for ref in flag_data.get("legal_references", []):
                 if isinstance(ref, dict):
                     legal_refs.append(LegalReference(
-                        articol=ref.get("articol", ""),
+                        citare=ref.get("citare", ""),
                         act_normativ=ref.get("act_normativ", ""),
                         text_extras=ref.get("text_extras", ""),
                     ))

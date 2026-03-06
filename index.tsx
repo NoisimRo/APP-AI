@@ -1317,7 +1317,7 @@ const App = () => {
                               <details key={refIdx} className="group">
                                 <summary className="cursor-pointer flex items-center gap-2 text-slate-700 hover:text-blue-700">
                                   <span className="font-mono text-xs bg-emerald-50 text-emerald-700 px-2 py-1 rounded border border-emerald-200">
-                                    {ref.act_normativ}, {ref.articol}
+                                    {ref.citare} din {ref.act_normativ}
                                   </span>
                                   <ChevronDown size={14} className="group-open:rotate-180 transition-transform text-slate-400" />
                                 </summary>

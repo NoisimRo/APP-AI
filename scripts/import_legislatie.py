@@ -1,15 +1,29 @@
 #!/usr/bin/env python3
 """Import Romanian procurement legislation from .md files into the database.
 
-Parses legislative .md files (Legea 98/2016, HG 395/2016, etc.) article by
-article and stores them in the `articole_legislatie` table with embeddings.
-This enables vector search grounding in the Red Flags Detector.
+Parses legislative .md files at ALINEAT granularity — the atomic citation unit
+in Romanian law. Each row in the DB represents one alineat (or a full article
+if it has no alineats).
+
+Supports exact citations like:
+    "art. 2 alin. (2) lit. a) și b) din Legea nr. 98/2016"
+
+Expected .md format (from the actual legislative files):
+    # LEGE nr. 98 din 19 mai 2016
+    ## Capitolul I - Dispoziții generale
+    ### Secțiunea 1 - Obiect, scop și principii
+    #### Articolul 1
+    Textul articolului...
+    #### Articolul 2
+    (1) Primul alineat...
+    (2) Al doilea alineat:
+    * a) prima literă;
+    * b) a doua literă;
 
 Features:
-- Parses articles from markdown files using regex patterns
-- Tracks chapter/section context for each article
-- Generates embeddings per article for vector search
-- Idempotent: skips articles already imported (by act_normativ + numar_articol)
+- Parses articles, alineats, and litere from markdown
+- Generates embeddings per alineat for precise vector search
+- Idempotent: skips entries already imported (by act_normativ + citare)
 - Retry with exponential backoff on API errors
 
 Usage:
@@ -45,19 +59,11 @@ from app.services.embedding import EmbeddingService
 
 logger = get_logger(__name__)
 
-# Embedding batch size (texts per API call)
 EMBED_BATCH_SIZE = 20
 
 
 def detect_act_normativ(filename: str) -> str:
-    """Detect the legislative act from filename.
-
-    Args:
-        filename: Name of the .md file.
-
-    Returns:
-        Normalized act name like "Legea 98/2016" or "HG 395/2016".
-    """
+    """Detect the legislative act from filename."""
     name = filename.upper()
     if "LEGE" in name and "98" in name:
         return "Legea 98/2016"
@@ -72,139 +78,218 @@ def detect_act_normativ(filename: str) -> str:
     elif "HG" in name and "394" in name:
         return "HG 394/2016"
     else:
-        # Try to extract from filename
         m = re.search(r'(LEGE|HG|OUG)\s*(?:nr\.?\s*)?(\d+)', name)
         if m:
             act_type = m.group(1)
             act_num = m.group(2)
-            # Try to find year
             y = re.search(r'(\d{4})', name)
             year = y.group(1) if y else "2016"
             if act_type == "LEGE":
                 return f"Legea {act_num}/{year}"
-            else:
-                return f"{act_type} {act_num}/{year}"
+            return f"{act_type} {act_num}/{year}"
         return filename
 
 
-def parse_articles(text: str, act_normativ: str) -> list[dict]:
-    """Parse a legislative text into individual articles.
+def parse_litere(text: str) -> list[dict]:
+    """Extract litere (a, b, c...) from alineat text.
 
-    Handles patterns like:
-    - "Art. 178" / "Art. 178." / "ART. 178"
-    - "Articolul 178"
-    - "Art. 178 -" (with dash separator)
-    - Multi-line articles with alineaturi
+    Handles formats:
+    - "* a) text;"
+    - "a) text;"
+    - Lines starting with letter followed by )
 
     Args:
-        text: Full text of the legislative act.
-        act_normativ: Name of the act (e.g., "Legea 98/2016").
+        text: Text of an alineat that may contain litere.
 
     Returns:
-        List of parsed article dicts.
+        List of {"litera": "a", "text": "..."} dicts.
     """
-    articles = []
+    litere = []
+    # Pattern: optional "* " then letter followed by ) then text
+    pattern = re.compile(r'^\s*(?:\*\s+)?([a-zăâîșț](?:\d+)?)\)\s*(.+)', re.MULTILINE)
+    for m in pattern.finditer(text):
+        litere.append({
+            "litera": m.group(1),
+            "text": m.group(2).rstrip(';.').strip(),
+        })
+    return litere
+
+
+def parse_alineats(article_text: str) -> list[dict]:
+    """Split article text into alineats.
+
+    Handles:
+    - "(1) First alineat text..." — numbered alineats
+    - Articles with no alineats (entire text = one entry)
+    - Alineats containing litere (* a), * b), etc.)
+
+    Args:
+        article_text: Full text of one article (without the "Articolul N" heading).
+
+    Returns:
+        List of alineat dicts with keys: alineat (int|None), text, litere.
+    """
+    # Check if the text contains numbered alineats
+    alin_pattern = re.compile(r'^\((\d+)\)\s*', re.MULTILINE)
+    alin_starts = list(alin_pattern.finditer(article_text))
+
+    if not alin_starts:
+        # No alineats — entire article is one unit
+        litere = parse_litere(article_text)
+        return [{
+            "alineat": None,
+            "text": article_text.strip(),
+            "litere": litere if litere else None,
+        }]
+
+    alineats = []
+    for idx, match in enumerate(alin_starts):
+        alin_num = int(match.group(1))
+        start = match.start()
+
+        # End = start of next alineat or end of text
+        if idx + 1 < len(alin_starts):
+            end = alin_starts[idx + 1].start()
+        else:
+            end = len(article_text)
+
+        alin_text = article_text[start:end].strip()
+        litere = parse_litere(alin_text)
+
+        alineats.append({
+            "alineat": alin_num,
+            "text": alin_text,
+            "litere": litere if litere else None,
+        })
+
+    # Check if there's text before the first alineat (introductory text)
+    if alin_starts[0].start() > 0:
+        intro = article_text[:alin_starts[0].start()].strip()
+        if intro and len(intro) > 10:
+            # This is unusual but handle it as alineat 0
+            alineats.insert(0, {
+                "alineat": None,
+                "text": intro,
+                "litere": None,
+            })
+
+    return alineats
+
+
+def parse_legislation(text: str, act_normativ: str) -> list[dict]:
+    """Parse a legislative .md file into alineat-level records.
+
+    Processes the markdown structure:
+    - ## Capitolul ... → capitol
+    - ### Secțiunea ... → sectiune
+    - #### Articolul N → article boundary
+    - (N) ... → alineat
+    - * a) ... → litera
+
+    Args:
+        text: Full text of the .md file.
+        act_normativ: Normalized act name.
+
+    Returns:
+        List of dicts ready for DB insertion.
+    """
+    lines = text.split('\n')
+    records = []
+
     current_capitol = None
     current_sectiune = None
+    current_art_num = None
+    current_art_lines: list[str] = []
 
-    # Track chapters and sections
-    # Patterns: "CAPITOLUL I", "CAPITOLUL II - Titlu", "Secțiunea 1", "SECȚIUNEA a 2-a"
-    capitol_pattern = re.compile(
-        r'^#+\s*(?:CAPITOLUL|CAP\.)\s+(.+?)$|'
-        r'^(?:CAPITOLUL|CAP\.)\s+(.+?)$',
-        re.MULTILINE | re.IGNORECASE
+    def flush_article():
+        """Process accumulated article lines into records."""
+        nonlocal current_art_lines, current_art_num
+        if current_art_num is None or not current_art_lines:
+            return
+
+        article_text = '\n'.join(current_art_lines).strip()
+        if not article_text:
+            return
+
+        alineats = parse_alineats(article_text)
+
+        for alin_data in alineats:
+            alin_num = alin_data["alineat"]
+
+            if alin_num is not None:
+                citare = f"art. {current_art_num} alin. ({alin_num})"
+                alineat_text = f"alin. ({alin_num})"
+            else:
+                citare = f"art. {current_art_num}"
+                alineat_text = None
+
+            records.append({
+                "act_normativ": act_normativ,
+                "numar_articol": current_art_num,
+                "articol": f"art. {current_art_num}",
+                "alineat": alin_num,
+                "alineat_text": alineat_text,
+                "litere": alin_data["litere"],
+                "text_integral": alin_data["text"],
+                "citare": citare,
+                "capitol": current_capitol,
+                "sectiune": current_sectiune,
+            })
+
+        current_art_lines = []
+
+    # Regex patterns for structure
+    capitol_re = re.compile(
+        r'^##\s+(?:Capitolul|CAPITOLUL|CAP\.)\s+(.+)',
+        re.IGNORECASE
     )
-    sectiune_pattern = re.compile(
-        r'^#+\s*(?:SECȚIUNEA|SEC[ȚT]IUNEA|Secțiunea|Sectiunea)\s+(.+?)$|'
-        r'^(?:SECȚIUNEA|SEC[ȚT]IUNEA|Secțiunea|Sectiunea)\s+(.+?)$',
-        re.MULTILINE | re.IGNORECASE
+    sectiune_re = re.compile(
+        r'^###\s+(?:Sec[tț]iunea|SECȚIUNEA|SEC[ȚT]IUNEA)\s+(.+)',
+        re.IGNORECASE
     )
-
-    # Split text into lines for processing
-    lines = text.split('\n')
-
-    # First pass: find all article start positions
-    # Pattern matches: "Art. 123", "ART. 123", "Articolul 123"
-    art_pattern = re.compile(
-        r'^(?:#+\s*)?'  # optional markdown heading
-        r'(?:Art(?:icolul)?\.?\s*)'  # "Art." or "Articolul"
-        r'(\d+)'  # article number
-        r'(?:\^(\d+))?'  # optional superscript like Art. 2^1
-        r'\s*'
-        r'(.*)',  # rest of line (may contain title after dash)
+    articol_re = re.compile(
+        r'^####\s+(?:Articolul|Art\.?)\s+(\d+)',
         re.IGNORECASE
     )
 
-    # Build a list of (line_index, article_number, title_hint)
-    article_starts = []
-    for i, line in enumerate(lines):
+    for line in lines:
         stripped = line.strip()
-        m = art_pattern.match(stripped)
+
+        # Check for chapter heading
+        m = capitol_re.match(stripped)
         if m:
-            art_num = int(m.group(1))
-            superscript = m.group(2)
-            rest = m.group(3).strip()
-
-            # Extract title if present (after dash)
-            title = None
-            if rest.startswith('-') or rest.startswith('–') or rest.startswith('—'):
-                title = rest.lstrip('-–— ').strip()
-                # Remove trailing period
-                if title.endswith('.'):
-                    title = title[:-1]
-
-            art_label = f"art. {art_num}"
-            if superscript:
-                art_label = f"art. {art_num}^{superscript}"
-                art_num = art_num * 100 + int(superscript)  # for sorting
-
-            article_starts.append((i, art_num, art_label, title))
-
-    if not article_starts:
-        logger.warning("no_articles_found", act=act_normativ)
-        return []
-
-    # Second pass: extract text and track chapters/sections
-    for idx, (start_line, art_num, art_label, title) in enumerate(article_starts):
-        # Determine end line (start of next article or end of file)
-        if idx + 1 < len(article_starts):
-            end_line = article_starts[idx + 1][0]
-        else:
-            end_line = len(lines)
-
-        # Update chapter/section context by scanning lines before this article
-        # (look back from current article to previous article or start)
-        lookback_start = article_starts[idx - 1][0] if idx > 0 else 0
-        for j in range(lookback_start, start_line):
-            line = lines[j].strip()
-            cm = capitol_pattern.match(line)
-            if cm:
-                current_capitol = (cm.group(1) or cm.group(2)).strip()
-            sm = sectiune_pattern.match(line)
-            if sm:
-                current_sectiune = (sm.group(1) or sm.group(2)).strip()
-
-        # Extract article text (from the Art. line to the next article)
-        article_lines = lines[start_line:end_line]
-        article_text = '\n'.join(article_lines).strip()
-
-        # Clean up: remove trailing empty lines and horizontal rules
-        article_text = re.sub(r'\n-{3,}\s*$', '', article_text).strip()
-
-        if len(article_text) < 10:
+            flush_article()
+            current_capitol = m.group(1).strip()
+            current_sectiune = None  # reset section on new chapter
             continue
 
-        articles.append({
-            'act_normativ': act_normativ,
-            'numar_articol': art_num,
-            'articol': art_label,
-            'titlu_articol': title,
-            'text_integral': article_text,
-            'capitol': current_capitol,
-            'sectiune': current_sectiune,
-        })
+        # Check for section heading
+        m = sectiune_re.match(stripped)
+        if m:
+            flush_article()
+            current_sectiune = m.group(1).strip()
+            continue
 
-    return articles
+        # Check for article heading
+        m = articol_re.match(stripped)
+        if m:
+            flush_article()
+            current_art_num = int(m.group(1))
+            current_art_lines = []
+            continue
+
+        # Skip top-level headings (# LEGE nr. ...)
+        if stripped.startswith('#'):
+            continue
+
+        # Accumulate article content
+        if current_art_num is not None:
+            current_art_lines.append(line)
+
+    # Don't forget the last article
+    flush_article()
+
+    return records
 
 
 async def import_file(
@@ -213,43 +298,46 @@ async def import_file(
     force: bool = False,
     dry_run: bool = False,
 ) -> int:
-    """Import articles from a single legislative .md file.
+    """Import alineat-level records from a single legislative .md file.
 
     Args:
         filepath: Path to the .md file.
         embedding_service: Service for generating embeddings.
-        force: If True, delete existing articles for this act and reimport.
-        dry_run: If True, only parse and print, don't write to DB.
+        force: Delete existing records for this act and reimport.
+        dry_run: Only parse and print, don't write to DB.
 
     Returns:
-        Number of articles imported.
+        Number of records imported.
     """
     act_normativ = detect_act_normativ(filepath.name)
     logger.info("importing_legislation", file=filepath.name, act=act_normativ)
 
-    # Read file
     text = filepath.read_text(encoding='utf-8')
     logger.info("file_read", chars=len(text), lines=text.count('\n'))
 
-    # Parse articles
-    articles = parse_articles(text, act_normativ)
-    logger.info("articles_parsed", count=len(articles), act=act_normativ)
+    records = parse_legislation(text, act_normativ)
+    logger.info("records_parsed", count=len(records), act=act_normativ)
 
-    if not articles:
-        logger.warning("no_articles_parsed", file=filepath.name)
+    if not records:
+        logger.warning("no_records_parsed", file=filepath.name)
         return 0
 
     if dry_run:
-        for art in articles:
-            print(f"  {art['articol']:>12s} | {art['capitol'] or '':>40s} | "
-                  f"{art['text_integral'][:80]}...")
-        print(f"\n  Total: {len(articles)} articles from {act_normativ}")
-        return len(articles)
+        for rec in records:
+            litere_str = ""
+            if rec["litere"]:
+                litere_str = f" [lit. {', '.join(l['litera'] for l in rec['litere'])}]"
+            print(
+                f"  {rec['citare']:>30s}{litere_str:>20s} | "
+                f"{rec['capitol'] or '':>40s} | "
+                f"{rec['text_integral'][:60]}..."
+            )
+        print(f"\n  Total: {len(records)} alineat-level records from {act_normativ}")
+        return len(records)
 
     # Database operations
     async with db_session.async_session() as session:
         if force:
-            # Delete existing articles for this act
             await session.execute(
                 delete(ArticolLegislatie).where(
                     ArticolLegislatie.act_normativ == act_normativ
@@ -258,37 +346,41 @@ async def import_file(
             await session.commit()
             logger.info("deleted_existing", act=act_normativ)
 
-        # Check which articles already exist
+        # Check which records already exist (by citare)
         existing = await session.execute(
-            select(ArticolLegislatie.numar_articol).where(
+            select(ArticolLegislatie.citare).where(
                 ArticolLegislatie.act_normativ == act_normativ
             )
         )
-        existing_nums = {row[0] for row in existing}
+        existing_citari = {row[0] for row in existing}
 
-        # Filter to new articles only
-        new_articles = [a for a in articles if a['numar_articol'] not in existing_nums]
-        if not new_articles:
-            logger.info("all_articles_exist", act=act_normativ, total=len(articles))
+        new_records = [r for r in records if r["citare"] not in existing_citari]
+        if not new_records:
+            logger.info("all_records_exist", act=act_normativ, total=len(records))
             return 0
 
         logger.info(
-            "importing_new_articles",
-            new=len(new_articles),
-            existing=len(existing_nums),
-            total=len(articles),
+            "importing_new_records",
+            new=len(new_records),
+            existing=len(existing_citari),
+            total=len(records),
         )
 
         # Generate embeddings in batches
         imported = 0
-        for batch_start in range(0, len(new_articles), EMBED_BATCH_SIZE):
-            batch = new_articles[batch_start:batch_start + EMBED_BATCH_SIZE]
+        for batch_start in range(0, len(new_records), EMBED_BATCH_SIZE):
+            batch = new_records[batch_start:batch_start + EMBED_BATCH_SIZE]
 
-            # Prepare texts for embedding: article label + text
-            embed_texts = [
-                f"{a['act_normativ']} {a['articol']}: {a['text_integral']}"
-                for a in batch
-            ]
+            # Embedding text: full citation context for better semantic match
+            embed_texts = []
+            for r in batch:
+                parts = [f"{r['act_normativ']} {r['citare']}"]
+                if r["capitol"]:
+                    parts.append(f"Capitol: {r['capitol']}")
+                if r["sectiune"]:
+                    parts.append(f"Secțiune: {r['sectiune']}")
+                parts.append(r["text_integral"])
+                embed_texts.append("\n".join(parts))
 
             # Generate embeddings with retry
             embeddings = None
@@ -313,22 +405,23 @@ async def import_file(
                 logger.error("embedding_failed", batch_start=batch_start)
                 continue
 
-            # Create DB records
-            for art_data, emb in zip(batch, embeddings):
+            for rec_data, emb in zip(batch, embeddings):
                 record = ArticolLegislatie(
-                    act_normativ=art_data['act_normativ'],
-                    numar_articol=art_data['numar_articol'],
-                    articol=art_data['articol'],
-                    titlu_articol=art_data['titlu_articol'],
-                    text_integral=art_data['text_integral'],
-                    capitol=art_data['capitol'],
-                    sectiune=art_data['sectiune'],
+                    act_normativ=rec_data["act_normativ"],
+                    numar_articol=rec_data["numar_articol"],
+                    articol=rec_data["articol"],
+                    alineat=rec_data["alineat"],
+                    alineat_text=rec_data["alineat_text"],
+                    litere=rec_data["litere"],
+                    text_integral=rec_data["text_integral"],
+                    citare=rec_data["citare"],
+                    capitol=rec_data["capitol"],
+                    sectiune=rec_data["sectiune"],
                     embedding=emb,
                 )
                 session.add(record)
                 imported += 1
 
-            # Commit per batch
             await session.commit()
             logger.info(
                 "batch_committed",
@@ -336,8 +429,7 @@ async def import_file(
                 imported_so_far=imported,
             )
 
-            # Rate limiting between batches
-            if batch_start + EMBED_BATCH_SIZE < len(new_articles):
+            if batch_start + EMBED_BATCH_SIZE < len(new_records):
                 await asyncio.sleep(1.0)
 
     logger.info("import_complete", act=act_normativ, imported=imported)
@@ -349,23 +441,19 @@ async def main():
         description="Import Romanian procurement legislation into the database"
     )
     parser.add_argument(
-        "--dir",
-        type=str,
+        "--dir", type=str,
         help="Directory containing .md legislation files",
     )
     parser.add_argument(
-        "--file",
-        type=str,
+        "--file", type=str,
         help="Single .md file to import",
     )
     parser.add_argument(
-        "--force",
-        action="store_true",
-        help="Delete existing articles and reimport",
+        "--force", action="store_true",
+        help="Delete existing records and reimport",
     )
     parser.add_argument(
-        "--dry-run",
-        action="store_true",
+        "--dry-run", action="store_true",
         help="Parse only, print results without writing to DB",
     )
     args = parser.parse_args()
@@ -373,7 +461,6 @@ async def main():
     if not args.dir and not args.file:
         parser.error("Either --dir or --file is required")
 
-    # Collect files
     files: list[Path] = []
     if args.file:
         files.append(Path(args.file))
@@ -393,7 +480,6 @@ async def main():
         print(f"  - {f.name}")
     print()
 
-    # Initialize DB and embedding service
     if not args.dry_run:
         await init_db()
 
@@ -409,15 +495,13 @@ async def main():
             print(f"Warning: {filepath} does not exist, skipping")
             continue
         count = await import_file(
-            filepath,
-            embedding_service,
-            force=args.force,
-            dry_run=args.dry_run,
+            filepath, embedding_service,
+            force=args.force, dry_run=args.dry_run,
         )
         total_imported += count
 
     elapsed = time.time() - start
-    print(f"\nDone! Imported {total_imported} articles in {elapsed:.1f}s")
+    print(f"\nDone! Imported {total_imported} alineat-level records in {elapsed:.1f}s")
 
 
 if __name__ == "__main__":

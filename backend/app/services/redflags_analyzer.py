@@ -16,6 +16,7 @@ Pass 2 — Grounding per Red Flag:
 
 import asyncio
 import json
+import re
 from typing import Optional
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -324,15 +325,19 @@ Severitate:
             legislation_task, jurisprudence_task
         )
 
-        # Build legislation context
+        # Build legislation context with full citation info
         legislation_context = ""
         if legal_articles:
             parts = []
             for art in legal_articles:
-                parts.append(
-                    f"--- {art.act_normativ}, {art.articol} ---\n"
-                    f"{art.text_integral}"
-                )
+                header = f"--- {art.act_normativ}, {art.citare} ---"
+                body = art.text_integral
+                if art.litere:
+                    litere_list = ", ".join(
+                        f"lit. {l['litera']}) {l['text']}" for l in art.litere
+                    )
+                    body += f"\nLitere: {litere_list}"
+                parts.append(f"{header}\n{body}")
             legislation_context = "\n\n".join(parts)
 
         # Build jurisprudence context
@@ -374,7 +379,8 @@ Severitate:
 Sarcina ta: compune analiza finală a problemei folosind EXCLUSIV referințele reale furnizate.
 
 REGULI STRICTE:
-- Pentru legal_references: folosește DOAR articolele furnizate mai jos. NU inventa alte articole.
+- Pentru legal_references: folosește DOAR articolele/alineatele furnizate mai jos. NU inventa alte articole.
+- Folosește citarea exactă furnizată (ex: "art. 2 alin. (2)"). Poți specifica și litere relevante (ex: "art. 2 alin. (2) lit. a) și b)").
 - Dacă niciun articol furnizat nu e relevant, lasă legal_references ca listă goală.
 - Pentru decision_refs: folosește DOAR ID-urile de decizii furnizate. NU inventa alte decizii.
 - Dacă nicio decizie furnizată nu e relevantă, lasă decision_refs ca listă goală.
@@ -388,9 +394,9 @@ Răspunde EXCLUSIV în format JSON:
   "severity": "CRITICĂ/MEDIE/SCĂZUTĂ",
   "legal_references": [
     {
-      "articol": "art. 178",
+      "citare": "art. 2 alin. (2) lit. a) și b)",
       "act_normativ": "Legea 98/2016",
-      "text_extras": "textul relevant din articol (max 200 caractere)"
+      "text_extras": "textul relevant citat din articol/alineat (max 200 caractere)"
     }
   ],
   "decision_refs": ["BO2025_1011"],
@@ -453,22 +459,35 @@ Răspunde EXCLUSIV în format JSON:
                 grounded["decision_refs"] = []
 
             # Post-process: verify legal_references against actual articles found
-            valid_articles = {
-                (art.act_normativ, art.articol) for art in legal_articles
+            # Build lookup: act_normativ → set of citare strings
+            valid_citari = {
+                (art.act_normativ, art.citare) for art in legal_articles
+            }
+            # Also index by article number for flexible matching
+            valid_art_nums = {
+                (art.act_normativ, art.numar_articol) for art in legal_articles
             }
             legal_refs = grounded.get("legal_references", [])
             if isinstance(legal_refs, list):
                 verified_refs = []
                 for ref in legal_refs:
                     if isinstance(ref, dict):
-                        # Check if this article was actually in our search results
                         act = ref.get("act_normativ", "")
-                        art = ref.get("articol", "")
-                        # Fuzzy match: the LLM might write "art. 178" vs our "art. 178"
-                        if any(art in db_art or db_art in art
-                               for db_act, db_art in valid_articles
+                        citare = ref.get("citare", "")
+                        # Exact match on citare
+                        if any(citare in db_citare or db_citare in citare
+                               for db_act, db_citare in valid_citari
                                if act in db_act or db_act in act):
                             verified_refs.append(ref)
+                        else:
+                            # Fallback: match by article number
+                            art_num_match = re.search(r'art\.\s*(\d+)', citare)
+                            if art_num_match:
+                                art_num = int(art_num_match.group(1))
+                                if any(art_num == db_num
+                                       for db_act, db_num in valid_art_nums
+                                       if act in db_act or db_act in act):
+                                    verified_refs.append(ref)
                 grounded["legal_references"] = verified_refs
             else:
                 grounded["legal_references"] = []

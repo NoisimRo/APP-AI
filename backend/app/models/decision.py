@@ -504,9 +504,17 @@ class NomenclatorCPV(Base):
 # =============================================================================
 
 class ArticolLegislatie(Base):
-    """Articles from Romanian procurement legislation.
+    """Articles/alineats from Romanian procurement legislation.
 
-    Stores individual articles from Legea 98/2016, HG 395/2016, etc.
+    Stores legislation at ALINEAT granularity — the atomic citation unit
+    in Romanian law. This enables exact citations like:
+        "art. 2 alin. (2) lit. a) și b) din Legea nr. 98/2016"
+
+    Hierarchy: Act > Capitol > Secțiune > Articol > Alineat > Literă
+    - Each row = one alineat (or full article if no alineats)
+    - Litere (a, b, c...) are stored as part of the alineat text
+    - The `litere` JSON field indexes individual litere for precise lookup
+
     Used for vector search grounding in the Red Flags Detector —
     ensures legal references are real, not hallucinated by the LLM.
     """
@@ -519,18 +527,36 @@ class ArticolLegislatie(Base):
         default=lambda: str(uuid4())
     )
 
-    # Article identification
+    # Legislative act identification
     act_normativ: Mapped[str] = mapped_column(
         String(100), nullable=False
     )  # "Legea 98/2016", "HG 395/2016"
+
+    # Article identification
     numar_articol: Mapped[int] = mapped_column(
         Integer, nullable=False
-    )  # numeric for sorting: 178, 31
+    )  # numeric: 2, 178 (for sorting)
     articol: Mapped[str] = mapped_column(
         String(50), nullable=False
-    )  # "art. 178", "art. 31"
-    titlu_articol: Mapped[Optional[str]] = mapped_column(Text)
+    )  # "art. 2", "art. 178"
+
+    # Alineat identification (NULL = article has no alineats, entire text is here)
+    alineat: Mapped[Optional[int]] = mapped_column(Integer)  # 1, 2, 3...
+    alineat_text: Mapped[Optional[str]] = mapped_column(
+        String(20)
+    )  # "alin. (1)", "alin. (2)"
+
+    # Litere within this alineat: [{"litera": "a", "text": "nediscriminarea;"}]
+    litere: Mapped[Optional[list]] = mapped_column(JSON)
+
+    # Full text of this alineat (including litere text)
     text_integral: Mapped[str] = mapped_column(Text, nullable=False)
+
+    # Canonical citation string for this row
+    # e.g. "art. 2 alin. (2)" or "art. 1" (if no alineat)
+    citare: Mapped[str] = mapped_column(
+        String(100), nullable=False
+    )  # "art. 2 alin. (2)", "art. 1"
 
     # Context in the law structure
     capitol: Mapped[Optional[str]] = mapped_column(String(500))
@@ -546,7 +572,8 @@ class ArticolLegislatie(Base):
 
     __table_args__ = (
         Index("ix_art_act", act_normativ),
-        Index("ix_art_numar", act_normativ, numar_articol, unique=True),
+        Index("ix_art_numar", act_normativ, numar_articol),
+        Index("ix_art_citare", act_normativ, citare, unique=True),
         Index(
             "ix_art_embedding_hnsw",
             embedding,
@@ -557,7 +584,7 @@ class ArticolLegislatie(Base):
     )
 
     def __repr__(self) -> str:
-        return f"<ArticolLegislatie {self.articol} ({self.act_normativ})>"
+        return f"<ArticolLegislatie {self.citare} ({self.act_normativ})>"
 
 
 # =============================================================================
