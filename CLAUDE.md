@@ -144,10 +144,64 @@ DATABASE_URL="postgresql+asyncpg://..." python scripts/generate_embeddings.py
    - Server-side pagination (20/page with prev/next + page numbers)
    - Tile redesign: BO reference as title, CPV + description, contestator vs. autoritate, ruling badge
 
+6. **Data Lake search** now server-side: backend `search` query param on `/api/v1/decisions/` with ILIKE across multiple columns, frontend debounced at 300ms
+
+7. **Data pipeline scripts** (`scripts/`):
+   - `generate_analysis.py` — Standalone LLM analysis with retry (3x exponential backoff), per-decision commit, progress reporting
+   - `generate_embeddings.py` — Per-batch commit (crash-safe), retry on API errors, progress reporting
+   - `pipeline.py` — Unified orchestrator: `import → analyze → embed` in one command
+
+### Data Pipeline Commands
+
+```bash
+# Full pipeline (import new from GCS → analyze → embed)
+DATABASE_URL="..." python scripts/pipeline.py
+
+# Individual steps
+DATABASE_URL="..." python scripts/pipeline.py --step analyze
+DATABASE_URL="..." python scripts/pipeline.py --step embed
+DATABASE_URL="..." python scripts/pipeline.py --step import
+
+# Skip import (when GCS not available, just process what's in DB)
+DATABASE_URL="..." python scripts/pipeline.py --skip-import
+
+# Standalone scripts with more options
+DATABASE_URL="..." python scripts/generate_analysis.py --dry-run   # Preview what would be analyzed
+DATABASE_URL="..." python scripts/generate_analysis.py --limit 10  # Test with 10
+DATABASE_URL="..." python scripts/generate_embeddings.py --force   # Regenerate all
+```
+
 ### What still needs to be done
-1. **Finish importing remaining ~1000 decisions**: Run `python scripts/import_decisions_from_gcs.py --skip-embeddings` (no --limit, let it run for all)
-2. **Run LLM analysis** on imported decisions (populates ArgumentareCritica): This is needed for RAG search to work
-3. **Generate embeddings** for all decisions: `python scripts/generate_embeddings.py`
-4. **CPV descriptions**: `cpv_descriere` column is currently NULL for most decisions — need to populate from `nomenclator_cpv` table or during import
-5. **Data Lake search**: Current search box does client-side filtering on 20 items — should be moved to server-side search (API query param)
-6. **Deploy**: Push to `main` to trigger Cloud Build → Cloud Run
+1. **Run LLM analysis** on all decisions: `python scripts/generate_analysis.py` (or `pipeline.py --step analyze`)
+2. **Generate embeddings**: `python scripts/generate_embeddings.py` (or `pipeline.py --step embed`)
+3. **CPV descriptions**: `cpv_descriere` column is currently NULL for most decisions — need to populate from `nomenclator_cpv` table or during import
+4. **Deploy**: Push to `main` to trigger Cloud Build → Cloud Run
+
+### Future: Daily Automation (Cloud Run Job + Cloud Scheduler)
+
+Currently all pipeline steps are manual CLI commands. For continuous updates:
+
+1. **Create a Cloud Run Job** using the existing Dockerfile with entrypoint override:
+   ```bash
+   gcloud run jobs create expertap-daily-pipeline \
+     --image=gcr.io/gen-lang-client-0706147575/expertap-api:latest \
+     --command="python" \
+     --args="scripts/pipeline.py,--daily" \
+     --set-secrets="DATABASE_URL=DATABASE_URL:latest,GEMINI_API_KEY=GEMINI_API_KEY:latest" \
+     --set-cloudsql-instances=gen-lang-client-0706147575:europe-west1:expertap-db \
+     --memory=1Gi \
+     --task-timeout=3600s \
+     --region=europe-west1
+   ```
+
+2. **Schedule with Cloud Scheduler** (daily at 02:00 Bucharest time):
+   ```bash
+   gcloud scheduler jobs create http expertap-daily-trigger \
+     --schedule="0 2 * * *" \
+     --time-zone="Europe/Bucharest" \
+     --uri="https://europe-west1-run.googleapis.com/apis/run.googleapis.com/v1/namespaces/gen-lang-client-0706147575/jobs/expertap-daily-pipeline:run" \
+     --http-method=POST \
+     --oauth-service-account-email=<SERVICE_ACCOUNT>@gen-lang-client-0706147575.iam.gserviceaccount.com
+   ```
+
+3. **What happens daily**: New GCS files get imported → analyzed by LLM → embeddings generated → RAG search updated. No user intervention needed.

@@ -107,28 +107,52 @@ class EmbeddingService:
         texts: list[str],
         batch_size: int = 20,
         task_type: str = "retrieval_document",
+        rate_limit_delay: float = 1.0,
     ) -> list[list[float]]:
-        """Generate embeddings in batches with rate limiting.
+        """Generate embeddings in batches with rate limiting and retry.
 
         Args:
             texts: List of texts to embed.
             batch_size: Number of texts per API call (Gemini limit ~100).
             task_type: Embedding task type.
+            rate_limit_delay: Seconds to wait between batches.
 
         Returns:
             List of embedding vectors in the same order as input texts.
         """
         all_embeddings: list[list[float]] = []
+        max_retries = 3
 
         for i in range(0, len(texts), batch_size):
             batch = texts[i:i + batch_size]
 
-            embeddings = await self.llm.embed(batch, task_type=task_type)
-            all_embeddings.extend(embeddings)
+            for attempt in range(1, max_retries + 1):
+                try:
+                    embeddings = await self.llm.embed(batch, task_type=task_type)
+                    all_embeddings.extend(embeddings)
+                    break
+                except Exception as e:
+                    if attempt < max_retries:
+                        delay = 2.0 ** attempt
+                        logger.warning(
+                            "embedding_batch_retry",
+                            batch_start=i,
+                            attempt=attempt,
+                            delay=delay,
+                            error=str(e),
+                        )
+                        await asyncio.sleep(delay)
+                    else:
+                        logger.error(
+                            "embedding_batch_failed",
+                            batch_start=i,
+                            error=str(e),
+                        )
+                        raise
 
             # Rate limiting between batches
             if i + batch_size < len(texts):
-                await asyncio.sleep(0.5)
+                await asyncio.sleep(rate_limit_delay)
 
             logger.debug(
                 "embedding_batch_completed",
