@@ -30,6 +30,8 @@ Sarcina ta: Analizează textul integral al unei decizii CNSC și extrage argumen
 Returnează un JSON array cu obiectele de mai jos. Dacă decizia are o singură critică, returnează un singur obiect.
 
 REGULI CRITICE:
+- cod_critica TREBUIE să fie un cod scurt de max 10 caractere (ex: "R2", "D1", "D4", "R1"). NU include descrieri sau paranteze. Dacă o critică acoperă mai multe coduri, folosește codul principal (ex: "R2" nu "R2, R3, R4 (Tardivitate)"). Dacă nu există cod explicit, folosește "C1", "C2" etc.
+- Fiecare critică separată = un obiect separat în array. NU combina criticile într-un singur obiect.
 - Extrage TOATE argumentele relevante, nu doar primele rânduri
 - Fiecare câmp text trebuie să fie un rezumat substanțial (minim 200 de cuvinte dacă informația există)
 - castigator_critica trebuie să fie unul din: "contestator", "autoritate", "partial", "unknown"
@@ -241,7 +243,7 @@ class DecisionAnalysisService:
                 intervenienti = None
 
             # Truncate VARCHAR fields to match DB column limits
-            cod_critica = str(item.get("cod_critica", "UNKNOWN"))[:100]
+            cod_critica = str(item.get("cod_critica", "UNKNOWN"))[:10]
             castigator = str(item.get("castigator_critica", "unknown"))[:20]
 
             arg = ArgumentareCritica(
