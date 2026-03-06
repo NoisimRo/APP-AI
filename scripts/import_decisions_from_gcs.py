@@ -73,11 +73,16 @@ class DecisionImporter:
             logger.error("gcs_connection_failed", error=str(e))
             raise
 
-    def list_decision_files(self, limit: Optional[int] = None) -> list[str]:
+    def list_decision_files(
+        self,
+        limit: Optional[int] = None,
+        offset: int = 0,
+    ) -> list[str]:
         """List all decision files in the GCS folder.
 
         Args:
-            limit: Maximum number of files to return (for testing)
+            limit: Maximum number of files to return (for testing/batching)
+            offset: Number of files to skip from the beginning (for batching)
 
         Returns:
             List of blob names (file paths in GCS)
@@ -86,14 +91,23 @@ class DecisionImporter:
         blobs = self.bucket.list_blobs(prefix=prefix)
 
         files = []
+        skipped = 0
         for blob in blobs:
             # Only process .txt files
             if blob.name.endswith('.txt'):
+                if skipped < offset:
+                    skipped += 1
+                    continue
                 files.append(blob.name)
                 if limit and len(files) >= limit:
                     break
 
-        logger.info("gcs_files_listed", count=len(files), prefix=prefix)
+        logger.info(
+            "gcs_files_listed",
+            count=len(files),
+            offset=offset,
+            prefix=prefix,
+        )
         return files
 
     def download_file(self, blob_name: str) -> str:
@@ -215,12 +229,14 @@ class DecisionImporter:
     async def import_all(
         self,
         limit: Optional[int] = None,
+        offset: int = 0,
         batch_size: int = 50,
     ) -> dict:
         """Import all decisions from GCS.
 
         Args:
-            limit: Maximum number of files to import (for testing)
+            limit: Maximum number of files to import (for testing/batching)
+            offset: Number of files to skip from the beginning (for batching)
             batch_size: Number of decisions to commit in each batch
 
         Returns:
@@ -237,7 +253,7 @@ class DecisionImporter:
         }
 
         # Get list of files
-        files = self.list_decision_files(limit=limit)
+        files = self.list_decision_files(limit=limit, offset=offset)
         stats["total_files"] = len(files)
 
         logger.info("import_starting", total_files=len(files))
@@ -349,7 +365,13 @@ async def main():
     parser.add_argument(
         "--limit",
         type=int,
-        help="Limit number of files to import (for testing)",
+        help="Limit number of files to import (for testing/batching)",
+    )
+    parser.add_argument(
+        "--offset",
+        type=int,
+        default=0,
+        help="Skip first N files (for batching, e.g. --offset 100 --limit 100)",
     )
     parser.add_argument(
         "--batch-size",
@@ -490,6 +512,7 @@ async def main():
     # Import decisions
     stats = await importer.import_all(
         limit=args.limit,
+        offset=args.offset,
         batch_size=args.batch_size,
     )
 
