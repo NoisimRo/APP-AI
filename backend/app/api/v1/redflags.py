@@ -12,15 +12,22 @@ router = APIRouter()
 logger = get_logger(__name__)
 
 
-class RedFlagItem(BaseModel):
-    """A detected red flag."""
+class LegalReference(BaseModel):
+    """A verified legal article reference from the legislation database."""
 
-    category: str
-    severity: str
+    articol: str  # "art. 178"
+    act_normativ: str  # "Legea 98/2016"
+    text_extras: str = ""  # excerpt from the real article text
+
+
+class RedFlagItem(BaseModel):
+    """A detected and grounded red flag."""
+
     clause: str
     issue: str
-    legal_reference: str
-    recommendation: str
+    severity: str
+    legal_references: list[LegalReference] = Field(default_factory=list)
+    recommendation: str = ""
     decision_refs: list[str] = Field(default_factory=list)
 
 
@@ -30,7 +37,7 @@ class RedFlagsRequest(BaseModel):
     text: str = Field(..., min_length=10, description="Document text to analyze")
     use_jurisprudence: bool = Field(
         default=True,
-        description="Whether to include CNSC jurisprudence in analysis"
+        description="Whether to ground with real legislation and CNSC jurisprudence"
     )
 
 
@@ -42,7 +49,7 @@ class RedFlagsResponse(BaseModel):
     critical_count: int
     medium_count: int
     low_count: int
-    used_jurisprudence: bool
+    grounded: bool  # True if legislation/jurisprudence was used
 
 
 @router.post("/", response_model=RedFlagsResponse)
@@ -50,28 +57,20 @@ async def analyze_red_flags(
     request: RedFlagsRequest,
     session: AsyncSession = Depends(get_session)
 ) -> RedFlagsResponse:
-    """
-    Analyze procurement document for red flags.
+    """Analyze procurement document for red flags.
 
-    Detects potentially illegal or restrictive clauses in procurement
-    documentation (specifications, tender documents, etc.).
-
-    Categories detected:
-    - Excessive similar experience requirements
-    - Disproportionate turnover requirements
-    - Restrictive certifications
-    - Excessive dedicated personnel
-    - Discriminatory clauses
-    - Unrealistic deadlines
-    - Restrictive technical criteria
+    Uses a two-pass approach:
+    1. Dynamic detection — LLM identifies problematic clauses
+    2. Grounding — each clause is verified against real legislation
+       (Legea 98/2016, HG 395/2016) and CNSC jurisprudence
 
     Each red flag includes:
-    - Category and severity
-    - Exact problematic clause
+    - Exact problematic clause from the document
     - Issue description
-    - Legal reference (Legea 98/2016, HG 395/2016)
-    - Recommendation for modification
-    - Related CNSC decisions (if use_jurisprudence=true)
+    - Severity (CRITICĂ, MEDIE, SCĂZUTĂ)
+    - Verified legal references with article text
+    - Related CNSC decisions (if found)
+    - Recommendation based on real legislation
     """
     logger.info(
         "red_flags_analysis_request",
@@ -80,10 +79,8 @@ async def analyze_red_flags(
     )
 
     try:
-        # Initialize analyzer
         analyzer = RedFlagsAnalyzer()
 
-        # Analyze document
         red_flags_data = await analyzer.analyze(
             document_text=request.text,
             session=session if request.use_jurisprudence else None,
@@ -91,9 +88,27 @@ async def analyze_red_flags(
         )
 
         # Convert to Pydantic models
-        red_flags = [RedFlagItem(**flag) for flag in red_flags_data]
+        red_flags = []
+        for flag_data in red_flags_data:
+            # Handle legal_references conversion
+            legal_refs = []
+            for ref in flag_data.get("legal_references", []):
+                if isinstance(ref, dict):
+                    legal_refs.append(LegalReference(
+                        articol=ref.get("articol", ""),
+                        act_normativ=ref.get("act_normativ", ""),
+                        text_extras=ref.get("text_extras", ""),
+                    ))
 
-        # Count by severity
+            red_flags.append(RedFlagItem(
+                clause=flag_data.get("clause", ""),
+                issue=flag_data.get("issue", ""),
+                severity=flag_data.get("severity", "MEDIE"),
+                legal_references=legal_refs,
+                recommendation=flag_data.get("recommendation", ""),
+                decision_refs=flag_data.get("decision_refs", []),
+            ))
+
         critical_count = sum(1 for rf in red_flags if rf.severity == "CRITICĂ")
         medium_count = sum(1 for rf in red_flags if rf.severity == "MEDIE")
         low_count = sum(1 for rf in red_flags if rf.severity == "SCĂZUTĂ")
@@ -103,7 +118,8 @@ async def analyze_red_flags(
             total=len(red_flags),
             critical=critical_count,
             medium=medium_count,
-            low=low_count
+            low=low_count,
+            grounded=request.use_jurisprudence,
         )
 
         return RedFlagsResponse(
@@ -112,7 +128,9 @@ async def analyze_red_flags(
             critical_count=critical_count,
             medium_count=medium_count,
             low_count=low_count,
-            used_jurisprudence=request.use_jurisprudence and len(red_flags_data) > 0
+            grounded=request.use_jurisprudence and any(
+                rf.legal_references or rf.decision_refs for rf in red_flags
+            ),
         )
 
     except Exception as e:

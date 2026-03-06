@@ -500,6 +500,67 @@ class NomenclatorCPV(Base):
 
 
 # =============================================================================
+# LEGISLATION ARTICLES (for Red Flags grounding)
+# =============================================================================
+
+class ArticolLegislatie(Base):
+    """Articles from Romanian procurement legislation.
+
+    Stores individual articles from Legea 98/2016, HG 395/2016, etc.
+    Used for vector search grounding in the Red Flags Detector —
+    ensures legal references are real, not hallucinated by the LLM.
+    """
+
+    __tablename__ = "articole_legislatie"
+
+    id: Mapped[str] = mapped_column(
+        UUID(as_uuid=False),
+        primary_key=True,
+        default=lambda: str(uuid4())
+    )
+
+    # Article identification
+    act_normativ: Mapped[str] = mapped_column(
+        String(100), nullable=False
+    )  # "Legea 98/2016", "HG 395/2016"
+    numar_articol: Mapped[int] = mapped_column(
+        Integer, nullable=False
+    )  # numeric for sorting: 178, 31
+    articol: Mapped[str] = mapped_column(
+        String(50), nullable=False
+    )  # "art. 178", "art. 31"
+    titlu_articol: Mapped[Optional[str]] = mapped_column(Text)
+    text_integral: Mapped[str] = mapped_column(Text, nullable=False)
+
+    # Context in the law structure
+    capitol: Mapped[Optional[str]] = mapped_column(String(500))
+    sectiune: Mapped[Optional[str]] = mapped_column(String(500))
+
+    # Vector embedding (2000 dimensions - max for pgvector HNSW index)
+    embedding: Mapped[Optional[list]] = mapped_column(Vector(2000))
+
+    # Timestamps
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(), nullable=False
+    )
+
+    __table_args__ = (
+        Index("ix_art_act", act_normativ),
+        Index("ix_art_numar", act_normativ, numar_articol, unique=True),
+        Index(
+            "ix_art_embedding_hnsw",
+            embedding,
+            postgresql_using="hnsw",
+            postgresql_ops={"embedding": "vector_cosine_ops"},
+            postgresql_with={"m": 16, "ef_construction": 64},
+        ),
+    )
+
+    def __repr__(self) -> str:
+        return f"<ArticolLegislatie {self.articol} ({self.act_normativ})>"
+
+
+# =============================================================================
 # LEGACY COMPATIBILITY (if needed)
 # =============================================================================
 
