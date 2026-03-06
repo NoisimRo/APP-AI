@@ -240,9 +240,13 @@ class DecisionAnalysisService:
             if intervenienti and not isinstance(intervenienti, list):
                 intervenienti = None
 
+            # Truncate VARCHAR fields to match DB column limits
+            cod_critica = str(item.get("cod_critica", "UNKNOWN"))[:100]
+            castigator = str(item.get("castigator_critica", "unknown"))[:20]
+
             arg = ArgumentareCritica(
                 decizie_id=decision.id,
-                cod_critica=item["cod_critica"],
+                cod_critica=cod_critica,
                 ordine_in_decizie=item.get("ordine_in_decizie"),
                 argumente_contestator=item.get("argumente_contestator"),
                 jurisprudenta_contestator=jp_contestator if jp_contestator else None,
@@ -252,7 +256,7 @@ class DecisionAnalysisService:
                 elemente_retinute_cnsc=item.get("elemente_retinute_cnsc"),
                 argumentatie_cnsc=item.get("argumentatie_cnsc"),
                 jurisprudenta_cnsc=jp_cnsc if jp_cnsc else None,
-                castigator_critica=item.get("castigator_critica", "unknown"),
+                castigator_critica=castigator,
             )
             session.add(arg)
             created += 1

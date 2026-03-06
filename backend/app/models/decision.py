@@ -249,7 +249,7 @@ class ArgumentareCritica(Base):
     )
 
     # Criticism being analyzed
-    cod_critica: Mapped[str] = mapped_column(String(10), nullable=False)  # D1, R2, etc.
+    cod_critica: Mapped[str] = mapped_column(String(100), nullable=False)  # D1, R2, etc.
     ordine_in_decizie: Mapped[Optional[int]] = mapped_column(Integer)
 
     # Argumentation flow
