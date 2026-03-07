@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """Import Romanian procurement legislation from .md files into the database.
 
-Parses legislative .md files at MAXIMUM GRANULARITY — each row represents
-the smallest independent legal unit:
+Reads .md files from a GCS bucket (default: date-expert-app/legislatie-ap)
+and parses them at MAXIMUM GRANULARITY — each row represents the smallest
+independent legal unit:
   - Literă (if the alineat has litere)
   - Alineat (if no litere)
   - Articol (if no alineats)
@@ -27,6 +28,7 @@ Expected .md format (from the actual legislative files):
     * b) a doua literă;
 
 Features:
+- Reads from GCS bucket (same approach as import_decisions_from_gcs.py)
 - Litere are separate rows (not JSON) — each is an independent legal unit
 - articol_complet field stores the full article text for RAG context
 - tsvector keywords for full-text search
@@ -34,17 +36,20 @@ Features:
 - Retry with exponential backoff on API errors
 
 Usage:
-    # Import all .md files from the legislation directory
-    DATABASE_URL="..." python scripts/import_legislatie.py --dir date-expert-app/legislatie-ap
+    # Import all .md files from GCS (default bucket/folder)
+    DATABASE_URL="..." python scripts/import_legislatie.py --dir legislatie-ap
 
-    # Import a single file
-    DATABASE_URL="..." python scripts/import_legislatie.py --file "path/to/LEGE nr. 98.md"
+    # Custom bucket and folder
+    DATABASE_URL="..." python scripts/import_legislatie.py --bucket date-expert-app --dir legislatie-ap
+
+    # Import a single file from GCS
+    DATABASE_URL="..." python scripts/import_legislatie.py --file "LEGE nr. 98.md"
 
     # Force reimport (delete + reinsert for a specific act)
-    DATABASE_URL="..." python scripts/import_legislatie.py --dir ... --force
+    DATABASE_URL="..." python scripts/import_legislatie.py --dir legislatie-ap --force
 
     # Dry run (parse only, no DB writes)
-    DATABASE_URL="..." python scripts/import_legislatie.py --dir ... --dry-run
+    DATABASE_URL="..." python scripts/import_legislatie.py --dir legislatie-ap --dry-run
 """
 
 import asyncio
@@ -53,10 +58,12 @@ import re
 import sys
 import time
 from pathlib import Path
+from typing import Optional
 
 # Add backend to path
 sys.path.insert(0, str(Path(__file__).parent.parent / "backend"))
 
+from google.cloud import storage
 from sqlalchemy import select, delete, text, func
 from app.core.logging import get_logger
 from app.db.session import init_db
@@ -322,7 +329,8 @@ async def get_or_create_act(
 
 
 async def import_file(
-    filepath: Path,
+    filename: str,
+    md_text: str,
     embedding_service: EmbeddingService,
     force: bool = False,
     dry_run: bool = False,
@@ -330,7 +338,8 @@ async def import_file(
     """Import fragment-level records from a single legislative .md file.
 
     Args:
-        filepath: Path to the .md file.
+        filename: Name of the .md file.
+        md_text: Content of the .md file.
         embedding_service: Service for generating embeddings.
         force: Delete existing records for this act and reimport.
         dry_run: Only parse and print, don't write to DB.
@@ -338,18 +347,16 @@ async def import_file(
     Returns:
         Number of records imported.
     """
-    tip_act, numar, an, titlu = detect_act_info(filepath.name)
+    tip_act, numar, an, titlu = detect_act_info(filename)
     act_label = f"{tip_act} {numar}/{an}"
-    logger.info("importing_legislation", file=filepath.name, act=act_label)
-
-    md_text = filepath.read_text(encoding='utf-8')
+    logger.info("importing_legislation", file=filename, act=act_label)
     logger.info("file_read", chars=len(md_text), lines=md_text.count('\n'))
 
     records = parse_legislation(md_text)
     logger.info("records_parsed", count=len(records), act=act_label)
 
     if not records:
-        logger.warning("no_records_parsed", file=filepath.name)
+        logger.warning("no_records_parsed", file=filename)
         return 0
 
     if dry_run:
@@ -364,7 +371,7 @@ async def import_file(
         return len(records)
 
     # Database operations
-    async with db_session.async_session() as session:
+    async with db_session.async_session_factory() as session:
         act_id = await get_or_create_act(session, tip_act, numar, an, titlu)
         await session.commit()
 
@@ -496,17 +503,86 @@ async def import_file(
     return imported
 
 
+def connect_to_gcs(
+    bucket_name: str,
+    project_id: Optional[str] = None,
+) -> storage.Bucket:
+    """Connect to GCS bucket.
+
+    Args:
+        bucket_name: Name of the GCS bucket.
+        project_id: GCP project ID (uses default credentials if None).
+
+    Returns:
+        GCS Bucket object.
+    """
+    logger.info("gcs_connecting", bucket=bucket_name, project=project_id)
+    if project_id:
+        client = storage.Client(project=project_id)
+    else:
+        client = storage.Client()
+    bucket = client.bucket(bucket_name)
+    logger.info("gcs_connected", bucket=bucket_name)
+    return bucket
+
+
+def list_md_files(bucket: storage.Bucket, folder: str) -> list[str]:
+    """List all .md files in a GCS folder.
+
+    Args:
+        bucket: GCS Bucket object.
+        folder: Folder prefix in the bucket.
+
+    Returns:
+        List of blob names.
+    """
+    prefix = f"{folder}/" if folder else ""
+    blobs = bucket.list_blobs(prefix=prefix, timeout=300)
+    files = [blob.name for blob in blobs if blob.name.endswith('.md')]
+    logger.info("gcs_files_listed", count=len(files), prefix=prefix)
+    return sorted(files)
+
+
+def download_file(bucket: storage.Bucket, blob_name: str) -> str:
+    """Download a file from GCS and return its content.
+
+    Args:
+        bucket: GCS Bucket object.
+        blob_name: Name of the blob (file path in GCS).
+
+    Returns:
+        File content as string.
+    """
+    blob = bucket.blob(blob_name)
+    try:
+        content = blob.download_as_text(encoding='utf-8', timeout=120)
+    except UnicodeDecodeError:
+        content = blob.download_as_text(encoding='latin-1', timeout=120)
+    return content
+
+
 async def main():
     parser = argparse.ArgumentParser(
-        description="Import Romanian procurement legislation into the database"
+        description="Import Romanian procurement legislation from GCS into the database"
+    )
+    parser.add_argument(
+        "--bucket",
+        default="date-expert-app",
+        help="GCS bucket name (default: date-expert-app)",
     )
     parser.add_argument(
         "--dir", type=str,
-        help="Directory containing .md legislation files",
+        default="legislatie-ap",
+        help="Folder in GCS bucket containing .md files (default: legislatie-ap)",
     )
     parser.add_argument(
         "--file", type=str,
-        help="Single .md file to import",
+        help="Single .md filename to import from GCS folder",
+    )
+    parser.add_argument(
+        "--project",
+        default="gen-lang-client-0706147575",
+        help="GCP project ID",
     )
     parser.add_argument(
         "--force", action="store_true",
@@ -518,26 +594,32 @@ async def main():
     )
     args = parser.parse_args()
 
-    if not args.dir and not args.file:
-        parser.error("Either --dir or --file is required")
-
-    files: list[Path] = []
-    if args.file:
-        files.append(Path(args.file))
-    if args.dir:
-        dir_path = Path(args.dir)
-        if not dir_path.exists():
-            print(f"Error: Directory {dir_path} does not exist")
-            sys.exit(1)
-        files.extend(sorted(dir_path.glob("*.md")))
-
-    if not files:
-        print("No .md files found")
+    # Connect to GCS
+    try:
+        bucket = connect_to_gcs(args.bucket, args.project)
+    except Exception as e:
+        print(f"ERROR: Could not connect to GCS: {e}")
+        print("Make sure you have:")
+        print("1. gcloud CLI installed and authenticated")
+        print("2. Proper permissions to access the bucket")
+        print("3. GOOGLE_APPLICATION_CREDENTIALS set (if using service account)")
         sys.exit(1)
 
-    print(f"Found {len(files)} legislation file(s):")
-    for f in files:
-        print(f"  - {f.name}")
+    # List files from GCS
+    if args.file:
+        # Single file — construct the full blob path
+        blob_name = f"{args.dir}/{args.file}" if args.dir else args.file
+        blob_names = [blob_name]
+    else:
+        blob_names = list_md_files(bucket, args.dir)
+
+    if not blob_names:
+        print("No .md files found in GCS")
+        sys.exit(1)
+
+    print(f"Found {len(blob_names)} legislation file(s) in gs://{args.bucket}/{args.dir}/:")
+    for b in blob_names:
+        print(f"  - {Path(b).name}")
     print()
 
     if not args.dry_run:
@@ -550,12 +632,17 @@ async def main():
     total_imported = 0
     start = time.time()
 
-    for filepath in files:
-        if not filepath.exists():
-            print(f"Warning: {filepath} does not exist, skipping")
+    for blob_name in blob_names:
+        filename = Path(blob_name).name
+        print(f"Downloading {filename} from GCS...")
+        try:
+            md_text = download_file(bucket, blob_name)
+        except Exception as e:
+            print(f"Warning: Failed to download {blob_name}: {e}, skipping")
             continue
+
         count = await import_file(
-            filepath, embedding_service,
+            filename, md_text, embedding_service,
             force=args.force, dry_run=args.dry_run,
         )
         total_imported += count

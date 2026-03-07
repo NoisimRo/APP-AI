@@ -34,27 +34,30 @@ class CriticismCodeType(str, Enum):
 
 
 CRITICISM_CODES_LEGEND = {
-    # Critici la Documentația de Atribuire (D)
-    "D1": "Cerințe restrictive: experiență similară, criterii calificare, specificații tehnice",
-    "D2": "Criterii atribuire/factori evaluare fără algoritm calcul sau cu algoritm netransparent/subiectiv",
-    "D3": "Denumiri tehnologii/produse/marci/producatori fara sintagma 'sau echivalent'",
-    "D4": "Lipsa răspuns clar/complet la solicitările de clarificări privind documentația",
+    # Critici formulate la Documentația de Atribuire (D)
+    "D1": "Cerințe restrictive cu privire la experiența similară, criterii de calificare, specificații tehnice",
+    "D2": "Criterii de atribuire și factori de evaluare fără algoritm de calcul, cu algoritm de calcul netransparent sau subiectiv",
+    "D3": ("Menționarea în cadrul documentației de atribuire a unor denumiri de tehnologii, produse, mărci, "
+           "producători, fără a se utiliza sintagma \u201Esau echivalent\u201D"),
+    "D4": ("Lipsa unui răspuns clar, complet și fără ambiguități din partea autorității contractante, "
+           "la solicitările de clarificări vizând prevederile documentației de atribuire"),
     "D5": "Forma de constituire a garanției de participare",
-    "D6": "Clauze contractuale inechitabile sau excesive",
-    "D7": "Nedivizarea achiziției pe loturi (produse/lucrări similare)",
-    "D8": "Alte critici la documentația de atribuire",
-    "DAL": "Altele (documentație) - necesită extragere din text",
+    "D6": "Impunerea de clauze contractuale inechitabile sau excesive",
+    "D7": "Nedivizarea achiziției pe loturi, în cazul produselor/lucrărilor similare",
+    "DAL": "Altele - de precizat",
 
-    # Critici la Rezultatul Procedurii (R)
-    "R1": "Contestații contra PV ședință deschidere (garanție participare, mod desfășurare)",
-    "R2": "Respingerea ofertei contestatorului ca neconformă sau inacceptabilă",
-    "R3": "Preț neobișnuit de scăzut al ofertelor altor participanți",
-    "R4": "Documente calificare ale altor ofertanți / mod de punctare-evaluare",
-    "R5": "Lipsa precizării motivelor de respingere în comunicare",
-    "R6": "Lipsa solicitare clarificări propunere tehnică/preț sau apreciere incorectă răspunsuri",
-    "R7": "Anularea fără temei legal a procedurii de către AC",
-    "R8": "Alte critici la rezultatul procedurii",
-    "RAL": "Altele (rezultat) - necesită extragere din text",
+    # Critici formulate la Rezultatul Procedurii (R)
+    "R1": ("Contestații împotriva procesului-verbal al ședinței de deschidere a ofertelor "
+           "(neluarea în considerare a garanției de participare, modul de desfășurare a ședinței de deschidere a ofertelor)"),
+    "R2": "Respingerea ofertei contestate ca neconformă sau inacceptabilă",
+    "R3": "Prețul neobișnuit de scăzut al ofertelor altor participanți la procedura de atribuire",
+    "R4": ("Documentele de calificare depuse de alți ofertanți participanți sau modul de punctare/evaluare "
+           "a acestora de către autoritatea contractantă"),
+    "R5": "Lipsa precizării motivelor de respingere a ofertei în comunicare",
+    "R6": ("Lipsa solicitare clarificări referitoare la propunerea tehnică/prețul ofertat "
+           "sau aprecierea incorectă a răspunsurilor la clarificări"),
+    "R7": "Anularea fără temei legal a procedurii de atribuire de către autoritatea contractantă",
+    "RAL": "Altele - de precizat",
 }
 
 
