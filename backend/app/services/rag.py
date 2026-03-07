@@ -2,23 +2,30 @@
 
 This service handles:
 1. Retrieving relevant CNSC decisions via semantic vector search
-2. Building rich context from ArgumentareCritica chunks
-3. Generating responses with verified citations
+2. Searching legislation fragments (legislatie_fragmente) for exact legal text
+3. Building rich context from ArgumentareCritica chunks + legislation
+4. Generating responses with verified citations
 
 The retrieval strategy uses ArgumentareCritica as the primary search unit
 (each row is a natural semantic chunk covering one criticism with full
 argumentation flow), then loads the parent DecizieCNSC for metadata.
 Falls back to keyword ILIKE search when no embeddings are available.
+
+Legislation search is triggered when the query references specific legal
+articles (e.g., "art. 2 alin. 3 lit. b din HG 395").
 """
 
 import re
 from typing import Optional
-from sqlalchemy import select, or_, func
+from sqlalchemy import select, or_, func, and_
 from sqlalchemy.ext.asyncio import AsyncSession
 from pydantic import BaseModel
 
 from app.core.logging import get_logger
-from app.models.decision import DecizieCNSC, ArgumentareCritica, NomenclatorCPV
+from app.models.decision import (
+    DecizieCNSC, ArgumentareCritica, NomenclatorCPV,
+    LegislatieFragment, ActNormativ,
+)
 from app.services.embedding import EmbeddingService
 from app.services.llm.gemini import GeminiProvider
 
@@ -162,6 +169,221 @@ class RAGService:
 
         logger.debug("extracted_legal_references", references=unique)
         return unique
+
+    def _parse_article_query(self, query: str) -> list[dict]:
+        """Parse structured article references from query.
+
+        Extracts article number, alineat, litera, and act info from
+        references like "art. 2 alin. (3) lit. b) din HG 395/2016".
+
+        Returns:
+            List of dicts with keys: numar_articol, alineat, litera,
+            tip_act, numar_act, an_act.
+        """
+        # Pattern: art. N [alin. (M)] [lit. X)] [din ACT N/YYYY]
+        pattern = (
+            r'art(?:icolul|\.)\s*(\d+)'
+            r'(?:\s*alin(?:eat(?:ul)?)?\.?\s*\(?(\d+)\)?)?'
+            r'(?:\s*lit(?:era)?\.?\s*([a-z])\)?)?'
+            r'(?:\s*(?:din|al)\s+(?:Legea|L\.?|HG|OUG|OG)'
+            r'\s*(?:nr\.?\s*)?(\d+)/(\d+))?'
+        )
+
+        matches = re.finditer(pattern, query, re.IGNORECASE)
+        results = []
+
+        for m in matches:
+            ref = {
+                "numar_articol": int(m.group(1)),
+                "alineat": int(m.group(2)) if m.group(2) else None,
+                "litera": m.group(3).lower() if m.group(3) else None,
+            }
+
+            if m.group(4) and m.group(5):
+                ref["numar_act"] = int(m.group(4))
+                ref["an_act"] = int(m.group(5))
+                # Determine act type from the matched text
+                act_text = query[m.start():m.end()].upper()
+                if "LEGEA" in act_text or "L." in act_text:
+                    ref["tip_act"] = "Lege"
+                elif "HG" in act_text:
+                    ref["tip_act"] = "HG"
+                elif "OUG" in act_text:
+                    ref["tip_act"] = "OUG"
+                elif "OG" in act_text:
+                    ref["tip_act"] = "OG"
+
+            results.append(ref)
+
+        logger.debug("parsed_article_query", results=results)
+        return results
+
+    async def _search_legislation_fragments(
+        self,
+        query: str,
+        session: AsyncSession,
+        limit: int = 5,
+    ) -> list[tuple[LegislatieFragment, str]]:
+        """Search legislatie_fragmente for relevant legal text.
+
+        Strategy:
+        1. Parse exact article references → exact DB lookup
+        2. Vector search for semantic matching (fallback)
+
+        Args:
+            query: User's query.
+            session: Database session.
+            limit: Maximum fragments to return.
+
+        Returns:
+            List of (LegislatieFragment, act_name) tuples.
+        """
+        fragments: list[tuple[LegislatieFragment, str]] = []
+
+        # 1. Exact article lookup
+        parsed_refs = self._parse_article_query(query)
+        for ref in parsed_refs:
+            conditions = [
+                LegislatieFragment.numar_articol == ref["numar_articol"]
+            ]
+
+            if ref.get("alineat") is not None:
+                conditions.append(LegislatieFragment.alineat == ref["alineat"])
+            if ref.get("litera") is not None:
+                conditions.append(LegislatieFragment.litera == ref["litera"])
+
+            # Filter by act if specified
+            if ref.get("tip_act") and ref.get("numar_act"):
+                act_stmt = select(ActNormativ.id).where(
+                    and_(
+                        func.upper(ActNormativ.tip_act) == ref["tip_act"].upper(),
+                        ActNormativ.numar == ref["numar_act"],
+                    )
+                )
+                if ref.get("an_act"):
+                    act_stmt = act_stmt.where(ActNormativ.an == ref["an_act"])
+
+                act_result = await session.execute(act_stmt)
+                act_ids = [row[0] for row in act_result.all()]
+                if act_ids:
+                    conditions.append(LegislatieFragment.act_id.in_(act_ids))
+                else:
+                    # Act not found in DB, skip this reference
+                    continue
+
+            stmt = (
+                select(LegislatieFragment)
+                .where(and_(*conditions))
+                .order_by(
+                    LegislatieFragment.numar_articol,
+                    LegislatieFragment.alineat.nulls_first(),
+                    LegislatieFragment.litera.nulls_first(),
+                )
+                .limit(limit)
+            )
+
+            result = await session.execute(stmt)
+            found = list(result.scalars().all())
+
+            for frag in found:
+                # Eagerly load act name
+                if frag.act_id:
+                    act_stmt = select(ActNormativ).where(ActNormativ.id == frag.act_id)
+                    act_result = await session.execute(act_stmt)
+                    act = act_result.scalar_one_or_none()
+                    act_name = act.denumire if act else "N/A"
+                else:
+                    act_name = "N/A"
+                fragments.append((frag, act_name))
+
+        if fragments:
+            logger.info(
+                "legislation_exact_match",
+                count=len(fragments),
+                refs=[f.citare for f, _ in fragments],
+            )
+            return fragments[:limit]
+
+        # 2. Vector search fallback on legislatie_fragmente
+        try:
+            query_vector = await self.embedding_service.embed_query(query)
+
+            stmt = (
+                select(
+                    LegislatieFragment,
+                    LegislatieFragment.embedding.cosine_distance(query_vector).label("distance"),
+                )
+                .where(LegislatieFragment.embedding.isnot(None))
+                .order_by("distance")
+                .limit(limit)
+            )
+
+            result = await session.execute(stmt)
+            rows = result.all()
+
+            # Only include fragments with reasonable similarity
+            for row in rows:
+                if row.distance < 0.6:
+                    frag = row[0]
+                    act_stmt = select(ActNormativ).where(ActNormativ.id == frag.act_id)
+                    act_result = await session.execute(act_stmt)
+                    act = act_result.scalar_one_or_none()
+                    act_name = act.denumire if act else "N/A"
+                    fragments.append((frag, act_name))
+
+            if fragments:
+                logger.info(
+                    "legislation_vector_search",
+                    count=len(fragments),
+                    top_distance=rows[0].distance if rows else None,
+                )
+        except Exception as e:
+            logger.warning("legislation_vector_search_failed", error=str(e))
+
+        return fragments
+
+    def _build_legislation_context(
+        self,
+        fragments: list[tuple[LegislatieFragment, str]],
+    ) -> list[str]:
+        """Build context strings from legislation fragments.
+
+        Groups fragments by act for organized context presentation.
+
+        Args:
+            fragments: List of (LegislatieFragment, act_name) tuples.
+
+        Returns:
+            List of context strings, one per act.
+        """
+        if not fragments:
+            return []
+
+        # Group by act
+        by_act: dict[str, list[LegislatieFragment]] = {}
+        for frag, act_name in fragments:
+            by_act.setdefault(act_name, []).append(frag)
+
+        contexts = []
+        for act_name, frags in by_act.items():
+            parts = [
+                f"=== LEGISLAȚIE: {act_name} ===",
+                "",
+            ]
+            for frag in frags:
+                parts.append(f"**{frag.citare}** din {act_name}")
+                if frag.capitol:
+                    parts.append(f"Capitol: {frag.capitol}")
+                if frag.sectiune:
+                    parts.append(f"Secțiune: {frag.sectiune}")
+                parts.append(f"Text: {frag.text_fragment}")
+                if frag.articol_complet and frag.articol_complet != frag.text_fragment:
+                    parts.append(f"\nArticolul complet:\n{frag.articol_complet}")
+                parts.append("")
+
+            contexts.append("\n".join(parts))
+
+        return contexts
 
     async def _search_by_legal_reference(
         self,
@@ -828,52 +1050,82 @@ class RAGService:
         Returns:
             Tuple of (response_text, citations, confidence, suggested_questions).
         """
-        logger.info("generating_rag_response", query=query)
+        logger.info(“generating_rag_response”, query=query)
 
-        # 1. Retrieve relevant decisions (vector search with keyword fallback)
+        # 1. Search legislation fragments (parallel with decision search)
+        legislation_fragments = await self._search_legislation_fragments(
+            query, session, limit=5
+        )
+
+        # 2. Retrieve relevant decisions (vector search with keyword fallback)
         decisions, matched_chunks = await self.search_decisions(
             query, session, limit=max_decisions
         )
 
-        if not decisions:
-            logger.warning("no_decisions_found", query=query)
+        if not decisions and not legislation_fragments:
+            logger.warning(“no_results_found”, query=query)
             return (
-                "Nu am găsit decizii CNSC relevante pentru această întrebare. "
-                "Încearcă să reformulezi întrebarea sau să folosești termeni mai specifici.",
+                “Nu am găsit informații relevante pentru această întrebare. “
+                “Încearcă să reformulezi întrebarea sau să folosești termeni mai specifici.”,
                 [],
                 0.0,
-                ["Ce decizii CNSC sunt disponibile?", "Arată-mi toate deciziile"],
+                [“Ce decizii CNSC sunt disponibile?”, “Arată-mi toate deciziile”],
             )
 
-        # 2. Build context from decisions and matched chunks
-        contexts = self._build_context(decisions, matched_chunks)
+        # 2. Build context — legislation first, then decisions
+        contexts = []
+        if legislation_fragments:
+            contexts.extend(self._build_legislation_context(legislation_fragments))
+        if decisions:
+            contexts.extend(self._build_context(decisions, matched_chunks))
 
         # 3. Build system prompt
-        system_prompt = """Ești un consultant senior în achiziții publice specializat în jurisprudența CNSC (Consiliul Național de Soluționare a Contestațiilor).
+        has_legislation = bool(legislation_fragments)
+        has_decisions = bool(decisions)
 
-Sarcina ta este să răspunzi la întrebări despre deciziile CNSC folosind EXCLUSIV informațiile din documentele furnizate în contextul de mai jos.
+        system_prompt = “””Ești un consultant senior în achiziții publice specializat în legislația și jurisprudența CNSC (Consiliul Național de Soluționare a Contestațiilor) din România.
+
+Sarcina ta este să răspunzi la întrebări folosind EXCLUSIV informațiile din contextul furnizat mai jos.”””
+
+        if has_legislation and has_decisions:
+            system_prompt += “””
+
+Contextul conține atât TEXTE LEGISLATIVE (articole din Legea 98/2016, HG 395/2016, etc.) cât și DECIZII CNSC. Folosește-le pe ambele:
+- Citează textul exact al articolelor de lege când sunt disponibile
+- Citează deciziile CNSC care aplică sau interpretează acele articole”””
+        elif has_legislation:
+            system_prompt += “””
+
+Contextul conține TEXTE LEGISLATIVE (articole din Legea 98/2016, HG 395/2016, etc.).
+Citează textul exact al articolelor, inclusiv alineatele și literele relevante.”””
+        else:
+            system_prompt += “””
+
+Contextul conține DECIZII CNSC relevante pentru întrebare.”””
+
+        system_prompt += “””
 
 Reguli importante:
 1. Bazează-te DOAR pe informațiile din contextul furnizat
-2. Citează deciziile specifice când răspunzi (ex: "Conform deciziei **BO2023_123**...")
+2. Citează sursele specifice: articole de lege cu citare completă (ex: “**art. 2 alin. (3) lit. b) din HG 395/2016**”) și/sau decizii CNSC (ex: “Conform deciziei **BO2025_123**...”)
 3. Dacă informația nu este în context, spune clar că nu ai suficiente date
 4. Oferă răspunsuri clare, structurate și profesionale
 5. Folosește terminologie juridică corectă specifică achizițiilor publice
 6. Când discuți despre soluții, menționează argumentele CNSC
 7. Când în context există referințe la jurisprudență (decizii ale instanțelor naționale, CJUE, directive europene), citează-le exact așa cum apar
-8. NU te prezenta și NU folosi formulări de genul "În calitate de..." - răspunde direct la întrebare
-9. **CITĂRI VERBATIM**: Când susții un argument sau prezinți o concluzie, include citate exacte din textul original al deciziei, folosind ghilimele și referința deciziei. Exemplu: *Conform deciziei **BO2025_123**, CNSC a reținut că „textul exact din decizie”*. Secțiunea „Text original din decizie” conține fragmente verbatim — folosește-le pentru citări directe.
+8. NU te prezenta și NU folosi formulări de genul “În calitate de...” - răspunde direct la întrebare
+9. **CITĂRI VERBATIM**: Când susții un argument sau prezinți o concluzie, include citate exacte din textul original, folosind ghilimele. Exemplu: *Conform **art. 2 alin. (3)** din HG 395/2016, „textul exact al articolului”*
 10. Prezintă atât argumentele contestatorului, cât și cele ale autorității contractante și ale CNSC, cu citate verbatim din fiecare parte, pentru a oferi o imagine completă.
 
 Formatare:
-- Folosește **bold** pentru termeni cheie și referințe la decizii
-- Folosește „ghilimele românești” pentru citatele verbatim din decizii
+- Folosește **bold** pentru termeni cheie, referințe la articole de lege și la decizii
+- Folosește „ghilimele românești” pentru citatele verbatim
 - Structurează răspunsul cu paragrafe clare, separate prin linii goale
 - Folosește liste numerotate (1. 2. 3.) pentru enumerări
 - Folosește titluri (## sau ###) pentru secțiuni distincte când răspunsul este lung
 - Fiecare argument sau decizie trebuie să fie pe un paragraf separat
 
-Răspunde în limba română, profesional și precis."""
+Răspunde în limba română, profesional și precis.”””
 
         # 4. Generate response with LLM
         try:
@@ -886,12 +1138,20 @@ Răspunde în limba română, profesional și precis."""
             )
 
             # 5. Extract citations
-            citations = self._extract_citations(response_text, decisions, matched_chunks)
+            citations = self._extract_citations(
+                response_text, decisions, matched_chunks
+            )
 
-            # 6. Calculate confidence
+            # 6. Calculate confidence (boost when legislation was found)
             confidence = self._calculate_confidence(
                 decisions, matched_chunks, max_decisions
             )
+            if legislation_fragments and not decisions:
+                # Pure legislation query — high confidence if exact match
+                confidence = max(confidence, 0.9)
+            elif legislation_fragments:
+                # Mixed — boost slightly
+                confidence = min(1.0, confidence + 0.1)
 
             # 7. Generate suggested follow-up questions
             suggested_questions = self._generate_suggested_questions(decisions)
