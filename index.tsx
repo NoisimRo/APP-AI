@@ -29,7 +29,8 @@ import {
   FolderInput,
   X,
   Eye,
-  ChevronDown
+  ChevronDown,
+  ChevronUp
 } from "lucide-react";
 
 // --- Types ---
@@ -179,7 +180,10 @@ const App = () => {
   const [apiDecisionsPage, setApiDecisionsPage] = useState(1);
   const [isLoadingDecisions, setIsLoadingDecisions] = useState(false);
   const [dbStats, setDbStats] = useState<any>(null);
-  
+  const [filterRuling, setFilterRuling] = useState("");
+  const [filterType, setFilterType] = useState("");
+  const [filterYear, setFilterYear] = useState("");
+
   // Chat/Interaction States
   const [chatMessages, setChatMessages] = useState<Message[]>([]);
   const [chatInput, setChatInput] = useState("");
@@ -203,6 +207,7 @@ const App = () => {
   const [viewingDecision, setViewingDecision] = useState<any | null>(null);
   const [isLoadingDecision, setIsLoadingDecision] = useState(false);
   const [decisionSearchTerm, setDecisionSearchTerm] = useState("");
+  const [decisionSearchIndex, setDecisionSearchIndex] = useState(0);
   const decisionContentRef = useRef<HTMLDivElement>(null);
 
   const chatEndRef = useRef<HTMLDivElement>(null);
@@ -221,6 +226,23 @@ const App = () => {
     };
     return () => { delete (window as any).__openDecision; };
   }, []);
+
+  // Scroll to active search match in decision modal
+  useEffect(() => {
+    if (!decisionContentRef.current || !decisionSearchTerm || decisionSearchTerm.length < 2) return;
+    const timer = setTimeout(() => {
+      const marks = decisionContentRef.current?.querySelectorAll('mark[data-match]');
+      if (marks && marks.length > 0 && decisionSearchIndex < marks.length) {
+        marks[decisionSearchIndex]?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+    }, 50);
+    return () => clearTimeout(timer);
+  }, [decisionSearchIndex, decisionSearchTerm]);
+
+  // Reset search index when search term changes
+  useEffect(() => {
+    setDecisionSearchIndex(0);
+  }, [decisionSearchTerm]);
 
   useEffect(() => {
     setGeneratedContent("");
@@ -251,6 +273,9 @@ const App = () => {
       if (search && search.trim()) {
         params.set('search', search.trim());
       }
+      if (filterRuling) params.set('ruling', filterRuling);
+      if (filterType) params.set('tip_contestatie', filterType);
+      if (filterYear) params.set('year', filterYear);
       const response = await fetch(`/api/v1/decisions/?${params}`);
       if (response.ok) {
         const data = await response.json();
@@ -269,13 +294,13 @@ const App = () => {
     fetchDecisions(1);
   }, []);
 
-  // Debounced search for Data Lake
+  // Debounced search for Data Lake (triggers on search or filter change)
   useEffect(() => {
     const timer = setTimeout(() => {
       fetchDecisions(1, fileSearch);
     }, 300);
     return () => clearTimeout(timer);
-  }, [fileSearch]);
+  }, [fileSearch, filterRuling, filterType, filterYear]);
 
   // --- File Management ---
 
@@ -879,16 +904,41 @@ const App = () => {
           </div>
         </div>
 
-        <div className="p-4 border-b border-slate-200 bg-white shrink-0">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-            <input
-              type="text"
-              className="w-full pl-10 pr-4 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none"
-              placeholder="Caută după număr decizie, contestator, autoritate, cod critică..."
-              value={fileSearch}
-              onChange={(e) => setFileSearch(e.target.value)}
-            />
+        {/* Search + Filters Bar */}
+        <div className="px-6 py-3 border-b border-slate-200 bg-white shrink-0">
+          <div className="flex items-center gap-3">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+              <input
+                type="text"
+                className="w-full pl-9 pr-4 py-1.5 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                placeholder="Caută după număr decizie, contestator, autoritate, CPV..."
+                value={fileSearch}
+                onChange={(e) => setFileSearch(e.target.value)}
+              />
+            </div>
+            <select value={filterRuling} onChange={(e) => setFilterRuling(e.target.value)} className="text-xs border border-slate-300 rounded-lg px-2 py-1.5 bg-white text-slate-700 focus:ring-2 focus:ring-blue-500 outline-none">
+              <option value="">Soluție: Toate</option>
+              <option value="ADMIS">Admis</option>
+              <option value="ADMIS_PARTIAL">Admis Parțial</option>
+              <option value="RESPINS">Respins</option>
+            </select>
+            <select value={filterType} onChange={(e) => setFilterType(e.target.value)} className="text-xs border border-slate-300 rounded-lg px-2 py-1.5 bg-white text-slate-700 focus:ring-2 focus:ring-blue-500 outline-none">
+              <option value="">Tip: Toate</option>
+              <option value="documentatie">Documentație</option>
+              <option value="rezultat">Rezultat</option>
+            </select>
+            <select value={filterYear} onChange={(e) => setFilterYear(e.target.value)} className="text-xs border border-slate-300 rounded-lg px-2 py-1.5 bg-white text-slate-700 focus:ring-2 focus:ring-blue-500 outline-none">
+              <option value="">An: Toate</option>
+              {Array.from({length: 6}, (_, i) => 2025 - i).map(y => (
+                <option key={y} value={String(y)}>{y}</option>
+              ))}
+            </select>
+            {(filterRuling || filterType || filterYear || fileSearch) && (
+              <button onClick={() => { setFilterRuling(""); setFilterType(""); setFilterYear(""); setFileSearch(""); }} className="text-xs text-blue-600 hover:text-blue-800 font-medium whitespace-nowrap">
+                Resetează
+              </button>
+            )}
           </div>
         </div>
 
@@ -901,61 +951,76 @@ const App = () => {
           ) : (
           <div className="grid grid-cols-1 gap-2">
             {apiDecisions.map((dec: any) => (
-              <div key={dec.id} className="group flex items-start justify-between p-4 rounded-lg border bg-white border-slate-200 hover:border-blue-300 hover:shadow-sm transition-all cursor-pointer"
+              <div key={dec.id} className="group p-4 rounded-lg border bg-white border-slate-200 hover:border-blue-300 hover:shadow-sm transition-all cursor-pointer"
                    onClick={() => openDecision(`BO${dec.an_bo}_${dec.numar_bo}`)}>
-                <div className="flex items-start gap-4 flex-1 min-w-0">
-                  <div className={`p-2 rounded shrink-0 ${
+                <div className="flex items-start gap-4">
+                  <div className={`p-2 rounded shrink-0 mt-0.5 ${
                     dec.solutie_contestatie === 'ADMIS' ? 'bg-green-50 text-green-600' :
                     dec.solutie_contestatie === 'RESPINS' ? 'bg-red-50 text-red-600' :
                     dec.solutie_contestatie === 'ADMIS_PARTIAL' ? 'bg-yellow-50 text-yellow-600' :
                     'bg-blue-50 text-blue-600'
                   }`}>
-                    <FileText size={20} />
+                    <FileText size={18} />
                   </div>
                   <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-3 mb-1">
-                      <span className="text-sm font-bold text-slate-800 font-mono">
-                        BO{dec.an_bo}_{dec.numar_bo}
-                      </span>
-                      <span className={`text-[10px] px-2 py-0.5 rounded font-medium border ${
-                        dec.solutie_contestatie === 'ADMIS' ? 'bg-green-100 text-green-700 border-green-200' :
-                        dec.solutie_contestatie === 'ADMIS_PARTIAL' ? 'bg-yellow-100 text-yellow-700 border-yellow-200' :
-                        dec.solutie_contestatie === 'RESPINS' ? 'bg-red-100 text-red-700 border-red-200' :
-                        'bg-slate-100 text-slate-600 border-slate-200'
-                      }`}>
-                        {dec.solutie_contestatie === 'ADMIS' ? 'Admis' :
-                         dec.solutie_contestatie === 'ADMIS_PARTIAL' ? 'Admis Parțial' :
-                         dec.solutie_contestatie === 'RESPINS' ? 'Respins' : dec.solutie_contestatie || 'N/A'}
-                      </span>
-                      <span className={`text-[10px] px-2 py-0.5 rounded font-medium border ${
-                        dec.tip_contestatie === 'documentatie'
-                          ? 'bg-purple-50 text-purple-700 border-purple-200'
-                          : 'bg-orange-50 text-orange-700 border-orange-200'
-                      }`}>
-                        {dec.tip_contestatie === 'documentatie' ? 'Documentație' : 'Rezultat'}
-                      </span>
+                    {/* Row 1: BO + date on left, ruling + type badges on right */}
+                    <div className="flex items-center justify-between mb-1">
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-bold text-slate-800 font-mono">
+                          BO{dec.an_bo}_{dec.numar_bo}
+                        </span>
+                        {dec.data_decizie && (
+                          <span className="text-[11px] text-slate-400">
+                            · {new Date(dec.data_decizie).toLocaleDateString('ro-RO')}
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <span className={`text-[10px] px-2 py-0.5 rounded font-medium border ${
+                          dec.solutie_contestatie === 'ADMIS' ? 'bg-green-100 text-green-700 border-green-200' :
+                          dec.solutie_contestatie === 'ADMIS_PARTIAL' ? 'bg-yellow-100 text-yellow-700 border-yellow-200' :
+                          dec.solutie_contestatie === 'RESPINS' ? 'bg-red-100 text-red-700 border-red-200' :
+                          'bg-slate-100 text-slate-600 border-slate-200'
+                        }`}>
+                          {dec.solutie_contestatie === 'ADMIS' ? 'Admis' :
+                           dec.solutie_contestatie === 'ADMIS_PARTIAL' ? 'Admis Parțial' :
+                           dec.solutie_contestatie === 'RESPINS' ? 'Respins' : dec.solutie_contestatie || 'N/A'}
+                        </span>
+                        <span className={`text-[10px] px-2 py-0.5 rounded font-medium border ${
+                          dec.tip_contestatie === 'documentatie'
+                            ? 'bg-purple-50 text-purple-700 border-purple-200'
+                            : 'bg-orange-50 text-orange-700 border-orange-200'
+                        }`}>
+                          {dec.tip_contestatie === 'documentatie' ? 'Documentație' : 'Rezultat'}
+                        </span>
+                      </div>
                     </div>
 
+                    {/* Row 2: CPV */}
                     <p className="text-xs text-slate-600 mb-1">
                       <span className="font-medium text-slate-500">CPV:</span>{' '}
                       {dec.cod_cpv || 'N/A'}{dec.cpv_descriere ? ` — ${dec.cpv_descriere}` : ''}
                     </p>
 
-                    <p className="text-xs text-slate-500 truncate">
-                      {dec.contestator && dec.autoritate_contractanta
-                        ? `${dec.contestator} vs. ${dec.autoritate_contractanta}`
-                        : dec.contestator || dec.autoritate_contractanta || 'Părți necunoscute'}
-                    </p>
+                    {/* Row 3: Summary snippet */}
+                    {dec.rezumat && (
+                      <p className="text-xs text-slate-400 mb-1.5 line-clamp-2 leading-relaxed">
+                        {dec.rezumat}
+                      </p>
+                    )}
 
-                    <div className="flex gap-1.5 mt-2 flex-wrap">
+                    {/* Row 4: Criticism codes + parties */}
+                    <div className="flex items-center gap-1.5 flex-wrap">
                       {dec.coduri_critici?.map((cod: string) => (
                         <span key={cod} className="text-[10px] bg-blue-50 text-blue-700 px-1.5 py-0.5 rounded border border-blue-200 font-mono">
                           {cod}
                         </span>
                       ))}
-                      {dec.data_decizie && (
-                        <span className="text-[10px] bg-slate-50 text-slate-500 px-1.5 py-0.5 rounded border border-slate-200">
-                          {new Date(dec.data_decizie).toLocaleDateString('ro-RO')}
+                      {(dec.contestator || dec.autoritate_contractanta) && (
+                        <span className="text-[10px] text-slate-400 ml-1">
+                          {dec.contestator && dec.autoritate_contractanta
+                            ? `${dec.contestator} vs. ${dec.autoritate_contractanta}`
+                            : dec.contestator || dec.autoritate_contractanta}
                         </span>
                       )}
                     </div>
@@ -1512,7 +1577,13 @@ const App = () => {
                 <Loader2 size={32} className="animate-spin text-blue-600" />
                 <span className="ml-3 text-slate-600">Se încarcă decizia...</span>
               </div>
-            ) : viewingDecision && (
+            ) : viewingDecision && (() => {
+              // Compute match count for search navigation
+              const searchActive = decisionSearchTerm && decisionSearchTerm.length >= 2;
+              const safeSearch = searchActive ? decisionSearchTerm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') : '';
+              const matchCount = searchActive ? ((viewingDecision.content || "").match(new RegExp(safeSearch, 'gi')) || []).length : 0;
+
+              return (
               <>
                 {/* Header */}
                 <div className="flex items-start justify-between gap-4 p-6 border-b border-slate-200 shrink-0">
@@ -1533,35 +1604,51 @@ const App = () => {
                           {viewingDecision.metadata.ruling}
                         </span>
                       )}
-                      {viewingDecision.metadata?.parties?.contestator && (
-                        <span className="text-xs bg-slate-50 text-slate-600 px-2 py-1 rounded border border-slate-200">
-                          Contestator: {viewingDecision.metadata.parties.contestator}
-                        </span>
-                      )}
                     </div>
                   </div>
-                  <div className="flex items-center gap-2 shrink-0">
-                    <div className="relative">
-                      <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
-                      <input
-                        type="text"
-                        placeholder="Caută în decizie..."
-                        value={decisionSearchTerm}
-                        onChange={(e) => setDecisionSearchTerm(e.target.value)}
-                        className="pl-8 pr-8 py-1.5 text-sm border border-slate-200 rounded-lg w-56 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      />
+                  <div className="flex items-center gap-1 shrink-0">
+                    <div className="flex items-center border border-slate-200 rounded-lg overflow-hidden">
+                      <div className="relative">
+                        <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                        <input
+                          type="text"
+                          placeholder="Caută în decizie..."
+                          value={decisionSearchTerm}
+                          onChange={(e) => setDecisionSearchTerm(e.target.value)}
+                          className="pl-8 pr-2 py-1.5 text-sm w-44 focus:outline-none border-none"
+                        />
+                      </div>
+                      {searchActive && (
+                        <span className="text-xs text-slate-500 px-2 whitespace-nowrap tabular-nums">
+                          {matchCount > 0 ? `${decisionSearchIndex + 1}/${matchCount}` : '0/0'}
+                        </span>
+                      )}
+                      <button
+                        onClick={() => { if (matchCount > 0) setDecisionSearchIndex(prev => prev <= 0 ? matchCount - 1 : prev - 1); }}
+                        disabled={!searchActive || matchCount === 0}
+                        className="p-1.5 hover:bg-slate-100 disabled:opacity-30 disabled:cursor-not-allowed border-l border-slate-200"
+                      >
+                        <ChevronUp size={14} className="text-slate-500" />
+                      </button>
+                      <button
+                        onClick={() => { if (matchCount > 0) setDecisionSearchIndex(prev => prev >= matchCount - 1 ? 0 : prev + 1); }}
+                        disabled={!searchActive || matchCount === 0}
+                        className="p-1.5 hover:bg-slate-100 disabled:opacity-30 disabled:cursor-not-allowed border-l border-slate-200"
+                      >
+                        <ChevronDown size={14} className="text-slate-500" />
+                      </button>
                       {decisionSearchTerm && (
                         <button
                           onClick={() => setDecisionSearchTerm("")}
-                          className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                          className="p-1.5 hover:bg-slate-100 border-l border-slate-200"
                         >
-                          <X size={14} />
+                          <X size={14} className="text-slate-400" />
                         </button>
                       )}
                     </div>
                     <button
-                      onClick={() => { setDecisionSearchTerm(""); setViewingDecision(null); }}
-                      className="p-2 hover:bg-slate-100 rounded-lg transition text-slate-400 hover:text-slate-600"
+                      onClick={() => { setDecisionSearchTerm(""); setDecisionSearchIndex(0); setViewingDecision(null); }}
+                      className="p-2 hover:bg-slate-100 rounded-lg transition text-slate-400 hover:text-slate-600 ml-1"
                     >
                       <X size={20} />
                     </button>
@@ -1576,10 +1663,16 @@ const App = () => {
                       __html: (() => {
                         const raw = viewingDecision.content || "";
                         const escaped = raw.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-                        if (!decisionSearchTerm || decisionSearchTerm.length < 2) return escaped;
-                        const safeSearch = decisionSearchTerm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                        if (!searchActive) return escaped;
                         const regex = new RegExp(`(${safeSearch})`, 'gi');
-                        return escaped.replace(regex, '<mark style="background:#fef08a;padding:1px 2px;border-radius:2px">$1</mark>');
+                        let idx = 0;
+                        return escaped.replace(regex, (match: string) => {
+                          const isActive = idx === decisionSearchIndex;
+                          const style = isActive
+                            ? 'background:#fb923c;color:white;padding:1px 2px;border-radius:2px'
+                            : 'background:#fef08a;padding:1px 2px;border-radius:2px';
+                          return `<mark data-match="${idx++}" style="${style}">${match}</mark>`;
+                        });
                       })()
                     }}
                   />
@@ -1589,21 +1682,17 @@ const App = () => {
                 <div className="p-4 border-t border-slate-200 flex justify-between items-center shrink-0">
                   <span className="text-xs text-slate-400">
                     {viewingDecision.content?.length?.toLocaleString()} caractere
-                    {decisionSearchTerm && decisionSearchTerm.length >= 2 && (() => {
-                      const safeSearch = decisionSearchTerm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-                      const matches = (viewingDecision.content || "").match(new RegExp(safeSearch, 'gi'));
-                      return matches ? ` · ${matches.length} rezultate` : ' · 0 rezultate';
-                    })()}
                   </span>
                   <button
-                    onClick={() => { setDecisionSearchTerm(""); setViewingDecision(null); }}
+                    onClick={() => { setDecisionSearchTerm(""); setDecisionSearchIndex(0); setViewingDecision(null); }}
                     className="px-4 py-2 bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200 transition text-sm font-medium"
                   >
                     Închide
                   </button>
                 </div>
               </>
-            )}
+              );
+            })()}
           </div>
         </div>
       )}
