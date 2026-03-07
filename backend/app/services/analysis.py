@@ -99,7 +99,7 @@ class DecisionAnalysisService:
     """Service for extracting structured argumentation from decision text."""
 
     def __init__(self, llm_provider: Optional[GeminiProvider] = None):
-        self.llm = llm_provider or GeminiProvider(model="gemini-3-flash-preview")
+        self.llm = llm_provider or GeminiProvider(model="gemini-3.1-pro-preview")
 
     async def analyze_decision(
         self,

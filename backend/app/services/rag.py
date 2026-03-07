@@ -49,7 +49,7 @@ class RAGService:
         Args:
             llm_provider: Optional LLM provider. If not provided, creates new GeminiProvider.
         """
-        self.llm = llm_provider or GeminiProvider(model="gemini-3-flash-preview")
+        self.llm = llm_provider or GeminiProvider(model="gemini-3.1-pro-preview")
         self.embedding_service = EmbeddingService(llm_provider=self.llm)
 
     async def search_by_vector(
@@ -1032,57 +1032,50 @@ class RAGService:
 
         return suggestions[:4]
 
-    async def generate_response(
+    async def prepare_context(
         self,
         query: str,
         session: AsyncSession,
         conversation_history: list[dict] | None = None,
         max_decisions: int = 5,
-    ) -> tuple[str, list[Citation], float, list[str]]:
-        """Generate a response to user query using RAG.
-
-        Args:
-            query: User's question.
-            session: Database session.
-            conversation_history: Optional previous conversation messages.
-            max_decisions: Maximum number of decisions to retrieve.
+    ) -> tuple[list[str], str, list[Citation], float, list[str]]:
+        """Prepare RAG context without generating the LLM response.
 
         Returns:
-            Tuple of (response_text, citations, confidence, suggested_questions).
+            Tuple of (contexts, system_prompt, citations, confidence, suggested_questions).
+            Returns None for contexts/system_prompt if no results found.
         """
-        logger.info("generating_rag_response", query=query)
-
-        # 1. Search legislation fragments (parallel with decision search)
         legislation_fragments = await self._search_legislation_fragments(
             query, session, limit=5
         )
-
-        # 2. Retrieve relevant decisions (vector search with keyword fallback)
         decisions, matched_chunks = await self.search_decisions(
             query, session, limit=max_decisions
         )
 
         if not decisions and not legislation_fragments:
-            logger.warning("no_results_found", query=query)
-            return (
-                "Nu am găsit informații relevante pentru această întrebare. "
-                "Încearcă să reformulezi întrebarea sau să folosești termeni mai specifici.",
-                [],
-                0.0,
-                ["Ce decizii CNSC sunt disponibile?", "Arată-mi toate deciziile"],
-            )
+            return None, None, [], 0.0, ["Ce decizii CNSC sunt disponibile?", "Arată-mi toate deciziile"]
 
-        # 2. Build context — legislation first, then decisions
         contexts = []
         if legislation_fragments:
             contexts.extend(self._build_legislation_context(legislation_fragments))
         if decisions:
             contexts.extend(self._build_context(decisions, matched_chunks))
 
-        # 3. Build system prompt
-        has_legislation = bool(legislation_fragments)
-        has_decisions = bool(decisions)
+        system_prompt = self._build_system_prompt(
+            bool(legislation_fragments), bool(decisions)
+        )
+        citations = self._extract_citations("", decisions, matched_chunks)
+        confidence = self._calculate_confidence(decisions, matched_chunks, max_decisions)
+        if legislation_fragments and not decisions:
+            confidence = max(confidence, 0.9)
+        elif legislation_fragments:
+            confidence = min(1.0, confidence + 0.1)
+        suggested = self._generate_suggested_questions(decisions)
 
+        return contexts, system_prompt, citations, confidence, suggested
+
+    def _build_system_prompt(self, has_legislation: bool, has_decisions: bool) -> str:
+        """Build the system prompt based on available context types."""
         system_prompt = """Ești un consultant senior în achiziții publice specializat în legislația și jurisprudența CNSC (Consiliul Național de Soluționare a Contestațiilor) din România.
 
 Sarcina ta este să răspunzi la întrebări folosind EXCLUSIV informațiile din contextul furnizat mai jos."""
@@ -1125,43 +1118,62 @@ Formatare:
 - Folosește titluri (## sau ###) pentru secțiuni distincte când răspunsul este lung
 - Fiecare argument sau decizie trebuie să fie pe un paragraf separat
 
-Răspunde în limba română, profesional și precis."""
+IMPORTANT pentru răspunsuri lungi:
+- Fii CONCIS și SUBSTANȚIAL — nu repeta aceleași idei în formulări diferite
+- Fiecare paragraf trebuie să aducă informație nouă
+- Preferă citatele exacte din decizii în loc de parafraze vagi
+- Când sunt multe decizii relevante, grupează-le tematic, nu le enumera individual cu texte repetitive
+- Evită formulări generice de tipul „conform jurisprudenței constante" — citează decizii concrete
 
-        # 4. Generate response with LLM
+Răspunde în limba română, profesional și precis."""
+        return system_prompt
+
+    async def generate_response(
+        self,
+        query: str,
+        session: AsyncSession,
+        conversation_history: list[dict] | None = None,
+        max_decisions: int = 5,
+    ) -> tuple[str, list[Citation], float, list[str]]:
+        """Generate a response to user query using RAG.
+
+        Args:
+            query: User's question.
+            session: Database session.
+            conversation_history: Optional previous conversation messages.
+            max_decisions: Maximum number of decisions to retrieve.
+
+        Returns:
+            Tuple of (response_text, citations, confidence, suggested_questions).
+        """
+        logger.info("generating_rag_response", query=query)
+
+        contexts, system_prompt, citations, confidence, suggested_questions = await self.prepare_context(
+            query, session, conversation_history, max_decisions
+        )
+
+        if contexts is None:
+            return (
+                "Nu am găsit informații relevante pentru această întrebare. "
+                "Încearcă să reformulezi întrebarea sau să folosești termeni mai specifici.",
+                [],
+                0.0,
+                suggested_questions,
+            )
+
         try:
             response_text = await self.llm.complete(
                 prompt=query,
                 context=contexts,
                 system_prompt=system_prompt,
                 temperature=0.1,
-                max_tokens=8192,
+                max_tokens=12288,
             )
-
-            # 5. Extract citations
-            citations = self._extract_citations(
-                response_text, decisions, matched_chunks
-            )
-
-            # 6. Calculate confidence (boost when legislation was found)
-            confidence = self._calculate_confidence(
-                decisions, matched_chunks, max_decisions
-            )
-            if legislation_fragments and not decisions:
-                # Pure legislation query — high confidence if exact match
-                confidence = max(confidence, 0.9)
-            elif legislation_fragments:
-                # Mixed — boost slightly
-                confidence = min(1.0, confidence + 0.1)
-
-            # 7. Generate suggested follow-up questions
-            suggested_questions = self._generate_suggested_questions(decisions)
 
             logger.info(
                 "rag_response_generated",
-                decisions_used=len(decisions),
                 citations=len(citations),
                 confidence=confidence,
-                used_vector_search=bool(matched_chunks),
             )
 
             return response_text, citations, confidence, suggested_questions

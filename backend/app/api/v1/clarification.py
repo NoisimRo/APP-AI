@@ -21,7 +21,7 @@ logger = get_logger(__name__)
 class ClarificationRequest(BaseModel):
     """Request payload for clarification generation."""
 
-    clause: str = Field(..., min_length=1, max_length=50000)
+    clause: str = Field(..., min_length=1, max_length=200000)
 
 
 class ClarificationResponse(BaseModel):
@@ -39,7 +39,7 @@ async def generate_clarification(
     """Generate a formal clarification request with RAG jurisprudence."""
     logger.info("clarification_request", clause_length=len(request.clause))
 
-    llm = GeminiProvider(model="gemini-2.5-flash")
+    llm = GeminiProvider(model="gemini-3.1-pro-preview")
     embedding_service = EmbeddingService(llm_provider=llm)
 
     # Step 1: Search for relevant CNSC jurisprudence via vector search
@@ -158,7 +158,7 @@ Redactează în limba română, limbaj formal și profesionist."""
         response_text = await llm.complete(
             prompt=prompt,
             temperature=0.3,
-            max_tokens=4096,
+            max_tokens=8192,
         )
 
         logger.info(

@@ -21,7 +21,7 @@ class GeminiProvider(LLMProvider):
 
     def __init__(
         self,
-        model: str = "gemini-2.5-flash",
+        model: str = "gemini-3.1-pro-preview",
         embedding_model: str = "gemini-embedding-001",
     ):
         self._model_name = model

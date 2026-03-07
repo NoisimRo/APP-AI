@@ -52,7 +52,7 @@ class RedFlagsAnalyzer:
     """
 
     def __init__(self, llm_provider: Optional[GeminiProvider] = None):
-        self.llm = llm_provider or GeminiProvider(model="gemini-2.5-flash")
+        self.llm = llm_provider or GeminiProvider(model="gemini-3.1-pro-preview")
         self.embedding_service = EmbeddingService(llm_provider=self.llm)
 
     # =========================================================================

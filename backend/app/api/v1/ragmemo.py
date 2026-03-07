@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.logging import get_logger
 from app.db.session import get_session
 from app.services.rag import RAGService
+from app.services.llm.streaming import create_sse_response
 
 router = APIRouter()
 logger = get_logger(__name__)
@@ -87,3 +88,39 @@ async def generate_rag_memo(
             status_code=500,
             detail=f"Eroare la generarea memo-ului: {str(e)}"
         )
+
+
+@router.post("/stream")
+async def generate_rag_memo_stream(
+    request: RAGMemoRequest,
+    session: AsyncSession = Depends(get_session),
+):
+    """Stream a legal memo via SSE."""
+    logger.info("rag_memo_stream_request", topic=request.topic)
+
+    rag = RAGService()
+    query = f"Generează un memo juridic despre: {request.topic}. Include jurisprudență CNSC relevantă, argumente cheie și recomandări."
+
+    contexts, system_prompt, citations, confidence, _ = await rag.prepare_context(
+        query=query, session=session, conversation_history=None, max_decisions=request.max_decisions
+    )
+
+    if contexts is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Nu am găsit jurisprudență relevantă pentru acest subiect.",
+        )
+
+    return await create_sse_response(
+        llm=rag.llm,
+        prompt=query,
+        context=contexts,
+        system_prompt=system_prompt,
+        temperature=0.1,
+        max_tokens=12288,
+        metadata={
+            "citations": [{"decision_id": c.decision_id, "text": c.text, "verified": c.verified} for c in citations],
+            "confidence": confidence,
+            "decisions_used": len(citations),
+        },
+    )

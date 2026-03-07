@@ -25,7 +25,7 @@ class EmbeddingService:
     """Service for generating and managing vector embeddings."""
 
     def __init__(self, llm_provider: Optional[GeminiProvider] = None):
-        self.llm = llm_provider or GeminiProvider(model="gemini-3-flash-preview")
+        self.llm = llm_provider or GeminiProvider(model="gemini-3.1-pro-preview")
 
     # -------------------------------------------------------------------------
     # Text composition (chunking)

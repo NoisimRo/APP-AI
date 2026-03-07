@@ -62,6 +62,44 @@ interface Message {
 
 const generateId = () => Math.random().toString(36).substr(2, 9);
 
+const fetchStream = async (
+  url: string,
+  body: any,
+  onChunk: (text: string) => void,
+  onDone: (meta: any) => void,
+  onError: (error: string) => void,
+) => {
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  if (!response.ok) {
+    onError(`HTTP ${response.status}`);
+    return;
+  }
+  const reader = response.body!.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    const parts = buffer.split('\n\n');
+    buffer = parts.pop()!;
+    for (const part of parts) {
+      if (part.startsWith('data: ')) {
+        try {
+          const data = JSON.parse(part.slice(6));
+          if (data.error) { onError(data.error); return; }
+          if (data.text) onChunk(data.text);
+          if (data.done) onDone(data);
+        } catch { /* ignore malformed SSE */ }
+      }
+    }
+  }
+};
+
 const parseFilenameMetadata = (filename: string) => {
   // Expected: BO2025 - [Bulletin] - [Critics] - [CPV] - [A/R].txt/pdf
   const metadata: UploadedFile['metadata'] = { ruling: 'Unknown' };
@@ -406,41 +444,58 @@ const App = () => {
     setChatInput("");
     setIsLoading(true);
 
+    // Add placeholder for streaming response
+    setChatMessages(prev => [...prev, { role: 'model', text: '' }]);
+
     try {
-      // Call backend API instead of Gemini directly
-      const response = await fetch('/api/v1/chat/', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
+      let accumulated = '';
+      await fetchStream(
+        '/api/v1/chat/stream',
+        {
           message: userMsg,
           history: chatMessages.map(m => ({
             role: m.role === 'model' ? 'assistant' : m.role,
             content: m.text
           }))
-        })
-      });
-
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-
-      const data = await response.json();
-
-      // Add response with citations if available
-      let responseText = data.message;
-      if (data.citations && data.citations.length > 0) {
-        responseText += "\n\n📚 **Surse:** " + data.citations.map((c: any) => `[[${c.decision_id}]]`).join(" ");
-      }
-
-      setChatMessages(prev => [...prev, { role: 'model', text: responseText }]);
+        },
+        (chunk) => {
+          accumulated += chunk;
+          setChatMessages(prev => {
+            const updated = [...prev];
+            updated[updated.length - 1] = { role: 'model', text: accumulated };
+            return updated;
+          });
+        },
+        (meta) => {
+          // Append citations on completion
+          if (meta.citations && meta.citations.length > 0) {
+            const sources = "\n\n📚 **Surse:** " + meta.citations.map((c: any) => `[[${c.decision_id}]]`).join(" ");
+            accumulated += sources;
+            setChatMessages(prev => {
+              const updated = [...prev];
+              updated[updated.length - 1] = { role: 'model', text: accumulated };
+              return updated;
+            });
+          }
+        },
+        (error) => {
+          setChatMessages(prev => {
+            const updated = [...prev];
+            updated[updated.length - 1] = { role: 'model', text: `Eroare: ${error}` };
+            return updated;
+          });
+        },
+      );
     } catch (err) {
       console.error(err);
-      setChatMessages(prev => [...prev, {
-        role: 'model',
-        text: "Eroare la procesarea cererii. Asigură-te că backend-ul este pornit și conectat la baza de date."
-      }]);
+      setChatMessages(prev => {
+        const updated = [...prev];
+        updated[updated.length - 1] = {
+          role: 'model',
+          text: "Eroare la procesarea cererii. Asigură-te că backend-ul este pornit și conectat la baza de date."
+        };
+        return updated;
+      });
     } finally {
       setIsLoading(false);
     }
@@ -452,23 +507,25 @@ const App = () => {
     setGeneratedDecisionRefs([]);
 
     try {
-      const response = await fetch('/api/v1/drafter/', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
+      await fetchStream(
+        '/api/v1/drafter/stream',
+        {
           facts: drafterContext.facts,
           authority_args: drafterContext.authorityArgs,
           legal_grounds: drafterContext.legalGrounds,
-        })
-      });
-
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-
-      const data = await response.json();
-      setGeneratedContent(data.content || "");
-      setGeneratedDecisionRefs(data.decision_refs || []);
+        },
+        (chunk) => {
+          setGeneratedContent(prev => prev + chunk);
+        },
+        (meta) => {
+          if (meta.decision_refs) {
+            setGeneratedDecisionRefs(meta.decision_refs);
+          }
+        },
+        (error) => {
+          setGeneratedContent(`Eroare: ${error}`);
+        },
+      );
     } catch (err) {
       console.error(err);
       setGeneratedContent("Eroare la generare. Verifică că backend-ul este pornit.");
@@ -640,25 +697,22 @@ const App = () => {
     setGeneratedContent("");
 
     try {
-      // Call backend RAG Memo API
-      const response = await fetch('/api/v1/ragmemo/', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
+      await fetchStream(
+        '/api/v1/ragmemo/stream',
+        {
           topic: memoTopic,
-          max_decisions: 5
-        })
-      });
-
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-
-      const data = await response.json();
-      setGeneratedContent(data.memo);
-
+          max_decisions: 5,
+        },
+        (chunk) => {
+          setGeneratedContent(prev => prev + chunk);
+        },
+        (_meta) => {
+          // Memo content is already streamed, metadata not used in UI
+        },
+        (error) => {
+          setGeneratedContent(`Eroare: ${error}`);
+        },
+      );
     } catch (err) {
       console.error(err);
       setGeneratedContent("Eroare la generarea memo-ului. Verifică că backend-ul este pornit și conectat la baza de date.");
@@ -1236,7 +1290,7 @@ const App = () => {
             <Send size={18} />
           </button>
         </div>
-        <p className="text-center text-xs text-slate-400 mt-2">Gemini 3 Flash poate face greșeli. Verifică informațiile importante.</p>
+        <p className="text-center text-xs text-slate-400 mt-2">Gemini Pro poate face greșeli. Verifică informațiile importante.</p>
       </div>
     </div>
   );
