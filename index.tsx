@@ -28,7 +28,8 @@ import {
   RefreshCw,
   FolderInput,
   X,
-  Eye
+  Eye,
+  ChevronDown
 } from "lucide-react";
 
 // --- Types ---
@@ -1281,48 +1282,67 @@ const App = () => {
                           }
                           size={20}
                         />
-                        <h4 className="font-bold text-slate-800">{flag.category}</h4>
+                        <span
+                          className={`text-xs px-3 py-1 rounded-full font-bold ${
+                            flag.severity === 'CRITICĂ'
+                              ? 'bg-red-100 text-red-700'
+                              : flag.severity === 'MEDIE'
+                              ? 'bg-orange-100 text-orange-700'
+                              : 'bg-yellow-100 text-yellow-700'
+                          }`}
+                        >
+                          {flag.severity}
+                        </span>
                       </div>
-                      <span
-                        className={`text-xs px-3 py-1 rounded-full font-bold ${
-                          flag.severity === 'CRITICĂ'
-                            ? 'bg-red-100 text-red-700'
-                            : flag.severity === 'MEDIE'
-                            ? 'bg-orange-100 text-orange-700'
-                            : 'bg-yellow-100 text-yellow-700'
-                        }`}
-                      >
-                        {flag.severity}
-                      </span>
                     </div>
 
                     <div className="space-y-3 text-sm">
                       <div>
-                        <p className="font-semibold text-slate-700 mb-1">📝 Clauză Problematică:</p>
+                        <p className="font-semibold text-slate-700 mb-1">Clauza Problematica:</p>
                         <p className="bg-slate-50 p-3 rounded border border-slate-200 italic text-slate-600">
                           "{flag.clause}"
                         </p>
                       </div>
 
                       <div>
-                        <p className="font-semibold text-slate-700 mb-1">⚠️ Problemă:</p>
+                        <p className="font-semibold text-slate-700 mb-1">Problema:</p>
                         <p className="text-slate-600">{flag.issue}</p>
                       </div>
 
-                      <div>
-                        <p className="font-semibold text-slate-700 mb-1">⚖️ Referință Legală:</p>
-                        <p className="text-slate-600 font-mono text-xs">{flag.legal_reference}</p>
-                      </div>
+                      {flag.legal_references && flag.legal_references.length > 0 && (
+                        <div>
+                          <p className="font-semibold text-slate-700 mb-1">Temei Legal:</p>
+                          <div className="space-y-2">
+                            {flag.legal_references.map((ref: any, refIdx: number) => (
+                              <details key={refIdx} className="group">
+                                <summary className="cursor-pointer flex items-center gap-2 text-slate-700 hover:text-blue-700">
+                                  <span className="font-mono text-xs bg-emerald-50 text-emerald-700 px-2 py-1 rounded border border-emerald-200">
+                                    {ref.citare} din {ref.act_normativ}
+                                  </span>
+                                  <ChevronDown size={14} className="group-open:rotate-180 transition-transform text-slate-400" />
+                                </summary>
+                                {ref.text_extras && (
+                                  <p className="mt-1 ml-2 p-2 bg-emerald-50/50 rounded text-xs text-slate-600 border-l-2 border-emerald-300">
+                                    {ref.text_extras}
+                                  </p>
+                                )}
+                              </details>
+                            ))}
+                          </div>
+                        </div>
+                      )}
 
-                      <div>
-                        <p className="font-semibold text-slate-700 mb-1">✅ Recomandare:</p>
-                        <p className="text-slate-600">{flag.recommendation}</p>
-                      </div>
+                      {flag.recommendation && (
+                        <div>
+                          <p className="font-semibold text-slate-700 mb-1">Recomandare:</p>
+                          <p className="text-slate-600">{flag.recommendation}</p>
+                        </div>
+                      )}
 
                       {flag.decision_refs && flag.decision_refs.length > 0 && (
                         <div>
-                          <p className="font-semibold text-slate-700 mb-1">📚 Jurisprudență CNSC:</p>
-                          <div className="flex gap-2">
+                          <p className="font-semibold text-slate-700 mb-1">Jurisprudenta CNSC:</p>
+                          <div className="flex gap-2 flex-wrap">
                             {flag.decision_refs.map((ref: string) => (
                               <span
                                 key={ref}
@@ -1333,6 +1353,13 @@ const App = () => {
                             ))}
                           </div>
                         </div>
+                      )}
+
+                      {(!flag.legal_references || flag.legal_references.length === 0) &&
+                       (!flag.decision_refs || flag.decision_refs.length === 0) && (
+                        <p className="text-xs text-slate-400 italic">
+                          Nu s-au gasit referinte legislative sau jurisprudenta CNSC relevanta in baza de date
+                        </p>
                       )}
                     </div>
                   </div>

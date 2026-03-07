@@ -42,7 +42,10 @@ DATABASE_URL="postgresql+asyncpg://..." python scripts/generate_embeddings.py
 | `backend/app/api/v1/chat.py` | Chat API endpoint |
 | `backend/app/api/v1/decisions.py` | Decisions CRUD API |
 | `backend/app/api/v1/ragmemo.py` | RAG memo generation API |
+| `backend/app/services/redflags_analyzer.py` | Red Flags Detector (two-pass: detect → ground) |
+| `backend/app/api/v1/redflags.py` | Red Flags API endpoint |
 | `scripts/import_decisions_from_gcs.py` | GCS → database import pipeline |
+| `scripts/import_legislatie.py` | Legislation .md → DB import (alineat-level) |
 
 ## Code Conventions
 
@@ -62,7 +65,7 @@ DATABASE_URL="postgresql+asyncpg://..." python scripts/generate_embeddings.py
 ### Embedding Dimensions
 
 - **Model:** `gemini-embedding-001` (native output: 3072 dimensions, capped to 2000)
-- **DB columns:** `Vector(2000)` on `argumentare_critica`, `sectiuni_decizie`, `citate_verbatim`
+- **DB columns:** `Vector(2000)` on `argumentare_critica`, `sectiuni_decizie`, `citate_verbatim`, `articole_legislatie`
 - **Why 2000?** pgvector HNSW indexes have a 2000 dimension limit. We use `output_dimensionality=2000` in the Gemini API call. This is 2.6x better than the original 768 while keeping HNSW index support.
 - **History:** Started at 768 (text-embedding-004 convention) → tried 3072 (native) but hit pgvector HNSW limit → settled on 2000.
 - **Migration SQL** (run once, then regenerate all embeddings):
@@ -97,6 +100,26 @@ DATABASE_URL="postgresql+asyncpg://..." python scripts/generate_embeddings.py
 | `citate_verbatim` | Verbatim quotes | Yes (2000-dim) |
 | `referinte_articole` | Legal article references | No |
 | `nomenclator_cpv` | CPV codes nomenclator | No |
+| `articole_legislatie` | Legislation articles at alineat level (Red Flags grounding) | Yes (2000-dim) |
+
+### ArticoleLegislatie Fields (populated by import_legislatie.py)
+
+Stores legislation at **alineat** granularity — one row per alineat. Enables exact citations like `art. 2 alin. (2) lit. a) și b) din Legea nr. 98/2016`.
+
+- `act_normativ` - legislative act: "Legea 98/2016", "HG 395/2016" (VARCHAR 100)
+- `numar_articol` - article number as integer for sorting (INTEGER)
+- `articol` - article label: "art. 2", "art. 178" (VARCHAR 50)
+- `alineat` - alineat number: 1, 2, 3... or NULL if no alineats (INTEGER)
+- `alineat_text` - formatted: "alin. (1)", "alin. (2)" (VARCHAR 20)
+- `litere` - litere within alineat (JSON): `[{"litera": "a", "text": "nediscriminarea"}, ...]`
+- `text_integral` - full text of the alineat including litere (TEXT)
+- `citare` - canonical citation: "art. 2 alin. (2)" or "art. 1" (VARCHAR 100, UNIQUE per act)
+- `capitol` - chapter context: "I - Dispoziții generale" (VARCHAR 500)
+- `sectiune` - section context: "1 - Obiect, scop și principii" (VARCHAR 500)
+- `embedding` - Vector(2000) with HNSW index
+
+**Import:** `python scripts/import_legislatie.py --dir date-expert-app/legislatie-ap`
+**Source files:** .md files in `date-expert-app/legislatie-ap/` (Legea 98/2016, HG 395/2016, etc.)
 
 ### ArgumentareCritica Fields (populated by LLM analysis)
 
