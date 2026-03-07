@@ -3,7 +3,7 @@
 Uses RAG vector search to ground the complaint in actual CNSC jurisprudence.
 """
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -13,6 +13,7 @@ from app.db.session import get_session
 from app.models.decision import ArgumentareCritica, DecizieCNSC
 from app.services.embedding import EmbeddingService
 from app.services.llm.gemini import GeminiProvider
+from app.services.llm.streaming import create_sse_response
 
 router = APIRouter()
 logger = get_logger(__name__)
@@ -21,9 +22,9 @@ logger = get_logger(__name__)
 class DrafterRequest(BaseModel):
     """Request payload for complaint drafting."""
 
-    facts: str = Field(..., min_length=1, max_length=50000)
-    authority_args: str = Field(default="", max_length=50000)
-    legal_grounds: str = Field(default="", max_length=5000)
+    facts: str = Field(..., min_length=1, max_length=200000)
+    authority_args: str = Field(default="", max_length=200000)
+    legal_grounds: str = Field(default="", max_length=50000)
 
 
 class DrafterResponse(BaseModel):
@@ -33,23 +34,18 @@ class DrafterResponse(BaseModel):
     decision_refs: list[str] = Field(default_factory=list)
 
 
-@router.post("/", response_model=DrafterResponse)
-async def draft_complaint(
+async def _build_drafter_context(
     request: DrafterRequest,
-    session: AsyncSession = Depends(get_session),
-) -> DrafterResponse:
-    """Generate a legal complaint draft using LLM with RAG jurisprudence."""
-    logger.info(
-        "draft_complaint_request",
-        facts_length=len(request.facts),
-        has_authority_args=bool(request.authority_args),
-        has_legal_grounds=bool(request.legal_grounds),
-    )
+    session: AsyncSession,
+) -> tuple[str, list[str]]:
+    """Build drafter prompt and search for relevant jurisprudence.
 
-    llm = GeminiProvider(model="gemini-2.5-flash")
+    Returns:
+        Tuple of (prompt, decision_refs).
+    """
+    llm = GeminiProvider(model="gemini-3.1-pro-preview")
     embedding_service = EmbeddingService(llm_provider=llm)
 
-    # Step 1: Search for relevant CNSC jurisprudence via vector search
     jurisprudence_context = ""
     decision_refs: list[str] = []
 
@@ -61,7 +57,6 @@ async def draft_complaint(
         )
 
         if has_embeddings and has_embeddings > 0:
-            # Build search query from facts
             search_query = request.facts[:3000]
             query_vector = await embedding_service.embed_query(search_query)
 
@@ -78,7 +73,6 @@ async def draft_complaint(
             result = await session.execute(stmt)
             rows = result.all()
 
-            # Filter by relevance (cosine distance < 0.5)
             relevant_chunks = [
                 (row.ArgumentareCritica, row.distance)
                 for row in rows
@@ -86,7 +80,6 @@ async def draft_complaint(
             ]
 
             if relevant_chunks:
-                # Load parent decisions
                 dec_ids = list({arg.decizie_id for arg, _ in relevant_chunks})
                 dec_result = await session.execute(
                     select(DecizieCNSC).where(DecizieCNSC.id.in_(dec_ids))
@@ -94,7 +87,6 @@ async def draft_complaint(
                 decisions = {d.id: d for d in dec_result.scalars().all()}
                 decision_refs = [d.external_id for d in decisions.values()]
 
-                # Build context
                 context_parts = []
                 for arg, dist in relevant_chunks:
                     dec = decisions.get(arg.decizie_id)
@@ -127,7 +119,7 @@ async def draft_complaint(
     except Exception as e:
         logger.warning("drafter_jurisprudence_search_failed", error=str(e))
 
-    # Step 2: Build prompt with jurisprudence context
+    # Build prompt with jurisprudence context
     jurisprudence_section = ""
     if jurisprudence_context:
         jurisprudence_section = f"""
@@ -162,13 +154,42 @@ Structura obligatorie a contestației:
 
 Redactează contestația în limba română, folosind limbaj juridic formal și profesionist.
 Fiecare secțiune trebuie să fie clar delimitată cu titluri bold.
-Include referințe la articole de lege relevante."""
+Include referințe la articole de lege relevante.
+
+INSTRUCȚIUNI DE STIL:
+- Scrie SINTETIC și CLAR — fiecare propoziție trebuie să aducă valoare juridică
+- Evidențiază clar: criticile, argumentele, dovezile și jurisprudența
+- NU dilua textul cu generalități, repetiții sau vorbărie goală
+- Folosește paragrafe scurte, numerotare și titluri pentru structură clară
+- Contestația poate avea până la 15 pagini — folosește spațiul pentru SUBSTANȚĂ, nu umplutură
+- Fiecare critică trebuie să conțină: faptele relevante, norma legală încălcată, argumentația juridică și dovada
+- Citează articole de lege cu text exact când este disponibil
+- Preferă citate verbatim din jurisprudența CNSC furnizată"""
+
+    return prompt, decision_refs
+
+
+@router.post("/", response_model=DrafterResponse)
+async def draft_complaint(
+    request: DrafterRequest,
+    session: AsyncSession = Depends(get_session),
+) -> DrafterResponse:
+    """Generate a legal complaint draft using LLM with RAG jurisprudence."""
+    logger.info(
+        "draft_complaint_request",
+        facts_length=len(request.facts),
+        has_authority_args=bool(request.authority_args),
+        has_legal_grounds=bool(request.legal_grounds),
+    )
+
+    prompt, decision_refs = await _build_drafter_context(request, session)
+    llm = GeminiProvider(model="gemini-3.1-pro-preview")
 
     try:
         response_text = await llm.complete(
             prompt=prompt,
             temperature=0.3,
-            max_tokens=8192,
+            max_tokens=16384,
         )
 
         logger.info(
@@ -181,3 +202,23 @@ Include referințe la articole de lege relevante."""
     except Exception as e:
         logger.error("draft_complaint_error", error=str(e))
         raise
+
+
+@router.post("/stream")
+async def draft_complaint_stream(
+    request: DrafterRequest,
+    session: AsyncSession = Depends(get_session),
+):
+    """Stream a legal complaint draft via SSE."""
+    logger.info("draft_complaint_stream_request", facts_length=len(request.facts))
+
+    prompt, decision_refs = await _build_drafter_context(request, session)
+    llm = GeminiProvider(model="gemini-3.1-pro-preview")
+
+    return await create_sse_response(
+        llm=llm,
+        prompt=prompt,
+        temperature=0.3,
+        max_tokens=16384,
+        metadata={"decision_refs": decision_refs},
+    )

@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.logging import get_logger
 from app.db.session import get_session
 from app.services.rag import RAGService
+from app.services.llm.streaming import create_sse_response
 
 router = APIRouter()
 logger = get_logger(__name__)
@@ -22,7 +23,7 @@ class ChatMessage(BaseModel):
 class ChatRequest(BaseModel):
     """Chat request payload."""
 
-    message: str = Field(..., min_length=1, max_length=10000)
+    message: str = Field(..., min_length=1, max_length=100000)
     conversation_id: str | None = Field(None, description="Optional conversation ID")
     history: list[ChatMessage] = Field(default_factory=list)
 
@@ -112,6 +113,56 @@ async def chat(
             status_code=500,
             detail=f"Eroare la procesarea cererii: {str(e)}"
         )
+
+
+@router.post("/stream")
+async def chat_stream(
+    request: ChatRequest,
+    session: AsyncSession = Depends(get_session)
+):
+    """Stream chat response via SSE."""
+    logger.info("chat_stream_request", message_length=len(request.message))
+
+    try:
+        rag = RAGService()
+
+        history = [
+            {"role": msg.role, "content": msg.content}
+            for msg in request.history
+        ] if request.history else None
+
+        # Run RAG search to get context and citations
+        query = request.message
+        contexts, system_prompt, citations, confidence, suggested = await rag.prepare_context(
+            query=query, session=session, conversation_history=history, max_decisions=5
+        )
+
+        if contexts is None:
+            # No relevant results — return a non-streaming error message
+            raise HTTPException(
+                status_code=404,
+                detail="Nu am găsit informații relevante. Reformulează întrebarea.",
+            )
+
+        # Stream the LLM response
+        return await create_sse_response(
+            llm=rag.llm,
+            prompt=query,
+            context=contexts,
+            system_prompt=system_prompt,
+            temperature=0.1,
+            max_tokens=12288,
+            metadata={
+                "citations": [{"decision_id": c.decision_id, "text": c.text, "verified": c.verified} for c in citations],
+                "confidence": confidence,
+                "suggested_questions": suggested,
+                "conversation_id": request.conversation_id or f"conv-{hash(request.message)}",
+            },
+        )
+
+    except Exception as e:
+        logger.error("chat_stream_error", error=str(e), exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.get("/conversations/{conversation_id}")
