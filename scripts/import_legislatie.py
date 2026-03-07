@@ -573,6 +573,19 @@ def download_file(bucket: storage.Bucket, blob_name: str) -> str:
         content = blob.download_as_text(encoding='utf-8', timeout=120)
     except UnicodeDecodeError:
         content = blob.download_as_text(encoding='latin-1', timeout=120)
+    except (TypeError, Exception) as e:
+        # Fallback: download as bytes and decode manually
+        # (workaround for google-cloud-storage issues with large files)
+        logger.warning(
+            "download_as_text_failed_trying_bytes",
+            blob=blob_name,
+            error=str(e),
+        )
+        raw = blob.download_as_bytes(timeout=300)
+        try:
+            content = raw.decode('utf-8')
+        except UnicodeDecodeError:
+            content = raw.decode('latin-1')
     return content
 
 

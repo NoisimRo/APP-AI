@@ -31,6 +31,17 @@ logger = get_logger(__name__)
 # Max concurrent grounding tasks (avoid overwhelming the API)
 MAX_CONCURRENT_GROUNDING = 5
 
+# Document chunking thresholds
+CHUNK_THRESHOLD = 15000  # chars — documents larger than this get chunked
+CHUNK_SIZE = 10000       # chars per chunk
+CHUNK_OVERLAP = 1500     # overlap between chunks for context continuity
+
+# Max flags to ground in Pass 2 (to keep total time reasonable)
+MAX_FLAGS_TO_GROUND = 15
+
+# Timeout for individual LLM calls (seconds)
+LLM_CALL_TIMEOUT = 120
+
 
 class RedFlagsAnalyzer:
     """Service for analyzing procurement documents for red flags.
@@ -48,23 +59,57 @@ class RedFlagsAnalyzer:
     # PASS 1: Dynamic clause detection
     # =========================================================================
 
-    async def _detect_clauses(self, document_text: str) -> list[dict]:
-        """Pass 1: LLM detects problematic clauses without legal references.
+    @staticmethod
+    def _split_into_chunks(text: str) -> list[str]:
+        """Split large document into overlapping chunks for parallel analysis.
 
-        The LLM reads the full document and identifies issues dynamically —
-        no predefined categories, no legal article references requested.
+        Splits on paragraph boundaries (double newlines) to avoid cutting
+        mid-sentence. Each chunk gets CHUNK_OVERLAP chars of overlap with
+        the previous chunk for context continuity.
 
         Args:
-            document_text: Full text of the procurement document.
+            text: Full document text.
 
         Returns:
-            List of detected clause dicts with keys:
-            - clause: exact text from the document
-            - issue: description of why it's problematic
-            - search_query: short query optimized for vector search
-            - severity: CRITICĂ / MEDIE / SCĂZUTĂ
+            List of text chunks.
         """
-        system_prompt = """Ești un expert în achiziții publice din România cu experiență vastă în contestații CNSC.
+        if len(text) <= CHUNK_THRESHOLD:
+            return [text]
+
+        chunks = []
+        start = 0
+        while start < len(text):
+            end = start + CHUNK_SIZE
+
+            if end >= len(text):
+                chunks.append(text[start:])
+                break
+
+            # Try to split on paragraph boundary (double newline)
+            split_zone = text[end - 500:end + 500]
+            best_split = split_zone.rfind("\n\n")
+            if best_split != -1:
+                end = (end - 500) + best_split + 2
+            else:
+                # Fallback: split on single newline
+                best_split = split_zone.rfind("\n")
+                if best_split != -1:
+                    end = (end - 500) + best_split + 1
+
+            chunks.append(text[start:end])
+            start = end - CHUNK_OVERLAP  # overlap for context
+
+        logger.info(
+            "document_chunked",
+            total_chars=len(text),
+            num_chunks=len(chunks),
+            chunk_sizes=[len(c) for c in chunks],
+        )
+        return chunks
+
+    def _get_detection_system_prompt(self) -> str:
+        """Return the system prompt for Pass 1 detection."""
+        return """Ești un expert în achiziții publice din România cu experiență vastă în contestații CNSC.
 
 Sarcina ta este să citești integral documentația de achiziție și să identifici TOATE clauzele care ar putea fi:
 - Restrictive pentru concurență
@@ -100,27 +145,148 @@ Severitate:
 - MEDIE: Clauză discutabilă, potențial restrictivă
 - SCĂZUTĂ: Problemă minoră, ar putea fi îmbunătățită"""
 
-        prompt = (
-            "Analizează integral următoarea documentație de achiziție publică "
-            "și identifică toate clauzele problematice:\n\n"
-            f"=== DOCUMENTAȚIE ACHIZIȚIE ===\n{document_text}\n=== SFÂRȘIT DOCUMENTAȚIE ==="
-        )
+    async def _detect_single_chunk(self, chunk_text: str, chunk_idx: int, total_chunks: int) -> list[dict]:
+        """Run Pass 1 detection on a single chunk with timeout.
+
+        Args:
+            chunk_text: Text of the chunk to analyze.
+            chunk_idx: Index of this chunk (for logging).
+            total_chunks: Total number of chunks (for logging).
+
+        Returns:
+            List of detected clause dicts.
+        """
+        system_prompt = self._get_detection_system_prompt()
+
+        if total_chunks > 1:
+            prompt = (
+                f"Analizează următoarea SECȚIUNE ({chunk_idx + 1} din {total_chunks}) "
+                "dintr-o documentație de achiziție publică "
+                "și identifică clauzele problematice:\n\n"
+                f"=== SECȚIUNE DOCUMENTAȚIE ===\n{chunk_text}\n=== SFÂRȘIT SECȚIUNE ==="
+            )
+        else:
+            prompt = (
+                "Analizează integral următoarea documentație de achiziție publică "
+                "și identifică toate clauzele problematice:\n\n"
+                f"=== DOCUMENTAȚIE ACHIZIȚIE ===\n{chunk_text}\n=== SFÂRȘIT DOCUMENTAȚIE ==="
+            )
 
         try:
-            response = await self.llm.complete(
-                prompt=prompt,
-                system_prompt=system_prompt,
-                temperature=0.1,
-                max_tokens=8192,
+            response = await asyncio.wait_for(
+                self.llm.complete(
+                    prompt=prompt,
+                    system_prompt=system_prompt,
+                    temperature=0.1,
+                    max_tokens=8192,
+                ),
+                timeout=LLM_CALL_TIMEOUT,
             )
 
             clauses = self._parse_detection_response(response)
+            logger.info("chunk_clauses_detected", chunk=chunk_idx + 1, count=len(clauses))
+            return clauses
+
+        except asyncio.TimeoutError:
+            logger.error("chunk_detection_timeout", chunk=chunk_idx + 1, timeout=LLM_CALL_TIMEOUT)
+            raise
+        except Exception as e:
+            logger.error("chunk_detection_error", chunk=chunk_idx + 1, error=str(e))
+            raise
+
+    @staticmethod
+    def _deduplicate_clauses(all_clauses: list[dict]) -> list[dict]:
+        """Deduplicate clauses detected across multiple chunks.
+
+        Uses clause text similarity to remove near-duplicates that may
+        appear due to chunk overlap.
+
+        Args:
+            all_clauses: Combined list of clauses from all chunks.
+
+        Returns:
+            Deduplicated list of clauses.
+        """
+        if len(all_clauses) <= 1:
+            return all_clauses
+
+        unique = []
+        seen_clauses: list[str] = []
+
+        for clause in all_clauses:
+            clause_text = clause.get("clause", "").strip().lower()
+            if not clause_text:
+                continue
+
+            # Check for substantial overlap with already-seen clauses
+            is_duplicate = False
+            for seen in seen_clauses:
+                # If one clause contains >60% of the other, consider duplicate
+                shorter = min(clause_text, seen, key=len)
+                longer = max(clause_text, seen, key=len)
+                if shorter in longer or (
+                    len(shorter) > 50 and shorter[:50] in longer
+                ):
+                    is_duplicate = True
+                    break
+
+            if not is_duplicate:
+                unique.append(clause)
+                seen_clauses.append(clause_text)
+
+        logger.info(
+            "clauses_deduplicated",
+            before=len(all_clauses),
+            after=len(unique),
+        )
+        return unique
+
+    async def _detect_clauses(self, document_text: str) -> list[dict]:
+        """Pass 1: LLM detects problematic clauses without legal references.
+
+        For large documents (>15K chars), splits into overlapping chunks
+        and analyzes each in parallel, then deduplicates results.
+
+        Args:
+            document_text: Full text of the procurement document.
+
+        Returns:
+            List of detected clause dicts with keys:
+            - clause: exact text from the document
+            - issue: description of why it's problematic
+            - search_query: short query optimized for vector search
+            - severity: CRITICĂ / MEDIE / SCĂZUTĂ
+        """
+        chunks = self._split_into_chunks(document_text)
+
+        if len(chunks) == 1:
+            # Small document — single call
+            clauses = await self._detect_single_chunk(chunks[0], 0, 1)
             logger.info("clauses_detected", count=len(clauses))
             return clauses
 
-        except Exception as e:
-            logger.error("clause_detection_error", error=str(e))
-            raise
+        # Large document — parallel chunk analysis
+        logger.info("large_document_parallel_detection", num_chunks=len(chunks))
+        tasks = [
+            self._detect_single_chunk(chunk, idx, len(chunks))
+            for idx, chunk in enumerate(chunks)
+        ]
+
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+
+        # Collect all clauses, skip failed chunks
+        all_clauses = []
+        for idx, result in enumerate(results):
+            if isinstance(result, Exception):
+                logger.error("chunk_failed", chunk=idx + 1, error=str(result))
+                continue
+            all_clauses.extend(result)
+
+        # Deduplicate clauses from overlapping chunks
+        clauses = self._deduplicate_clauses(all_clauses)
+
+        logger.info("clauses_detected", count=len(clauses), from_chunks=len(chunks))
+        return clauses
 
     @staticmethod
     def _parse_detection_response(response: str) -> list[dict]:
@@ -440,11 +606,14 @@ Răspunde EXCLUSIV în format JSON:
         )
 
         try:
-            response = await self.llm.complete(
-                prompt="\n".join(prompt_parts),
-                system_prompt=system_prompt,
-                temperature=0.1,
-                max_tokens=2048,
+            response = await asyncio.wait_for(
+                self.llm.complete(
+                    prompt="\n".join(prompt_parts),
+                    system_prompt=system_prompt,
+                    temperature=0.1,
+                    max_tokens=2048,
+                ),
+                timeout=LLM_CALL_TIMEOUT,
             )
 
             grounded = self._parse_grounding_response(response)
@@ -579,7 +748,7 @@ Răspunde EXCLUSIV în format JSON:
             use_jurisprudence=use_jurisprudence,
         )
 
-        # Pass 1: Dynamic detection
+        # Pass 1: Dynamic detection (with chunking for large documents)
         detected_clauses = await self._detect_clauses(document_text)
 
         if not detected_clauses:
@@ -587,6 +756,19 @@ Răspunde EXCLUSIV în format JSON:
             return []
 
         logger.info("pass1_complete", detected=len(detected_clauses))
+
+        # Cap flags to ground — prioritize by severity
+        if len(detected_clauses) > MAX_FLAGS_TO_GROUND:
+            severity_order = {"CRITICĂ": 0, "MEDIE": 1, "SCĂZUTĂ": 2}
+            detected_clauses.sort(
+                key=lambda c: severity_order.get(c.get("severity", "MEDIE"), 1)
+            )
+            logger.info(
+                "flags_capped",
+                total_detected=len(detected_clauses),
+                capped_to=MAX_FLAGS_TO_GROUND,
+            )
+            detected_clauses = detected_clauses[:MAX_FLAGS_TO_GROUND]
 
         # Pass 2: Grounding per flag
         if use_jurisprudence and session:
