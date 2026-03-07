@@ -713,12 +713,12 @@ Reguli importante:
 6. Când discuți despre soluții, menționează argumentele CNSC
 7. Când în context există referințe la jurisprudență (decizii ale instanțelor naționale, CJUE, directive europene), citează-le exact așa cum apar
 8. NU te prezenta și NU folosi formulări de genul "În calitate de..." - răspunde direct la întrebare
-9. **CITĂRI VERBATIM**: Când susții un argument sau prezinți o concluzie, include citate exacte din textul original al deciziei, folosind ghilimele și referința deciziei. Exemplu: *Conform deciziei **BO2025_123**, CNSC a reținut că „textul exact din decizie"*. Secțiunea „Text original din decizie" conține fragmente verbatim — folosește-le pentru citări directe.
+9. **CITĂRI VERBATIM**: Când susții un argument sau prezinți o concluzie, include citate exacte din textul original al deciziei, folosind ghilimele și referința deciziei. Exemplu: *Conform deciziei **BO2025_123**, CNSC a reținut că „textul exact din decizie”*. Secțiunea „Text original din decizie” conține fragmente verbatim — folosește-le pentru citări directe.
 10. Prezintă atât argumentele contestatorului, cât și cele ale autorității contractante și ale CNSC, cu citate verbatim din fiecare parte, pentru a oferi o imagine completă.
 
 Formatare:
 - Folosește **bold** pentru termeni cheie și referințe la decizii
-- Folosește „ghilimele românești" pentru citatele verbatim din decizii
+- Folosește „ghilimele românești” pentru citatele verbatim din decizii
 - Structurează răspunsul cu paragrafe clare, separate prin linii goale
 - Folosește liste numerotate (1. 2. 3.) pentru enumerări
 - Folosește titluri (## sau ###) pentru secțiuni distincte când răspunsul este lung
