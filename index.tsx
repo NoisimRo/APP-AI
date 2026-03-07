@@ -97,8 +97,8 @@ const formatMarkdown = (text: string): string => {
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
-    // Citation links: [[BO2025_1000]] -> clickable link
-    .replace(/\[\[(BO\d{4}_\d+)\]\]/g, '<a href="#" data-decision="$1" onclick="window.__openDecision && window.__openDecision(\'$1\'); return false;" style="color:#2563eb;font-weight:600;text-decoration:underline;cursor:pointer;font-family:monospace;font-size:0.85em">$1</a>')
+    // Citation links: [[BO2025_1000]] -> clickable pill tag
+    .replace(/\[\[(BO\d{4}_\d+)\]\]/g, '<a href="#" data-decision="$1" onclick="window.__openDecision && window.__openDecision(\'$1\'); return false;" style="display:inline-flex;align-items:center;background:#eff6ff;color:#1d4ed8;padding:2px 10px;border-radius:9999px;border:1px solid #bfdbfe;font-family:monospace;font-size:0.8em;font-weight:600;cursor:pointer;text-decoration:none;margin:2px 3px;transition:background 0.15s" onmouseover="this.style.background=\'#dbeafe\'" onmouseout="this.style.background=\'#eff6ff\'">$1</a>')
     // Bold: **text**
     .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
     // Italic: *text*
@@ -202,6 +202,8 @@ const App = () => {
   // Decision Viewer State
   const [viewingDecision, setViewingDecision] = useState<any | null>(null);
   const [isLoadingDecision, setIsLoadingDecision] = useState(false);
+  const [decisionSearchTerm, setDecisionSearchTerm] = useState("");
+  const decisionContentRef = useRef<HTMLDivElement>(null);
 
   const chatEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -404,10 +406,7 @@ const App = () => {
       // Add response with citations if available
       let responseText = data.message;
       if (data.citations && data.citations.length > 0) {
-        responseText += "\n\n📚 **Surse:**";
-        data.citations.forEach((citation: any) => {
-          responseText += `\n- [[${citation.decision_id}]]`;
-        });
+        responseText += "\n\n📚 **Surse:** " + data.citations.map((c: any) => `[[${c.decision_id}]]`).join(" ");
       }
 
       setChatMessages(prev => [...prev, { role: 'model', text: responseText }]);
@@ -1516,13 +1515,10 @@ const App = () => {
             ) : viewingDecision && (
               <>
                 {/* Header */}
-                <div className="flex items-start justify-between p-6 border-b border-slate-200 shrink-0">
-                  <div>
-                    <h2 className="text-xl font-bold text-slate-900">{viewingDecision.title}</h2>
+                <div className="flex items-start justify-between gap-4 p-6 border-b border-slate-200 shrink-0">
+                  <div className="min-w-0">
+                    <h2 className="text-xl font-bold text-slate-900 font-mono">{viewingDecision.metadata?.case_number || viewingDecision.title}</h2>
                     <div className="flex gap-2 mt-2 flex-wrap">
-                      <span className="text-xs bg-blue-50 text-blue-700 px-2 py-1 rounded border border-blue-200 font-mono">
-                        {viewingDecision.metadata?.case_number}
-                      </span>
                       {viewingDecision.metadata?.date && (
                         <span className="text-xs bg-slate-100 text-slate-600 px-2 py-1 rounded border border-slate-200">
                           {new Date(viewingDecision.metadata.date).toLocaleDateString('ro-RO')}
@@ -1544,28 +1540,63 @@ const App = () => {
                       )}
                     </div>
                   </div>
-                  <button
-                    onClick={() => setViewingDecision(null)}
-                    className="p-2 hover:bg-slate-100 rounded-lg transition text-slate-400 hover:text-slate-600"
-                  >
-                    <X size={20} />
-                  </button>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <div className="relative">
+                      <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                      <input
+                        type="text"
+                        placeholder="Caută în decizie..."
+                        value={decisionSearchTerm}
+                        onChange={(e) => setDecisionSearchTerm(e.target.value)}
+                        className="pl-8 pr-8 py-1.5 text-sm border border-slate-200 rounded-lg w-56 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      />
+                      {decisionSearchTerm && (
+                        <button
+                          onClick={() => setDecisionSearchTerm("")}
+                          className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                        >
+                          <X size={14} />
+                        </button>
+                      )}
+                    </div>
+                    <button
+                      onClick={() => { setDecisionSearchTerm(""); setViewingDecision(null); }}
+                      className="p-2 hover:bg-slate-100 rounded-lg transition text-slate-400 hover:text-slate-600"
+                    >
+                      <X size={20} />
+                    </button>
+                  </div>
                 </div>
 
                 {/* Content */}
-                <div className="flex-1 overflow-y-auto p-6">
-                  <div className="prose prose-slate max-w-none text-sm leading-relaxed whitespace-pre-wrap font-mono bg-slate-50 p-6 rounded-lg border border-slate-200">
-                    {viewingDecision.content}
-                  </div>
+                <div className="flex-1 overflow-y-auto p-6" ref={decisionContentRef}>
+                  <div
+                    className="prose prose-slate max-w-none text-sm leading-relaxed whitespace-pre-wrap font-mono bg-slate-50 p-6 rounded-lg border border-slate-200"
+                    dangerouslySetInnerHTML={{
+                      __html: (() => {
+                        const raw = viewingDecision.content || "";
+                        const escaped = raw.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+                        if (!decisionSearchTerm || decisionSearchTerm.length < 2) return escaped;
+                        const safeSearch = decisionSearchTerm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                        const regex = new RegExp(`(${safeSearch})`, 'gi');
+                        return escaped.replace(regex, '<mark style="background:#fef08a;padding:1px 2px;border-radius:2px">$1</mark>');
+                      })()
+                    }}
+                  />
                 </div>
 
                 {/* Footer */}
                 <div className="p-4 border-t border-slate-200 flex justify-between items-center shrink-0">
                   <span className="text-xs text-slate-400">
                     {viewingDecision.content?.length?.toLocaleString()} caractere
+                    {decisionSearchTerm && decisionSearchTerm.length >= 2 && (() => {
+                      const safeSearch = decisionSearchTerm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                      const matches = (viewingDecision.content || "").match(new RegExp(safeSearch, 'gi'));
+                      return matches ? ` · ${matches.length} rezultate` : ' · 0 rezultate';
+                    })()}
                   </span>
                   <button
-                    onClick={() => setViewingDecision(null)}
+                    onClick={() => { setDecisionSearchTerm(""); setViewingDecision(null); }}
                     className="px-4 py-2 bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200 transition text-sm font-medium"
                   >
                     Închide
