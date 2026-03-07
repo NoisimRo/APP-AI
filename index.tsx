@@ -534,7 +534,10 @@ const App = () => {
     }
   };
 
-  const handleDocumentUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleDocumentUpload = async (
+    event: React.ChangeEvent<HTMLInputElement>,
+    onTextExtracted?: (text: string) => void,
+  ) => {
     const file = event.target.files?.[0];
     if (!file) return;
 
@@ -573,7 +576,9 @@ const App = () => {
         name: file.name,
         text: data.text
       });
-      setRedFlagsText(data.text);
+      if (onTextExtracted) {
+        onTextExtracted(data.text);
+      }
 
     } catch (err) {
       console.error(err);
@@ -1162,11 +1167,32 @@ const App = () => {
         </h2>
         
         <div className="space-y-5">
+          <div className="bg-slate-50 p-4 rounded-lg border border-dashed border-slate-300">
+            <label className="text-xs font-bold text-slate-500 uppercase mb-2 block">
+              Încarcă document (.txt, .md, .pdf)
+            </label>
+            <input
+              type="file"
+              accept=".txt,.md,.pdf"
+              onChange={(e) => handleDocumentUpload(e, (text) => setDrafterContext(prev => ({...prev, facts: text})))}
+              className="block w-full text-sm text-slate-600
+                file:mr-4 file:py-1.5 file:px-3
+                file:rounded-lg file:border-0
+                file:text-xs file:font-semibold
+                file:bg-blue-50 file:text-blue-700
+                hover:file:bg-blue-100"
+            />
+            {uploadedDocument && mode === 'drafter' && (
+              <p className="text-xs text-green-600 mt-2">
+                ✓ {uploadedDocument.name} ({uploadedDocument.text.length} caractere)
+              </p>
+            )}
+          </div>
           <div>
             <label className="block text-xs font-bold text-slate-700 uppercase mb-2">Situația de Fapt</label>
-            <textarea 
+            <textarea
               className="w-full p-3 border border-slate-300 rounded-lg text-sm h-32 focus:ring-2 focus:ring-blue-500 outline-none transition shadow-sm"
-              placeholder="Descrie cronologia evenimentelor..."
+              placeholder="Descrie cronologia evenimentelor sau încarcă un document..."
               value={drafterContext.facts}
               onChange={(e) => setDrafterContext({...drafterContext, facts: e.target.value})}
             />
@@ -1373,7 +1399,7 @@ const App = () => {
                 <input
                   type="file"
                   accept=".txt,.md,.pdf"
-                  onChange={handleDocumentUpload}
+                  onChange={(e) => handleDocumentUpload(e, (text) => setRedFlagsText(text))}
                   className="block w-full text-sm text-slate-600 mb-4
                     file:mr-4 file:py-2 file:px-4
                     file:rounded-lg file:border-0
@@ -1550,10 +1576,31 @@ const App = () => {
           <div className="p-8 max-w-4xl mx-auto">
              <h2 className="text-2xl font-bold text-slate-800 mb-6 flex items-center gap-2"><Search className="text-purple-600" /> Asistent Clarificări</h2>
              <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 mb-6">
+                <div className="bg-slate-50 p-4 rounded-lg border border-dashed border-slate-300 mb-4">
+                  <label className="text-xs font-bold text-slate-500 uppercase mb-2 block">
+                    Încarcă document (.txt, .md, .pdf)
+                  </label>
+                  <input
+                    type="file"
+                    accept=".txt,.md,.pdf"
+                    onChange={(e) => handleDocumentUpload(e, (text) => setClarificationClause(text))}
+                    className="block w-full text-sm text-slate-600
+                      file:mr-4 file:py-1.5 file:px-3
+                      file:rounded-lg file:border-0
+                      file:text-xs file:font-semibold
+                      file:bg-purple-50 file:text-purple-700
+                      hover:file:bg-purple-100"
+                  />
+                  {uploadedDocument && mode === 'clarification' && (
+                    <p className="text-xs text-green-600 mt-2">
+                      ✓ {uploadedDocument.name} ({uploadedDocument.text.length} caractere)
+                    </p>
+                  )}
+                </div>
                 <label className="block font-bold text-slate-700 mb-3">Clauza Problematică</label>
-                <textarea 
+                <textarea
                   className="w-full p-4 border border-slate-300 rounded-lg h-32 mb-4 focus:ring-2 focus:ring-purple-500 outline-none"
-                  placeholder="Paste text din documentație..."
+                  placeholder="Paste text din documentație sau încarcă un document..."
                   value={clarificationClause}
                   onChange={(e) => setClarificationClause(e.target.value)}
                 />
@@ -1590,10 +1637,31 @@ const App = () => {
               <div className="flex gap-6 h-full overflow-hidden">
                  <div className="w-80 shrink-0 flex flex-col gap-4">
                     <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
+                       <div className="bg-slate-50 p-3 rounded-lg border border-dashed border-slate-300 mb-3">
+                         <label className="text-xs font-bold text-slate-500 uppercase mb-2 block">
+                           Încarcă document (.txt, .md, .pdf)
+                         </label>
+                         <input
+                           type="file"
+                           accept=".txt,.md,.pdf"
+                           onChange={(e) => handleDocumentUpload(e, (text) => setMemoTopic(text))}
+                           className="block w-full text-sm text-slate-600
+                             file:mr-4 file:py-1.5 file:px-3
+                             file:rounded-lg file:border-0
+                             file:text-xs file:font-semibold
+                             file:bg-teal-50 file:text-teal-700
+                             hover:file:bg-teal-100"
+                         />
+                         {uploadedDocument && mode === 'rag' && (
+                           <p className="text-xs text-green-600 mt-2">
+                             ✓ {uploadedDocument.name} ({uploadedDocument.text.length} caractere)
+                           </p>
+                         )}
+                       </div>
                        <label className="text-sm font-bold text-slate-700 block mb-2">Subiect Memo</label>
-                       <textarea 
+                       <textarea
                           className="w-full border border-slate-300 rounded-lg p-3 text-sm h-24 mb-3 focus:ring-2 focus:ring-teal-500 outline-none"
-                          placeholder="Ex: Respingere ofertă..."
+                          placeholder="Ex: Respingere ofertă sau încarcă document..."
                           value={memoTopic}
                           onChange={(e) => setMemoTopic(e.target.value)}
                        />
