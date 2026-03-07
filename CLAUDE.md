@@ -147,8 +147,12 @@ Permite citări exacte: `art. 2 alin. (2) lit. a) din Legea nr. 98/2016`
 - `embedding` - Vector(2000) with HNSW index
 - UNIQUE constraint: `(act_id, numar_articol, COALESCE(alineat, 0), COALESCE(litera, ''))`
 
-**Import:** `python scripts/import_legislatie.py --dir date-expert-app/legislatie-ap`
-**Source files:** .md files in `date-expert-app/legislatie-ap/` (Legea 98/2016, HG 395/2016, etc.)
+**Import:** `python scripts/import_legislatie.py --dir legislatie-ap`
+**Update (smart upsert):** `python scripts/import_legislatie.py --dir legislatie-ap --update`
+**Source files:** .md/.txt files in GCS bucket `date-expert-app/legislatie-ap/` (Legea 98/2016, HG 395/2016, Legea 101/2016, etc.)
+**Supported formats:** Markdown (old, with `## ### ####` headers) and plaintext (new, legislație consolidată from legislatie.just.ro)
+**Superscript handling:** Articles like `61^1` → `numar_articol=6101`, alineats like `(2^1)` → `alineat=201` (encoding: main*100+sub)
+**Update mode (`--update`):** Compares existing DB records with parsed file — inserts new, updates changed text + re-embeds, removes obsolete fragments. Ideal for frequent legislative updates.
 
 ### ArgumentareCritica Fields (populated by LLM analysis)
 
