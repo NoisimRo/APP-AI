@@ -55,6 +55,7 @@ class DecisionSummary(BaseModel):
     solutie_contestatie: str | None
     contestator: str | None
     autoritate_contractanta: str | None
+    rezumat: str | None = None
 
 
 class DecisionListResponse(BaseModel):
@@ -72,6 +73,7 @@ async def list_decisions(
     page_size: int = Query(20, ge=1, le=100),
     ruling: str | None = Query(None, description="Filter by ruling"),
     year: int | None = Query(None, ge=2000, le=2100),
+    tip_contestatie: str | None = Query(None, description="Filter by type: documentatie or rezultat"),
     search: str | None = Query(None, description="Search by BO number, contestator, autoritate, CPV, or criticism codes"),
     session: AsyncSession = Depends(get_session),
 ) -> DecisionListResponse:
@@ -97,6 +99,8 @@ async def list_decisions(
         query = query.where(DecizieCNSC.solutie_contestatie == ruling)
     if year:
         query = query.where(DecizieCNSC.an_bo == year)
+    if tip_contestatie:
+        query = query.where(DecizieCNSC.tip_contestatie == tip_contestatie)
     if search:
         search_term = f"%{search.strip()}%"
 
@@ -154,6 +158,7 @@ async def list_decisions(
             solutie_contestatie=d.solutie_contestatie,
             contestator=d.contestator,
             autoritate_contractanta=d.autoritate_contractanta,
+            rezumat=(d.text_integral[:300] + "...") if d.text_integral and len(d.text_integral) > 300 else d.text_integral,
         )
         for d in decisions_db
     ]
