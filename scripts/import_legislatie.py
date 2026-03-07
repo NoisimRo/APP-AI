@@ -1,12 +1,18 @@
 #!/usr/bin/env python3
 """Import Romanian procurement legislation from .md files into the database.
 
-Parses legislative .md files at ALINEAT granularity — the atomic citation unit
-in Romanian law. Each row in the DB represents one alineat (or a full article
-if it has no alineats).
+Parses legislative .md files at MAXIMUM GRANULARITY — each row represents
+the smallest independent legal unit:
+  - Literă (if the alineat has litere)
+  - Alineat (if no litere)
+  - Articol (if no alineats)
 
 Supports exact citations like:
-    "art. 2 alin. (2) lit. a) și b) din Legea nr. 98/2016"
+    "art. 2 alin. (2) lit. a) din Legea nr. 98/2016"
+
+Schema:
+  - acte_normative: master table for legislative acts (FK, not strings)
+  - legislatie_fragmente: one row per fragment with embedding + tsvector
 
 Expected .md format (from the actual legislative files):
     # LEGE nr. 98 din 19 mai 2016
@@ -21,9 +27,10 @@ Expected .md format (from the actual legislative files):
     * b) a doua literă;
 
 Features:
-- Parses articles, alineats, and litere from markdown
-- Generates embeddings per alineat for precise vector search
-- Idempotent: skips entries already imported (by act_normativ + citare)
+- Litere are separate rows (not JSON) — each is an independent legal unit
+- articol_complet field stores the full article text for RAG context
+- tsvector keywords for full-text search
+- Idempotent: skips entries already imported (by act_id + numar_articol + alineat + litera)
 - Retry with exponential backoff on API errors
 
 Usage:
@@ -33,7 +40,7 @@ Usage:
     # Import a single file
     DATABASE_URL="..." python scripts/import_legislatie.py --file "path/to/LEGE nr. 98.md"
 
-    # Force reimport (delete + reinsert)
+    # Force reimport (delete + reinsert for a specific act)
     DATABASE_URL="..." python scripts/import_legislatie.py --dir ... --force
 
     # Dry run (parse only, no DB writes)
@@ -50,53 +57,55 @@ from pathlib import Path
 # Add backend to path
 sys.path.insert(0, str(Path(__file__).parent.parent / "backend"))
 
-from sqlalchemy import select, delete
+from sqlalchemy import select, delete, text, func
 from app.core.logging import get_logger
 from app.db.session import init_db
 from app.db import session as db_session
-from app.models.decision import ArticolLegislatie
+from app.models.decision import ActNormativ, LegislatieFragment
 from app.services.embedding import EmbeddingService
 
 logger = get_logger(__name__)
 
 EMBED_BATCH_SIZE = 20
 
+# Map from filename patterns to (tip_act, numar, an, titlu)
+ACT_NORMATIV_MAP = {
+    ("LEGE", "98"): ("Lege", 98, 2016, "Legea nr. 98/2016 privind achizițiile publice"),
+    ("HG", "395"): ("HG", 395, 2016, "HG nr. 395/2016 - Normele metodologice de aplicare a Legii 98/2016"),
+    ("LEGE", "99"): ("Lege", 99, 2016, "Legea nr. 99/2016 privind achizițiile sectoriale"),
+    ("LEGE", "100"): ("Lege", 100, 2016, "Legea nr. 100/2016 privind concesiunile de lucrări și servicii"),
+    ("LEGE", "101"): ("Lege", 101, 2016, "Legea nr. 101/2016 privind remediile și căile de atac"),
+    ("HG", "394"): ("HG", 394, 2016, "HG nr. 394/2016 - Normele metodologice de aplicare a Legii 99/2016"),
+}
 
-def detect_act_normativ(filename: str) -> str:
-    """Detect the legislative act from filename."""
+
+def detect_act_info(filename: str) -> tuple[str, int, int, str]:
+    """Detect legislative act info from filename.
+
+    Returns:
+        Tuple of (tip_act, numar, an, titlu).
+    """
     name = filename.upper()
-    if "LEGE" in name and "98" in name:
-        return "Legea 98/2016"
-    elif "HG" in name and "395" in name:
-        return "HG 395/2016"
-    elif "LEGE" in name and "99" in name:
-        return "Legea 99/2016"
-    elif "LEGE" in name and "100" in name:
-        return "Legea 100/2016"
-    elif "LEGE" in name and "101" in name:
-        return "Legea 101/2016"
-    elif "HG" in name and "394" in name:
-        return "HG 394/2016"
-    else:
-        m = re.search(r'(LEGE|HG|OUG)\s*(?:nr\.?\s*)?(\d+)', name)
-        if m:
-            act_type = m.group(1)
-            act_num = m.group(2)
-            y = re.search(r'(\d{4})', name)
-            year = y.group(1) if y else "2016"
-            if act_type == "LEGE":
-                return f"Legea {act_num}/{year}"
-            return f"{act_type} {act_num}/{year}"
-        return filename
+
+    for (act_type, act_num), (tip, numar, an, titlu) in ACT_NORMATIV_MAP.items():
+        if act_type in name and act_num in name:
+            return tip, numar, an, titlu
+
+    # Fallback: try to parse from filename
+    m = re.search(r'(LEGE|HG|OUG)\s*(?:nr\.?\s*)?(\d+)', name)
+    if m:
+        act_type = m.group(1)
+        act_num = int(m.group(2))
+        y = re.search(r'(\d{4})', name)
+        year = int(y.group(1)) if y else 2016
+        tip = "Lege" if act_type == "LEGE" else act_type
+        return tip, act_num, year, f"{tip} {act_num}/{year}"
+
+    raise ValueError(f"Cannot detect act normativ from filename: {filename}")
 
 
 def parse_litere(text: str) -> list[dict]:
     """Extract litere (a, b, c...) from alineat text.
-
-    Handles formats:
-    - "* a) text;"
-    - "a) text;"
-    - Lines starting with letter followed by )
 
     Args:
         text: Text of an alineat that may contain litere.
@@ -105,7 +114,6 @@ def parse_litere(text: str) -> list[dict]:
         List of {"litera": "a", "text": "..."} dicts.
     """
     litere = []
-    # Pattern: optional "* " then letter followed by ) then text
     pattern = re.compile(r'^\s*(?:\*\s+)?([a-zăâîșț](?:\d+)?)\)\s*(.+)', re.MULTILINE)
     for m in pattern.finditer(text):
         litere.append({
@@ -116,42 +124,30 @@ def parse_litere(text: str) -> list[dict]:
 
 
 def parse_alineats(article_text: str) -> list[dict]:
-    """Split article text into alineats.
-
-    Handles:
-    - "(1) First alineat text..." — numbered alineats
-    - Articles with no alineats (entire text = one entry)
-    - Alineats containing litere (* a), * b), etc.)
+    """Split article text into alineats with their litere.
 
     Args:
-        article_text: Full text of one article (without the "Articolul N" heading).
+        article_text: Full text of one article (without the heading).
 
     Returns:
         List of alineat dicts with keys: alineat (int|None), text, litere.
     """
-    # Check if the text contains numbered alineats
     alin_pattern = re.compile(r'^\((\d+)\)\s*', re.MULTILINE)
     alin_starts = list(alin_pattern.finditer(article_text))
 
     if not alin_starts:
-        # No alineats — entire article is one unit
         litere = parse_litere(article_text)
         return [{
             "alineat": None,
             "text": article_text.strip(),
-            "litere": litere if litere else None,
+            "litere": litere if litere else [],
         }]
 
     alineats = []
     for idx, match in enumerate(alin_starts):
         alin_num = int(match.group(1))
         start = match.start()
-
-        # End = start of next alineat or end of text
-        if idx + 1 < len(alin_starts):
-            end = alin_starts[idx + 1].start()
-        else:
-            end = len(article_text)
+        end = alin_starts[idx + 1].start() if idx + 1 < len(alin_starts) else len(article_text)
 
         alin_text = article_text[start:end].strip()
         litere = parse_litere(alin_text)
@@ -159,41 +155,32 @@ def parse_alineats(article_text: str) -> list[dict]:
         alineats.append({
             "alineat": alin_num,
             "text": alin_text,
-            "litere": litere if litere else None,
+            "litere": litere if litere else [],
         })
 
-    # Check if there's text before the first alineat (introductory text)
+    # Text before first alineat (introductory text)
     if alin_starts[0].start() > 0:
         intro = article_text[:alin_starts[0].start()].strip()
         if intro and len(intro) > 10:
-            # This is unusual but handle it as alineat 0
             alineats.insert(0, {
                 "alineat": None,
                 "text": intro,
-                "litere": None,
+                "litere": [],
             })
 
     return alineats
 
 
-def parse_legislation(text: str, act_normativ: str) -> list[dict]:
-    """Parse a legislative .md file into alineat-level records.
+def parse_legislation(md_text: str) -> list[dict]:
+    """Parse a legislative .md file into fragment-level records.
 
-    Processes the markdown structure:
-    - ## Capitolul ... → capitol
-    - ### Secțiunea ... → sectiune
-    - #### Articolul N → article boundary
-    - (N) ... → alineat
-    - * a) ... → litera
-
-    Args:
-        text: Full text of the .md file.
-        act_normativ: Normalized act name.
+    Each record = smallest independent legal unit (literă > alineat > articol).
 
     Returns:
-        List of dicts ready for DB insertion.
+        List of dicts with keys: numar_articol, articol, alineat, alineat_text,
+        litera, text_fragment, articol_complet, citare, capitol, sectiune.
     """
-    lines = text.split('\n')
+    lines = md_text.split('\n')
     records = []
 
     current_capitol = None
@@ -201,8 +188,19 @@ def parse_legislation(text: str, act_normativ: str) -> list[dict]:
     current_art_num = None
     current_art_lines: list[str] = []
 
+    # Regex patterns for structure
+    capitol_re = re.compile(
+        r'^##\s+(?:Capitolul|CAPITOLUL|CAP\.)\s+(.+)', re.IGNORECASE
+    )
+    sectiune_re = re.compile(
+        r'^###\s+(?:Sec[tț]iunea|SECȚIUNEA|SEC[ȚT]IUNEA)\s+(.+)', re.IGNORECASE
+    )
+    articol_re = re.compile(
+        r'^####\s+(?:Articolul|Art\.?)\s+(\d+)', re.IGNORECASE
+    )
+
     def flush_article():
-        """Process accumulated article lines into records."""
+        """Process accumulated article lines into fragment records."""
         nonlocal current_art_lines, current_art_num
         if current_art_num is None or not current_art_lines:
             return
@@ -215,62 +213,67 @@ def parse_legislation(text: str, act_normativ: str) -> list[dict]:
 
         for alin_data in alineats:
             alin_num = alin_data["alineat"]
+            alineat_text = f"alin. ({alin_num})" if alin_num is not None else None
+            litere = alin_data["litere"]
 
-            if alin_num is not None:
-                citare = f"art. {current_art_num} alin. ({alin_num})"
-                alineat_text = f"alin. ({alin_num})"
+            if litere:
+                # Each litera becomes its own row
+                for lit in litere:
+                    if alin_num is not None:
+                        citare = f"art. {current_art_num} alin. ({alin_num}) lit. {lit['litera']})"
+                    else:
+                        citare = f"art. {current_art_num} lit. {lit['litera']})"
+
+                    records.append({
+                        "numar_articol": current_art_num,
+                        "articol": f"art. {current_art_num}",
+                        "alineat": alin_num,
+                        "alineat_text": alineat_text,
+                        "litera": lit["litera"],
+                        "text_fragment": lit["text"],
+                        "articol_complet": article_text,
+                        "citare": citare,
+                        "capitol": current_capitol,
+                        "sectiune": current_sectiune,
+                    })
             else:
-                citare = f"art. {current_art_num}"
-                alineat_text = None
+                # No litere — fragment is the alineat itself (or whole article)
+                if alin_num is not None:
+                    citare = f"art. {current_art_num} alin. ({alin_num})"
+                else:
+                    citare = f"art. {current_art_num}"
 
-            records.append({
-                "act_normativ": act_normativ,
-                "numar_articol": current_art_num,
-                "articol": f"art. {current_art_num}",
-                "alineat": alin_num,
-                "alineat_text": alineat_text,
-                "litere": alin_data["litere"],
-                "text_integral": alin_data["text"],
-                "citare": citare,
-                "capitol": current_capitol,
-                "sectiune": current_sectiune,
-            })
+                records.append({
+                    "numar_articol": current_art_num,
+                    "articol": f"art. {current_art_num}",
+                    "alineat": alin_num,
+                    "alineat_text": alineat_text,
+                    "litera": None,
+                    "text_fragment": alin_data["text"],
+                    "articol_complet": article_text,
+                    "citare": citare,
+                    "capitol": current_capitol,
+                    "sectiune": current_sectiune,
+                })
 
         current_art_lines = []
-
-    # Regex patterns for structure
-    capitol_re = re.compile(
-        r'^##\s+(?:Capitolul|CAPITOLUL|CAP\.)\s+(.+)',
-        re.IGNORECASE
-    )
-    sectiune_re = re.compile(
-        r'^###\s+(?:Sec[tț]iunea|SECȚIUNEA|SEC[ȚT]IUNEA)\s+(.+)',
-        re.IGNORECASE
-    )
-    articol_re = re.compile(
-        r'^####\s+(?:Articolul|Art\.?)\s+(\d+)',
-        re.IGNORECASE
-    )
 
     for line in lines:
         stripped = line.strip()
 
-        # Check for chapter heading
         m = capitol_re.match(stripped)
         if m:
             flush_article()
             current_capitol = m.group(1).strip()
-            current_sectiune = None  # reset section on new chapter
+            current_sectiune = None
             continue
 
-        # Check for section heading
         m = sectiune_re.match(stripped)
         if m:
             flush_article()
             current_sectiune = m.group(1).strip()
             continue
 
-        # Check for article heading
         m = articol_re.match(stripped)
         if m:
             flush_article()
@@ -278,18 +281,44 @@ def parse_legislation(text: str, act_normativ: str) -> list[dict]:
             current_art_lines = []
             continue
 
-        # Skip top-level headings (# LEGE nr. ...)
         if stripped.startswith('#'):
             continue
 
-        # Accumulate article content
         if current_art_num is not None:
             current_art_lines.append(line)
 
-    # Don't forget the last article
     flush_article()
 
     return records
+
+
+async def get_or_create_act(
+    session,
+    tip_act: str,
+    numar: int,
+    an: int,
+    titlu: str,
+) -> str:
+    """Get existing act_id or create new ActNormativ record.
+
+    Returns:
+        UUID string of the act.
+    """
+    result = await session.execute(
+        select(ActNormativ.id).where(
+            ActNormativ.tip_act == tip_act,
+            ActNormativ.numar == numar,
+            ActNormativ.an == an,
+        )
+    )
+    existing = result.scalar_one_or_none()
+    if existing:
+        return existing
+
+    act = ActNormativ(tip_act=tip_act, numar=numar, an=an, titlu=titlu)
+    session.add(act)
+    await session.flush()
+    return act.id
 
 
 async def import_file(
@@ -298,7 +327,7 @@ async def import_file(
     force: bool = False,
     dry_run: bool = False,
 ) -> int:
-    """Import alineat-level records from a single legislative .md file.
+    """Import fragment-level records from a single legislative .md file.
 
     Args:
         filepath: Path to the .md file.
@@ -309,14 +338,15 @@ async def import_file(
     Returns:
         Number of records imported.
     """
-    act_normativ = detect_act_normativ(filepath.name)
-    logger.info("importing_legislation", file=filepath.name, act=act_normativ)
+    tip_act, numar, an, titlu = detect_act_info(filepath.name)
+    act_label = f"{tip_act} {numar}/{an}"
+    logger.info("importing_legislation", file=filepath.name, act=act_label)
 
-    text = filepath.read_text(encoding='utf-8')
-    logger.info("file_read", chars=len(text), lines=text.count('\n'))
+    md_text = filepath.read_text(encoding='utf-8')
+    logger.info("file_read", chars=len(md_text), lines=md_text.count('\n'))
 
-    records = parse_legislation(text, act_normativ)
-    logger.info("records_parsed", count=len(records), act=act_normativ)
+    records = parse_legislation(md_text)
+    logger.info("records_parsed", count=len(records), act=act_label)
 
     if not records:
         logger.warning("no_records_parsed", file=filepath.name)
@@ -324,45 +354,58 @@ async def import_file(
 
     if dry_run:
         for rec in records:
-            litere_str = ""
-            if rec["litere"]:
-                litere_str = f" [lit. {', '.join(l['litera'] for l in rec['litere'])}]"
+            lit_str = f" lit. {rec['litera']})" if rec["litera"] else ""
             print(
-                f"  {rec['citare']:>30s}{litere_str:>20s} | "
+                f"  {rec['citare']:>45s} | "
                 f"{rec['capitol'] or '':>40s} | "
-                f"{rec['text_integral'][:60]}..."
+                f"{rec['text_fragment'][:60]}..."
             )
-        print(f"\n  Total: {len(records)} alineat-level records from {act_normativ}")
+        print(f"\n  Total: {len(records)} fragment-level records from {act_label}")
         return len(records)
 
     # Database operations
     async with db_session.async_session() as session:
+        act_id = await get_or_create_act(session, tip_act, numar, an, titlu)
+        await session.commit()
+
         if force:
             await session.execute(
-                delete(ArticolLegislatie).where(
-                    ArticolLegislatie.act_normativ == act_normativ
+                delete(LegislatieFragment).where(
+                    LegislatieFragment.act_id == act_id
                 )
             )
             await session.commit()
-            logger.info("deleted_existing", act=act_normativ)
+            logger.info("deleted_existing", act=act_label)
 
-        # Check which records already exist (by citare)
+        # Check which records already exist (by unique constraint components)
         existing = await session.execute(
-            select(ArticolLegislatie.citare).where(
-                ArticolLegislatie.act_normativ == act_normativ
+            select(
+                LegislatieFragment.numar_articol,
+                LegislatieFragment.alineat,
+                LegislatieFragment.litera,
+            ).where(
+                LegislatieFragment.act_id == act_id
             )
         )
-        existing_citari = {row[0] for row in existing}
+        existing_keys = {
+            (row[0], row[1] or 0, row[2] or "")
+            for row in existing
+        }
 
-        new_records = [r for r in records if r["citare"] not in existing_citari]
+        new_records = [
+            r for r in records
+            if (r["numar_articol"], r["alineat"] or 0, r["litera"] or "")
+            not in existing_keys
+        ]
+
         if not new_records:
-            logger.info("all_records_exist", act=act_normativ, total=len(records))
+            logger.info("all_records_exist", act=act_label, total=len(records))
             return 0
 
         logger.info(
             "importing_new_records",
             new=len(new_records),
-            existing=len(existing_citari),
+            existing=len(existing_keys),
             total=len(records),
         )
 
@@ -371,15 +414,15 @@ async def import_file(
         for batch_start in range(0, len(new_records), EMBED_BATCH_SIZE):
             batch = new_records[batch_start:batch_start + EMBED_BATCH_SIZE]
 
-            # Embedding text: full citation context for better semantic match
+            # Embedding text: citation + context for better semantic match
             embed_texts = []
             for r in batch:
-                parts = [f"{r['act_normativ']} {r['citare']}"]
+                parts = [f"{act_label} {r['citare']}"]
                 if r["capitol"]:
                     parts.append(f"Capitol: {r['capitol']}")
                 if r["sectiune"]:
                     parts.append(f"Secțiune: {r['sectiune']}")
-                parts.append(r["text_integral"])
+                parts.append(r["text_fragment"])
                 embed_texts.append("\n".join(parts))
 
             # Generate embeddings with retry
@@ -406,14 +449,18 @@ async def import_file(
                 continue
 
             for rec_data, emb in zip(batch, embeddings):
-                record = ArticolLegislatie(
-                    act_normativ=rec_data["act_normativ"],
+                # Build tsvector from fragment text + citation
+                keywords_text = f"{rec_data['citare']} {rec_data['text_fragment']}"
+
+                record = LegislatieFragment(
+                    act_id=act_id,
                     numar_articol=rec_data["numar_articol"],
                     articol=rec_data["articol"],
                     alineat=rec_data["alineat"],
                     alineat_text=rec_data["alineat_text"],
-                    litere=rec_data["litere"],
-                    text_integral=rec_data["text_integral"],
+                    litera=rec_data["litera"],
+                    text_fragment=rec_data["text_fragment"],
+                    articol_complet=rec_data["articol_complet"],
                     citare=rec_data["citare"],
                     capitol=rec_data["capitol"],
                     sectiune=rec_data["sectiune"],
@@ -423,6 +470,19 @@ async def import_file(
                 imported += 1
 
             await session.commit()
+
+            # Update tsvector keywords for this batch using SQL
+            # (tsvector generation needs to happen server-side for proper Romanian config)
+            await session.execute(
+                text("""
+                    UPDATE legislatie_fragmente
+                    SET keywords = to_tsvector('romanian', text_fragment || ' ' || citare)
+                    WHERE act_id = :act_id AND keywords IS NULL
+                """),
+                {"act_id": act_id},
+            )
+            await session.commit()
+
             logger.info(
                 "batch_committed",
                 batch=batch_start // EMBED_BATCH_SIZE + 1,
@@ -432,7 +492,7 @@ async def import_file(
             if batch_start + EMBED_BATCH_SIZE < len(new_records):
                 await asyncio.sleep(1.0)
 
-    logger.info("import_complete", act=act_normativ, imported=imported)
+    logger.info("import_complete", act=act_label, imported=imported)
     return imported
 
 
@@ -501,7 +561,7 @@ async def main():
         total_imported += count
 
     elapsed = time.time() - start
-    print(f"\nDone! Imported {total_imported} alineat-level records in {elapsed:.1f}s")
+    print(f"\nDone! Imported {total_imported} fragment-level records in {elapsed:.1f}s")
 
 
 if __name__ == "__main__":

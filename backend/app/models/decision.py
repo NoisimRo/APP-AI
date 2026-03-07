@@ -12,10 +12,10 @@ from uuid import uuid4
 
 from pgvector.sqlalchemy import Vector
 from sqlalchemy import (
-    JSON, DateTime, ForeignKey, Index, Integer, Numeric, String, Text, func,
-    Boolean, Enum as SQLEnum, CheckConstraint
+    JSON, Date, DateTime, ForeignKey, Index, Integer, Numeric, String, Text,
+    func, Boolean, Enum as SQLEnum, CheckConstraint
 )
-from sqlalchemy.dialects.postgresql import UUID, ARRAY
+from sqlalchemy.dialects.postgresql import UUID, ARRAY, TSVECTOR
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.session import Base
@@ -500,26 +500,17 @@ class NomenclatorCPV(Base):
 
 
 # =============================================================================
-# LEGISLATION ARTICLES (for Red Flags grounding)
+# LEGISLATIVE ACTS (master table)
 # =============================================================================
 
-class ArticolLegislatie(Base):
-    """Articles/alineats from Romanian procurement legislation.
+class ActNormativ(Base):
+    """Master table for legislative acts.
 
-    Stores legislation at ALINEAT granularity — the atomic citation unit
-    in Romanian law. This enables exact citations like:
-        "art. 2 alin. (2) lit. a) și b) din Legea nr. 98/2016"
-
-    Hierarchy: Act > Capitol > Secțiune > Articol > Alineat > Literă
-    - Each row = one alineat (or full article if no alineats)
-    - Litere (a, b, c...) are stored as part of the alineat text
-    - The `litere` JSON field indexes individual litere for precise lookup
-
-    Used for vector search grounding in the Red Flags Detector —
-    ensures legal references are real, not hallucinated by the LLM.
+    Normalizes act references — instead of repeating "Legea 98/2016" as a
+    string in every fragment row, we use an FK to this table.
     """
 
-    __tablename__ = "articole_legislatie"
+    __tablename__ = "acte_normative"
 
     id: Mapped[str] = mapped_column(
         UUID(as_uuid=False),
@@ -527,40 +518,111 @@ class ArticolLegislatie(Base):
         default=lambda: str(uuid4())
     )
 
-    # Legislative act identification
-    act_normativ: Mapped[str] = mapped_column(
-        String(100), nullable=False
-    )  # "Legea 98/2016", "HG 395/2016"
+    tip_act: Mapped[str] = mapped_column(
+        String(30), nullable=False
+    )  # Lege, HG, OUG, OG
+    numar: Mapped[int] = mapped_column(Integer, nullable=False)  # 98, 395
+    an: Mapped[int] = mapped_column(Integer, nullable=False)  # 2016
+    titlu: Mapped[Optional[str]] = mapped_column(Text)
+    data_publicare: Mapped[Optional[datetime]] = mapped_column(Date)
+
+    # Timestamps
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(), nullable=False
+    )
+
+    # Relationships
+    fragmente: Mapped[list["LegislatieFragment"]] = relationship(
+        "LegislatieFragment", back_populates="act", cascade="all, delete-orphan"
+    )
+
+    __table_args__ = (
+        Index("ix_acte_unique", tip_act, numar, an, unique=True),
+    )
+
+    @property
+    def denumire(self) -> str:
+        """Human-readable name: 'Legea 98/2016', 'HG 395/2016'."""
+        return f"{self.tip_act} {self.numar}/{self.an}"
+
+    def __repr__(self) -> str:
+        return f"<ActNormativ {self.denumire}>"
+
+
+# =============================================================================
+# LEGISLATION FRAGMENTS (for Red Flags grounding + RAG)
+# =============================================================================
+
+class LegislatieFragment(Base):
+    """Fragment of Romanian procurement legislation at maximum granularity.
+
+    Each row = the smallest independent legal unit:
+    - Literă (if the alineat has litere)
+    - Alineat (if no litere)
+    - Articol (if no alineats)
+
+    This enables exact citations like:
+        "art. 2 alin. (2) lit. a) din Legea nr. 98/2016"
+
+    Embedding is on the fragment text, but `articol_complet` provides
+    the full article context for RAG when the model needs neighboring alineats.
+
+    Used for vector search grounding in the Red Flags Detector —
+    ensures legal references are real, not hallucinated by the LLM.
+    """
+
+    __tablename__ = "legislatie_fragmente"
+
+    id: Mapped[str] = mapped_column(
+        UUID(as_uuid=False),
+        primary_key=True,
+        default=lambda: str(uuid4())
+    )
+
+    # FK to legislative act (normalized, not string)
+    act_id: Mapped[str] = mapped_column(
+        UUID(as_uuid=False),
+        ForeignKey("acte_normative.id", ondelete="CASCADE"),
+        nullable=False,
+    )
 
     # Article identification
     numar_articol: Mapped[int] = mapped_column(
         Integer, nullable=False
-    )  # numeric: 2, 178 (for sorting)
+    )  # 2, 178 (numeric for sorting)
     articol: Mapped[str] = mapped_column(
-        String(50), nullable=False
+        String(30), nullable=False
     )  # "art. 2", "art. 178"
 
-    # Alineat identification (NULL = article has no alineats, entire text is here)
+    # Alineat (NULL = article has no alineats)
     alineat: Mapped[Optional[int]] = mapped_column(Integer)  # 1, 2, 3...
     alineat_text: Mapped[Optional[str]] = mapped_column(
         String(20)
     )  # "alin. (1)", "alin. (2)"
 
-    # Litere within this alineat: [{"litera": "a", "text": "nediscriminarea;"}]
-    litere: Mapped[Optional[list]] = mapped_column(JSON)
+    # Literă (NULL = no litera, fragment is at alineat or article level)
+    litera: Mapped[Optional[str]] = mapped_column(
+        String(5)
+    )  # "a", "b", "c"...
 
-    # Full text of this alineat (including litere text)
-    text_integral: Mapped[str] = mapped_column(Text, nullable=False)
+    # Text of THIS specific fragment
+    text_fragment: Mapped[str] = mapped_column(Text, nullable=False)
 
-    # Canonical citation string for this row
-    # e.g. "art. 2 alin. (2)" or "art. 1" (if no alineat)
+    # Full article text (all alineats + litere) for RAG context
+    articol_complet: Mapped[Optional[str]] = mapped_column(Text)
+
+    # Canonical citation (without act name, that's via FK)
+    # e.g. "art. 2 alin. (2) lit. a)", "art. 1", "art. 178 alin. (3)"
     citare: Mapped[str] = mapped_column(
-        String(100), nullable=False
-    )  # "art. 2 alin. (2)", "art. 1"
+        String(150), nullable=False
+    )
 
     # Context in the law structure
     capitol: Mapped[Optional[str]] = mapped_column(String(500))
     sectiune: Mapped[Optional[str]] = mapped_column(String(500))
+
+    # Full-text search for legal queries
+    keywords: Mapped[Optional[str]] = mapped_column(TSVECTOR)
 
     # Vector embedding (2000 dimensions - max for pgvector HNSW index)
     embedding: Mapped[Optional[list]] = mapped_column(Vector(2000))
@@ -570,12 +632,17 @@ class ArticolLegislatie(Base):
         DateTime, server_default=func.now(), nullable=False
     )
 
+    # Relationships
+    act: Mapped["ActNormativ"] = relationship(
+        "ActNormativ", back_populates="fragmente"
+    )
+
     __table_args__ = (
-        Index("ix_art_act", act_normativ),
-        Index("ix_art_numar", act_normativ, numar_articol),
-        Index("ix_art_citare", act_normativ, citare, unique=True),
+        Index("ix_frag_act", act_id),
+        Index("ix_frag_lookup", act_id, numar_articol, alineat, litera),
+        Index("ix_frag_citare", act_id, citare),
         Index(
-            "ix_art_embedding_hnsw",
+            "ix_frag_embedding_hnsw",
             embedding,
             postgresql_using="hnsw",
             postgresql_ops={"embedding": "vector_cosine_ops"},
@@ -584,7 +651,8 @@ class ArticolLegislatie(Base):
     )
 
     def __repr__(self) -> str:
-        return f"<ArticolLegislatie {self.citare} ({self.act_normativ})>"
+        act_name = self.act.denumire if self.act else "?"
+        return f"<LegislatieFragment {self.citare} ({act_name})>"
 
 
 # =============================================================================
@@ -594,3 +662,5 @@ class ArticolLegislatie(Base):
 # Alias for backwards compatibility with existing code
 Decision = DecizieCNSC
 DecisionChunk = ArgumentareCritica  # Conceptually similar for RAG
+# Legacy alias — old code may reference this
+ArticolLegislatie = LegislatieFragment
