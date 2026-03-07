@@ -399,11 +399,26 @@ async def import_file(
             for row in existing
         }
 
-        new_records = [
-            r for r in records
-            if (r["numar_articol"], r["alineat"] or 0, r["litera"] or "")
-            not in existing_keys
-        ]
+        # Filter out records already in DB AND deduplicate parsed records
+        # (parser may generate duplicates for same art/alin/litera)
+        seen_keys = set(existing_keys)
+        new_records = []
+        duplicates_skipped = 0
+        for r in records:
+            key = (r["numar_articol"], r["alineat"] or 0, r["litera"] or "")
+            if key in seen_keys:
+                if key not in existing_keys:
+                    duplicates_skipped += 1
+                continue
+            seen_keys.add(key)
+            new_records.append(r)
+
+        if duplicates_skipped > 0:
+            logger.warning(
+                "duplicates_in_parsed_records",
+                count=duplicates_skipped,
+                act=act_label,
+            )
 
         if not new_records:
             logger.info("all_records_exist", act=act_label, total=len(records))
