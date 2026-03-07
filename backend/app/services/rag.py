@@ -18,7 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from pydantic import BaseModel
 
 from app.core.logging import get_logger
-from app.models.decision import DecizieCNSC, ArgumentareCritica
+from app.models.decision import DecizieCNSC, ArgumentareCritica, NomenclatorCPV
 from app.services.embedding import EmbeddingService
 from app.services.llm.gemini import GeminiProvider
 
@@ -233,6 +233,105 @@ class RAGService:
 
         return decisions, matched_chunks
 
+    async def _find_cpv_codes_for_query(
+        self,
+        query: str,
+        session: AsyncSession,
+    ) -> list[str]:
+        """Find CPV codes matching domain keywords in the query.
+
+        Searches nomenclator_cpv.descriere for keywords from the query
+        to identify relevant CPV codes. This enables domain-based filtering
+        (e.g., "catering" → CPV 55520000, "lucrări de instalații" → CPV 45300000).
+
+        Args:
+            query: User's search query.
+            session: Database session.
+
+        Returns:
+            List of matching CPV codes (may be empty).
+        """
+        keywords = self._extract_keywords(query)
+        if not keywords:
+            return []
+
+        # Build search conditions for nomenclator
+        conditions = []
+        for keyword in keywords:
+            conditions.append(NomenclatorCPV.descriere.ilike(f"%{keyword}%"))
+
+        if not conditions:
+            return []
+
+        stmt = (
+            select(NomenclatorCPV.cod_cpv)
+            .where(or_(*conditions))
+        )
+        result = await session.execute(stmt)
+        cpv_codes = [row[0] for row in result.all()]
+
+        if cpv_codes:
+            logger.info(
+                "cpv_codes_from_query",
+                query=query[:80],
+                keywords=keywords,
+                cpv_count=len(cpv_codes),
+            )
+
+        return cpv_codes
+
+    async def _search_by_cpv_domain(
+        self,
+        cpv_codes: list[str],
+        session: AsyncSession,
+        limit: int,
+    ) -> tuple[list[DecizieCNSC], list[tuple[ArgumentareCritica, float]]]:
+        """Search decisions by CPV codes (domain-based search).
+
+        Args:
+            cpv_codes: CPV codes to filter by.
+            session: Database session.
+            limit: Maximum number of decisions.
+
+        Returns:
+            Tuple of (decisions, matched_chunks).
+        """
+        if not cpv_codes:
+            return [], []
+
+        # Find decisions with matching CPV codes
+        stmt = (
+            select(DecizieCNSC)
+            .where(DecizieCNSC.cod_cpv.in_(cpv_codes))
+            .order_by(DecizieCNSC.data_decizie.desc().nulls_last())
+            .limit(limit)
+        )
+        result = await session.execute(stmt)
+        decisions = list(result.scalars().all())
+
+        if not decisions:
+            return [], []
+
+        # Load ArgumentareCritica for these decisions
+        dec_ids = [d.id for d in decisions]
+        stmt = (
+            select(ArgumentareCritica)
+            .where(ArgumentareCritica.decizie_id.in_(dec_ids))
+            .order_by(ArgumentareCritica.ordine_in_decizie)
+        )
+        result = await session.execute(stmt)
+        args = list(result.scalars().all())
+        matched_chunks = [(arg, 0.1) for arg in args]
+
+        logger.info(
+            "cpv_domain_search_found",
+            cpv_count=len(cpv_codes),
+            decisions=len(decisions),
+            chunks=len(matched_chunks),
+        )
+
+        return decisions, matched_chunks
+
     async def search_decisions(
         self,
         query: str,
@@ -244,8 +343,9 @@ class RAGService:
         Search strategy (in order of priority):
         1. Direct BO references (e.g. BO2025_1011)
         2. Legal article/reference search (e.g. art. 57 din Legea 98/2016)
-        3. Vector search on ArgumentareCritica embeddings
-        4. Keyword ILIKE fallback
+        3. CPV domain search (e.g. "catering" → find CPV codes → filter decisions)
+        4. Vector search on ArgumentareCritica embeddings (boosted by CPV if available)
+        5. Keyword ILIKE fallback
 
         Args:
             query: User's search query.
@@ -291,7 +391,10 @@ class RAGService:
             if ref_decisions:
                 return ref_decisions, ref_chunks
 
-        # 3. Check if embeddings exist for vector search
+        # 3. Find CPV codes matching domain keywords in the query
+        cpv_codes = await self._find_cpv_codes_for_query(query, session)
+
+        # 4. Check if embeddings exist for vector search
         has_embeddings = await session.scalar(
             select(func.count())
             .select_from(ArgumentareCritica)
@@ -305,6 +408,28 @@ class RAGService:
             )
 
             if matched_chunks:
+                # If we have CPV codes, boost chunks from decisions with matching CPV
+                if cpv_codes:
+                    cpv_set = set(cpv_codes)
+                    # Load decision CPV codes for matched chunks
+                    chunk_dec_ids = list({arg.decizie_id for arg, _ in matched_chunks})
+                    stmt = (
+                        select(DecizieCNSC.id, DecizieCNSC.cod_cpv)
+                        .where(DecizieCNSC.id.in_(chunk_dec_ids))
+                    )
+                    result = await session.execute(stmt)
+                    dec_cpv_map = {row[0]: row[1] for row in result.all()}
+
+                    # Re-score: reduce distance for CPV-matching decisions
+                    boosted_chunks = []
+                    for arg, dist in matched_chunks:
+                        dec_cpv = dec_cpv_map.get(arg.decizie_id)
+                        if dec_cpv and dec_cpv in cpv_set:
+                            boosted_chunks.append((arg, dist * 0.5))  # Boost by halving distance
+                        else:
+                            boosted_chunks.append((arg, dist))
+                    matched_chunks = sorted(boosted_chunks, key=lambda x: x[1])
+
                 # Get unique decision IDs from matched chunks
                 seen_ids = set()
                 unique_decision_ids = []
@@ -331,10 +456,19 @@ class RAGService:
                     "vector_search_decisions_found",
                     count=len(decisions),
                     chunks_matched=len(matched_chunks),
+                    cpv_boost=bool(cpv_codes),
                 )
                 return decisions, matched_chunks
 
-        # 4. Fallback: keyword ILIKE search
+        # 5. CPV domain search (when no embeddings or vector search returned nothing)
+        if cpv_codes:
+            cpv_decisions, cpv_chunks = await self._search_by_cpv_domain(
+                cpv_codes, session, limit=limit
+            )
+            if cpv_decisions:
+                return cpv_decisions, cpv_chunks
+
+        # 6. Fallback: keyword ILIKE search
         logger.info("falling_back_to_keyword_search", query=query)
         decisions = await self._keyword_search(query, session, limit)
         return decisions, []
@@ -355,6 +489,8 @@ class RAGService:
             conditions.append(DecizieCNSC.contestator.ilike(keyword_pattern))
             conditions.append(DecizieCNSC.autoritate_contractanta.ilike(keyword_pattern))
             conditions.append(DecizieCNSC.filename.ilike(keyword_pattern))
+            conditions.append(DecizieCNSC.cpv_descriere.ilike(keyword_pattern))
+            conditions.append(DecizieCNSC.cpv_clasa.ilike(keyword_pattern))
 
         if not conditions:
             stmt = (
@@ -492,6 +628,12 @@ class RAGService:
                 if not dec:
                     continue
 
+                cpv_info = dec.cod_cpv or 'N/A'
+                if dec.cpv_descriere:
+                    cpv_info += f" — {dec.cpv_descriere}"
+                if dec.cpv_categorie:
+                    cpv_info += f" ({dec.cpv_categorie})"
+
                 context_parts = [
                     f"=== Decizia {dec.external_id} ===",
                     f"Număr decizie: {dec.numar_decizie or 'N/A'}",
@@ -499,6 +641,7 @@ class RAGService:
                     f"Complet: {dec.complet or 'N/A'}",
                     f"Tip contestație: {dec.tip_contestatie}",
                     f"Coduri critici: {', '.join(dec.coduri_critici) if dec.coduri_critici else 'N/A'}",
+                    f"CPV: {cpv_info}",
                     f"Soluție: {dec.solutie_contestatie or 'N/A'}",
                     f"Contestator: {dec.contestator or 'N/A'}",
                     f"Autoritate contractantă: {dec.autoritate_contractanta or 'N/A'}",
@@ -557,6 +700,11 @@ class RAGService:
             for dec in decisions:
                 text = dec.text_integral
                 truncated = len(text) > max_chars_per_decision
+                cpv_info = dec.cod_cpv or 'N/A'
+                if dec.cpv_descriere:
+                    cpv_info += f" — {dec.cpv_descriere}"
+                if dec.cpv_categorie:
+                    cpv_info += f" ({dec.cpv_categorie})"
                 context_parts = [
                     f"=== Decizia {dec.external_id} ===",
                     f"Număr decizie: {dec.numar_decizie or 'N/A'}",
@@ -564,6 +712,7 @@ class RAGService:
                     f"Complet: {dec.complet or 'N/A'}",
                     f"Tip contestație: {dec.tip_contestatie}",
                     f"Coduri critici: {', '.join(dec.coduri_critici) if dec.coduri_critici else 'N/A'}",
+                    f"CPV: {cpv_info}",
                     f"Soluție: {dec.solutie_contestatie or 'N/A'}",
                     f"Contestator: {dec.contestator or 'N/A'}",
                     f"Autoritate contractantă: {dec.autoritate_contractanta or 'N/A'}",
