@@ -468,31 +468,55 @@ Severitate:
 
         return decisions, relevant_chunks
 
-    async def _ground_single_flag(
+    async def _fetch_context_for_flag(
         self,
         clause_info: dict,
         session: AsyncSession,
     ) -> dict:
-        """Ground a single detected clause with real legislation + jurisprudence.
+        """Fetch DB context (legislation + jurisprudence) for a single flag.
 
-        Performs two vector searches (legislation + CNSC decisions), then
-        asks the LLM to compose the final red flag with REAL context.
+        IMPORTANT: Must be called sequentially — AsyncSession is NOT safe
+        for concurrent use from multiple coroutines.
 
         Args:
             clause_info: Dict from Pass 1 with clause, issue, search_query.
             session: Database session.
 
         Returns:
-            Grounded red flag dict.
+            Dict with legal_articles, decisions, matched_chunks.
         """
         search_query = clause_info.get("search_query", clause_info.get("issue", ""))
 
-        # Run both searches in parallel
-        legislation_task = self._search_legislation(search_query, session, limit=3)
-        jurisprudence_task = self._search_jurisprudence(search_query, session, limit=5)
-        legal_articles, (decisions, matched_chunks) = await asyncio.gather(
-            legislation_task, jurisprudence_task
-        )
+        # Run searches SEQUENTIALLY — AsyncSession cannot handle concurrent queries
+        legal_articles = await self._search_legislation(search_query, session, limit=3)
+        decisions, matched_chunks = await self._search_jurisprudence(search_query, session, limit=5)
+
+        return {
+            "legal_articles": legal_articles,
+            "decisions": decisions,
+            "matched_chunks": matched_chunks,
+        }
+
+    async def _ground_single_flag(
+        self,
+        clause_info: dict,
+        context: dict,
+    ) -> dict:
+        """Ground a single detected clause with pre-fetched context.
+
+        This method only calls the LLM (no DB access), so it's safe to
+        run multiple instances in parallel.
+
+        Args:
+            clause_info: Dict from Pass 1 with clause, issue, search_query.
+            context: Pre-fetched DB context from _fetch_context_for_flag.
+
+        Returns:
+            Grounded red flag dict.
+        """
+        legal_articles = context["legal_articles"]
+        decisions = context["decisions"]
+        matched_chunks = context["matched_chunks"]
 
         # Build legislation context with full citation info
         legislation_context = ""
@@ -770,17 +794,28 @@ Răspunde EXCLUSIV în format JSON:
             )
             detected_clauses = detected_clauses[:MAX_FLAGS_TO_GROUND]
 
-        # Pass 2: Grounding per flag
+        # Pass 2: Grounding per flag (two phases to avoid concurrent session use)
         if use_jurisprudence and session:
-            # Use semaphore to limit concurrent API calls
+            # Phase 2a: Fetch all DB context SEQUENTIALLY (AsyncSession is not
+            # safe for concurrent use from multiple coroutines)
+            logger.info("pass2_fetching_context", count=len(detected_clauses))
+            contexts = []
+            for clause in detected_clauses:
+                ctx = await self._fetch_context_for_flag(clause, session)
+                contexts.append(ctx)
+
+            # Phase 2b: Run LLM grounding calls in PARALLEL (no DB needed)
             semaphore = asyncio.Semaphore(MAX_CONCURRENT_GROUNDING)
 
-            async def ground_with_limit(clause: dict) -> dict:
+            async def ground_with_limit(clause: dict, ctx: dict) -> dict:
                 async with semaphore:
-                    return await self._ground_single_flag(clause, session)
+                    return await self._ground_single_flag(clause, ctx)
 
             grounded_flags = await asyncio.gather(
-                *[ground_with_limit(clause) for clause in detected_clauses]
+                *[
+                    ground_with_limit(clause, ctx)
+                    for clause, ctx in zip(detected_clauses, contexts)
+                ]
             )
         else:
             # No grounding — return detection results with empty refs
