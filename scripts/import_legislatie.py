@@ -338,8 +338,8 @@ def parse_legislation(raw_text: str) -> list[dict]:
                         "text_fragment": lit["text"],
                         "articol_complet": article_text,
                         "citare": citare,
-                        "capitol": current_capitol,
-                        "sectiune": current_sectiune,
+                        "capitol": current_capitol[:500] if current_capitol else None,
+                        "sectiune": current_sectiune[:500] if current_sectiune else None,
                     })
             else:
                 # No litere — fragment is the alineat itself (or whole article)
