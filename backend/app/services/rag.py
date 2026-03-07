@@ -1050,7 +1050,7 @@ class RAGService:
         Returns:
             Tuple of (response_text, citations, confidence, suggested_questions).
         """
-        logger.info(“generating_rag_response”, query=query)
+        logger.info("generating_rag_response", query=query)
 
         # 1. Search legislation fragments (parallel with decision search)
         legislation_fragments = await self._search_legislation_fragments(
@@ -1063,13 +1063,13 @@ class RAGService:
         )
 
         if not decisions and not legislation_fragments:
-            logger.warning(“no_results_found”, query=query)
+            logger.warning("no_results_found", query=query)
             return (
-                “Nu am găsit informații relevante pentru această întrebare. “
-                “Încearcă să reformulezi întrebarea sau să folosești termeni mai specifici.”,
+                "Nu am găsit informații relevante pentru această întrebare. "
+                "Încearcă să reformulezi întrebarea sau să folosești termeni mai specifici.",
                 [],
                 0.0,
-                [“Ce decizii CNSC sunt disponibile?”, “Arată-mi toate deciziile”],
+                ["Ce decizii CNSC sunt disponibile?", "Arată-mi toate deciziile"],
             )
 
         # 2. Build context — legislation first, then decisions
@@ -1083,49 +1083,49 @@ class RAGService:
         has_legislation = bool(legislation_fragments)
         has_decisions = bool(decisions)
 
-        system_prompt = “””Ești un consultant senior în achiziții publice specializat în legislația și jurisprudența CNSC (Consiliul Național de Soluționare a Contestațiilor) din România.
+        system_prompt = """Ești un consultant senior în achiziții publice specializat în legislația și jurisprudența CNSC (Consiliul Național de Soluționare a Contestațiilor) din România.
 
-Sarcina ta este să răspunzi la întrebări folosind EXCLUSIV informațiile din contextul furnizat mai jos.”””
+Sarcina ta este să răspunzi la întrebări folosind EXCLUSIV informațiile din contextul furnizat mai jos."""
 
         if has_legislation and has_decisions:
-            system_prompt += “””
+            system_prompt += """
 
 Contextul conține atât TEXTE LEGISLATIVE (articole din Legea 98/2016, HG 395/2016, etc.) cât și DECIZII CNSC. Folosește-le pe ambele:
 - Citează textul exact al articolelor de lege când sunt disponibile
-- Citează deciziile CNSC care aplică sau interpretează acele articole”””
+- Citează deciziile CNSC care aplică sau interpretează acele articole"""
         elif has_legislation:
-            system_prompt += “””
+            system_prompt += """
 
 Contextul conține TEXTE LEGISLATIVE (articole din Legea 98/2016, HG 395/2016, etc.).
-Citează textul exact al articolelor, inclusiv alineatele și literele relevante.”””
+Citează textul exact al articolelor, inclusiv alineatele și literele relevante."""
         else:
-            system_prompt += “””
+            system_prompt += """
 
-Contextul conține DECIZII CNSC relevante pentru întrebare.”””
+Contextul conține DECIZII CNSC relevante pentru întrebare."""
 
-        system_prompt += “””
+        system_prompt += """
 
 Reguli importante:
 1. Bazează-te DOAR pe informațiile din contextul furnizat
-2. Citează sursele specifice: articole de lege cu citare completă (ex: “**art. 2 alin. (3) lit. b) din HG 395/2016**”) și/sau decizii CNSC (ex: “Conform deciziei **BO2025_123**...”)
+2. Citează sursele specifice: articole de lege cu citare completă (ex: "**art. 2 alin. (3) lit. b) din HG 395/2016**") și/sau decizii CNSC (ex: "Conform deciziei **BO2025_123**...")
 3. Dacă informația nu este în context, spune clar că nu ai suficiente date
 4. Oferă răspunsuri clare, structurate și profesionale
 5. Folosește terminologie juridică corectă specifică achizițiilor publice
 6. Când discuți despre soluții, menționează argumentele CNSC
 7. Când în context există referințe la jurisprudență (decizii ale instanțelor naționale, CJUE, directive europene), citează-le exact așa cum apar
-8. NU te prezenta și NU folosi formulări de genul “În calitate de...” - răspunde direct la întrebare
-9. **CITĂRI VERBATIM**: Când susții un argument sau prezinți o concluzie, include citate exacte din textul original, folosind ghilimele. Exemplu: *Conform **art. 2 alin. (3)** din HG 395/2016, „textul exact al articolului”*
+8. NU te prezenta și NU folosi formulări de genul "În calitate de..." - răspunde direct la întrebare
+9. **CITĂRI VERBATIM**: Când susții un argument sau prezinți o concluzie, include citate exacte din textul original, folosind ghilimele. Exemplu: *Conform **art. 2 alin. (3)** din HG 395/2016, „textul exact al articolului"*
 10. Prezintă atât argumentele contestatorului, cât și cele ale autorității contractante și ale CNSC, cu citate verbatim din fiecare parte, pentru a oferi o imagine completă.
 
 Formatare:
 - Folosește **bold** pentru termeni cheie, referințe la articole de lege și la decizii
-- Folosește „ghilimele românești” pentru citatele verbatim
+- Folosește „ghilimele românești" pentru citatele verbatim
 - Structurează răspunsul cu paragrafe clare, separate prin linii goale
 - Folosește liste numerotate (1. 2. 3.) pentru enumerări
 - Folosește titluri (## sau ###) pentru secțiuni distincte când răspunsul este lung
 - Fiecare argument sau decizie trebuie să fie pe un paragraf separat
 
-Răspunde în limba română, profesional și precis.”””
+Răspunde în limba română, profesional și precis."""
 
         # 4. Generate response with LLM
         try:
