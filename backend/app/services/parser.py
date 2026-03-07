@@ -485,12 +485,13 @@ class CNSCDecisionParser:
                 solutie_str = match.group(4).upper()
 
         # Parse criticism codes (e.g., "D1_D4" -> ["D1", "D4"])
+        # "NA" means no specific criticism codes — valid for some decisions
         coduri_critici = self._parse_criticism_codes_from_filename(critici_str)
 
-        if not coduri_critici:
+        if not coduri_critici and critici_str.upper() != "NA":
             raise ValueError(f"No valid criticism codes found in: {critici_str}")
 
-        # Determine contest type from criticism codes
+        # Determine contest type from criticism codes (or from solutie if NA)
         tip_contestatie = self._determine_contest_type(coduri_critici)
 
         # Parse solution code
