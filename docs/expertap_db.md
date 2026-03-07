@@ -177,7 +177,7 @@ Foreign-key constraints:
 |------|-------------|-------------|-----------|
 | 2026-03-07 | `CREATE TABLE acte_normative (...)` + seed data 6 acte | Utilizator | DA |
 | 2026-03-07 | `CREATE TABLE legislatie_fragmente (...)` + 7 indexuri (incl. HNSW, GIN, UNIQUE) | Utilizator | DA |
-| 2026-03-07 | `DROP TABLE IF EXISTS citate_verbatim CASCADE` | Utilizator | PENDING |
-| 2026-03-07 | `DROP TABLE IF EXISTS sectiuni_decizie CASCADE` | Utilizator | PENDING |
-| 2026-03-07 | `DROP TABLE IF EXISTS referinte_articole CASCADE` | Utilizator | PENDING |
-| 2026-03-07 | `DROP INDEX IF EXISTS ix_decizii_cnsc_solutie_contestatie` (duplicate of ix_decizii_solutie) | Utilizator | PENDING |
+| 2026-03-07 | `DROP TABLE IF EXISTS citate_verbatim CASCADE` | Utilizator | DA |
+| 2026-03-07 | `DROP TABLE IF EXISTS sectiuni_decizie CASCADE` | Utilizator | DA |
+| 2026-03-07 | `DROP TABLE IF EXISTS referinte_articole CASCADE` | Utilizator | DA |
+| 2026-03-07 | `DROP INDEX IF EXISTS ix_decizii_cnsc_solutie_contestatie` (duplicate of ix_decizii_solutie) | Utilizator | DA |

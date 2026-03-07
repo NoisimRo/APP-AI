@@ -68,5 +68,5 @@ nomenclator_cpv — independent (nu are FK)
 |------|-------------|-------------|-----------|
 | 2026-03-07 | `CREATE TABLE acte_normative (...)` + seed data 6 acte | Utilizator | DA |
 | 2026-03-07 | `CREATE TABLE legislatie_fragmente (...)` + 7 indexuri | Utilizator | DA |
-| 2026-03-07 | `DROP TABLE citate_verbatim, sectiuni_decizie, referinte_articole CASCADE` | Utilizator | PENDING |
-| 2026-03-07 | `DROP INDEX ix_decizii_cnsc_solutie_contestatie` (duplicate) | Utilizator | PENDING |
+| 2026-03-07 | `DROP TABLE citate_verbatim, sectiuni_decizie, referinte_articole CASCADE` | Utilizator | DA |
+| 2026-03-07 | `DROP INDEX ix_decizii_cnsc_solutie_contestatie` (duplicate) | Utilizator | DA |
