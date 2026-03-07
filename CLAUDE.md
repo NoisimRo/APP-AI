@@ -62,6 +62,23 @@ DATABASE_URL="postgresql+asyncpg://..." python scripts/generate_embeddings.py
 - HNSW indexes on embedding columns for fast vector search
 - Decision lookup supports: direct BO reference, vector search, keyword ILIKE fallback
 
+### ⚠️ REGULI OBLIGATORII — Schema Producție (`DATABASE_SCHEMA.md`)
+
+**`DATABASE_SCHEMA.md`** este sursa de adevăr pentru schema bazei de date din producție. Regulile de mai jos sunt **obligatorii** și nu pot fi ignorate:
+
+1. **Înainte de a propune orice modificare SQL** (ALTER TABLE, CREATE TABLE, DROP, CREATE INDEX, etc.), Claude TREBUIE să citească `DATABASE_SCHEMA.md` pentru a înțelege starea actuală a producției.
+
+2. **După ce utilizatorul confirmă că a executat o comandă SQL în producție**, Claude TREBUIE **imediat** să actualizeze `DATABASE_SCHEMA.md`:
+   - Actualizează tabelul/coloana/indexul afectat
+   - Adaugă o intrare în secțiunea "Changelog Schema Producție" cu data, comanda SQL, și cine a executat-o
+   - Actualizează "Ultima sincronizare cu producția" din header
+
+3. **Niciodată** nu se propun modificări SQL bazate doar pe modelele SQLAlchemy — producția poate diferi de cod (coloane adăugate manual, indexuri lipsă, dimensiuni diferite, etc.).
+
+4. **Când se creează o migrare Alembic nouă**, aceasta trebuie să fie consistentă cu `DATABASE_SCHEMA.md`, nu invers.
+
+5. **Dacă Claude detectează o discrepanță** între `DATABASE_SCHEMA.md`, modele SQLAlchemy, și/sau migrări Alembic, trebuie să semnaleze imediat utilizatorului și să ceară output din producție (`\d <table>`) pentru clarificare.
+
 ### Embedding Dimensions
 
 - **Model:** `gemini-embedding-001` (native output: 3072 dimensions, capped to 2000)
