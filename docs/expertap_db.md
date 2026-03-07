@@ -1,15 +1,17 @@
 # \dt+
 
                                             List of relations
- Schema |        Name         | Type  |  Owner   | Persistence | Access method |    Size    | Description 
+ Schema |        Name         | Type  |  Owner   | Persistence | Access method |    Size    | Description
 --------+---------------------+-------+----------+-------------+---------------+------------+-------------
- public | argumentare_critica | table | expertap | permanent   | heap          | 4320 kB    | 
- public | citate_verbatim     | table | expertap | permanent   | heap          | 8192 bytes | 
- public | decizii_cnsc        | table | expertap | permanent   | heap          | 78 MB      | 
- public | nomenclator_cpv     | table | expertap | permanent   | heap          | 8192 bytes | 
- public | referinte_articole  | table | expertap | permanent   | heap          | 8192 bytes | 
- public | sectiuni_decizie    | table | expertap | permanent   | heap          | 8192 bytes | 
-(6 rows)
+ public | acte_normative      | table | expertap | permanent   | heap          | 8192 bytes |
+ public | argumentare_critica | table | expertap | permanent   | heap          | 4320 kB    |
+ public | citate_verbatim     | table | expertap | permanent   | heap          | 8192 bytes |
+ public | decizii_cnsc        | table | expertap | permanent   | heap          | 78 MB      |
+ public | legislatie_fragmente| table | expertap | permanent   | heap          | 8192 bytes |
+ public | nomenclator_cpv     | table | expertap | permanent   | heap          | 8192 bytes |
+ public | referinte_articole  | table | expertap | permanent   | heap          | 8192 bytes |
+ public | sectiuni_decizie    | table | expertap | permanent   | heap          | 8192 bytes |
+(8 rows)
  
 
 
@@ -192,6 +194,55 @@ Indexes:
     "ix_cpv_clasa" btree (clasa_produse)
 
 
+# \d acte_normative
+                            Table "public.acte_normative"
+     Column      |            Type             | Collation | Nullable |       Default
+-----------------+-----------------------------+-----------+----------+--------------------
+ id              | uuid                        |           | not null | gen_random_uuid()
+ tip_act         | character varying(30)       |           | not null |
+ numar           | integer                     |           | not null |
+ an              | integer                     |           | not null |
+ titlu           | text                        |           |          |
+ data_publicare  | date                        |           |          |
+ created_at      | timestamp without time zone |           | not null | now()
+Indexes:
+    "acte_normative_pkey" PRIMARY KEY, btree (id)
+    "ix_acte_unique" UNIQUE, btree (tip_act, numar, an)
+Referenced by:
+    TABLE "legislatie_fragmente" CONSTRAINT "legislatie_fragmente_act_id_fkey" FOREIGN KEY (act_id) REFERENCES acte_normative(id) ON DELETE CASCADE
+
+
+# \d legislatie_fragmente
+                          Table "public.legislatie_fragmente"
+     Column       |            Type             | Collation | Nullable |       Default
+------------------+-----------------------------+-----------+----------+--------------------
+ id               | uuid                        |           | not null | gen_random_uuid()
+ act_id           | uuid                        |           | not null |
+ numar_articol    | integer                     |           | not null |
+ articol          | character varying(30)       |           | not null |
+ alineat          | integer                     |           |          |
+ alineat_text     | character varying(20)       |           |          |
+ litera           | character varying(5)        |           |          |
+ text_fragment    | text                        |           | not null |
+ articol_complet  | text                        |           |          |
+ citare           | character varying(150)      |           | not null |
+ capitol          | character varying(500)      |           |          |
+ sectiune         | character varying(500)      |           |          |
+ keywords         | tsvector                    |           |          |
+ embedding        | vector(2000)                |           |          |
+ created_at       | timestamp without time zone |           | not null | now()
+Indexes:
+    "legislatie_fragmente_pkey" PRIMARY KEY, btree (id)
+    "ix_frag_unique" UNIQUE, btree (act_id, numar_articol, COALESCE(alineat, 0), COALESCE(litera::text, ''::text))
+    "ix_frag_act" btree (act_id)
+    "ix_frag_citare" btree (act_id, citare)
+    "ix_frag_embedding_hnsw" hnsw (embedding vector_cosine_ops) WITH (m='16', ef_construction='64')
+    "ix_frag_keywords" gin (keywords)
+    "ix_frag_lookup" btree (act_id, numar_articol, alineat, litera)
+Foreign-key constraints:
+    "legislatie_fragmente_act_id_fkey" FOREIGN KEY (act_id) REFERENCES acte_normative(id) ON DELETE CASCADE
+
+
 # \dx
                                     List of installed extensions
   Name   | Version |   Schema   |                            Description                            
@@ -200,4 +251,16 @@ Indexes:
  plpgsql | 1.0     | pg_catalog | PL/pgSQL procedural language
  vector  | 0.8.1   | public     | vector data type and ivfflat and hnsw access methods
 (3 rows)
+
+
+---
+
+# Ultima sincronizare cu producția: 2026-03-07
+
+# Changelog Schema Producție
+
+| Data | Comanda SQL | Executat de | Verificat |
+|------|-------------|-------------|-----------|
+| 2026-03-07 | `CREATE TABLE acte_normative (...)` + seed data 6 acte | Utilizator | DA |
+| 2026-03-07 | `CREATE TABLE legislatie_fragmente (...)` + 7 indexuri (incl. HNSW, GIN, UNIQUE) | Utilizator | DA |
 

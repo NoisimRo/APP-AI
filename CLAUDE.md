@@ -149,8 +149,6 @@ Permite citări exacte: `art. 2 alin. (2) lit. a) din Legea nr. 98/2016`
 - UNIQUE constraint: `(act_id, numar_articol, COALESCE(alineat, 0), COALESCE(litera, ''))`
 
 **Import:** `python scripts/import_legislatie.py --dir date-expert-app/legislatie-ap`
-
-**Import:** `python scripts/import_legislatie.py --dir date-expert-app/legislatie-ap`
 **Source files:** .md files in `date-expert-app/legislatie-ap/` (Legea 98/2016, HG 395/2016, etc.)
 
 ### ArgumentareCritica Fields (populated by LLM analysis)
