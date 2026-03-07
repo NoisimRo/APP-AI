@@ -31,7 +31,7 @@ from app.core.config import get_settings
 from app.core.logging import get_logger
 from app.db.session import init_db, Base
 from app.db import session as db_session
-from app.models.decision import DecizieCNSC, ArgumentareCritica
+from app.models.decision import DecizieCNSC, ArgumentareCritica, NomenclatorCPV
 from app.services.analysis import DecisionAnalysisService
 from app.services.embedding import EmbeddingService
 from app.services.parser import parse_decision_text
@@ -135,6 +135,7 @@ class DecisionImporter:
         session: AsyncSession,
         blob_name: str,
         content: str,
+        cpv_map: dict | None = None,
     ) -> tuple[str, Optional[str], Optional[str]]:
         """Parse and import a single decision.
 
@@ -205,6 +206,13 @@ class DecisionImporter:
                 parse_warnings=parsed.parse_warnings,
             )
 
+            # Enrich CPV data from nomenclator
+            if cpv_map and decision.cod_cpv and decision.cod_cpv in cpv_map:
+                cpv_info = cpv_map[decision.cod_cpv]
+                decision.cpv_descriere = cpv_info["descriere"]
+                decision.cpv_categorie = cpv_info["categorie"]
+                decision.cpv_clasa = cpv_info["clasa"]
+
             # Use savepoint so a single failure doesn't poison the batch session
             async with session.begin_nested():
                 session.add(decision)
@@ -235,6 +243,19 @@ class DecisionImporter:
             )
             return {row[0] for row in result.all()}
 
+    async def _load_cpv_nomenclator(self) -> dict:
+        """Load CPV nomenclator into memory for enrichment during import."""
+        async with db_session.async_session_factory() as session:
+            result = await session.execute(select(NomenclatorCPV))
+            cpv_map = {}
+            for cpv in result.scalars().all():
+                cpv_map[cpv.cod_cpv] = {
+                    "descriere": cpv.descriere,
+                    "categorie": cpv.categorie_achizitii,
+                    "clasa": cpv.clasa_produse,
+                }
+            return cpv_map
+
     async def import_all(
         self,
         limit: Optional[int] = None,
@@ -264,6 +285,10 @@ class DecisionImporter:
         # Pre-load existing filenames to skip without downloading
         existing_filenames = await self._load_existing_filenames()
         logger.info("existing_filenames_loaded", count=len(existing_filenames))
+
+        # Pre-load CPV nomenclator for enrichment
+        cpv_map = await self._load_cpv_nomenclator()
+        logger.info("cpv_nomenclator_loaded", count=len(cpv_map))
 
         # Get list of files
         files = self.list_decision_files(limit=limit, offset=offset)
@@ -317,7 +342,7 @@ class DecisionImporter:
                     try:
                         # Import to database
                         status, decision_id, error_msg = await self.import_decision(
-                            session, blob_name, content
+                            session, blob_name, content, cpv_map=cpv_map
                         )
 
                         if status == "imported":
