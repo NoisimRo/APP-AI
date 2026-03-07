@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Generate vector embeddings for CNSC decision data.
 
-Populates the embedding columns in ArgumentareCritica and CitatVerbatim
-tables using the Gemini text-embedding-004 model. These embeddings enable
-semantic vector search in the RAG pipeline.
+Populates the embedding column in ArgumentareCritica using the Gemini
+embedding model. These embeddings enable semantic vector search in the
+RAG pipeline.
 
 Features:
 - Skips rows that already have embeddings (idempotent)
@@ -15,9 +15,7 @@ Usage:
     python scripts/generate_embeddings.py                    # Generate all missing embeddings
     python scripts/generate_embeddings.py --force            # Regenerate all embeddings
     python scripts/generate_embeddings.py --limit 10         # Process only 10 rows (testing)
-    python scripts/generate_embeddings.py --table argumentari  # Only ArgumentareCritica
-    python scripts/generate_embeddings.py --table citate       # Only CitatVerbatim
-    python scripts/generate_embeddings.py --batch-size 20      # API batch size (default: 20)
+    python scripts/generate_embeddings.py --batch-size 20    # API batch size (default: 20)
 """
 
 import asyncio
@@ -33,7 +31,7 @@ from sqlalchemy import select, func
 from app.core.logging import get_logger
 from app.db.session import init_db
 from app.db import session as db_session
-from app.models.decision import ArgumentareCritica, CitatVerbatim
+from app.models.decision import ArgumentareCritica
 from app.services.embedding import EmbeddingService
 
 logger = get_logger(__name__)
@@ -44,7 +42,6 @@ COMMIT_BATCH_SIZE = 100
 
 async def generate_embeddings_batched(
     embedding_service: EmbeddingService,
-    table_name: str,
     force: bool = False,
     limit: int | None = None,
     api_batch_size: int = 20,
@@ -54,7 +51,6 @@ async def generate_embeddings_batched(
 
     Args:
         embedding_service: The embedding service instance.
-        table_name: 'argumentari' or 'citate'.
         force: Regenerate all embeddings.
         limit: Max rows to process.
         api_batch_size: Texts per API call.
@@ -63,40 +59,32 @@ async def generate_embeddings_batched(
     Returns:
         Total embeddings generated.
     """
-    model_class = ArgumentareCritica if table_name == "argumentari" else CitatVerbatim
-    compose_fn = (
-        EmbeddingService.compose_text_for_argumentare
-        if table_name == "argumentari"
-        else EmbeddingService.compose_text_for_citat
-    )
-
     # Count total to process
     async with db_session.async_session_factory() as session:
-        count_stmt = select(func.count()).select_from(model_class)
+        count_stmt = select(func.count()).select_from(ArgumentareCritica)
         if not force:
-            count_stmt = count_stmt.where(model_class.embedding.is_(None))
+            count_stmt = count_stmt.where(ArgumentareCritica.embedding.is_(None))
         total_to_process = await session.scalar(count_stmt)
 
     if limit:
         total_to_process = min(total_to_process, limit)
 
     if total_to_process == 0:
-        print(f"  No {table_name} need embeddings.")
+        print("  No argumentari need embeddings.")
         return 0
 
-    print(f"  Processing {total_to_process} {table_name}...")
+    print(f"  Processing {total_to_process} argumentari...")
 
     total_generated = 0
-    offset = 0
 
     while total_generated < total_to_process:
         batch_target = min(COMMIT_BATCH_SIZE, total_to_process - total_generated)
 
         async with db_session.async_session_factory() as session:
             # Fetch next batch of rows needing embeddings
-            stmt = select(model_class)
+            stmt = select(ArgumentareCritica)
             if not force:
-                stmt = stmt.where(model_class.embedding.is_(None))
+                stmt = stmt.where(ArgumentareCritica.embedding.is_(None))
             stmt = stmt.limit(batch_target)
 
             result = await session.execute(stmt)
@@ -108,7 +96,7 @@ async def generate_embeddings_batched(
             # Compose texts
             valid_pairs = []
             for row in rows:
-                text = compose_fn(row)
+                text = EmbeddingService.compose_text_for_argumentare(row)
                 if text.strip():
                     valid_pairs.append((row, text))
 
@@ -125,7 +113,7 @@ async def generate_embeddings_batched(
                     rate_limit_delay=rate_limit,
                 )
             except Exception as e:
-                print(f"  ERROR at offset {offset}: {e}")
+                print(f"  ERROR: {e}")
                 print(f"  Progress saved: {total_generated} embeddings committed so far.")
                 break
 
@@ -137,7 +125,6 @@ async def generate_embeddings_batched(
             await session.commit()
             batch_count = len(embeddings)
             total_generated += batch_count
-            offset += batch_count
 
             print(
                 f"  [{total_generated}/{total_to_process}] "
@@ -151,12 +138,6 @@ async def main():
     """Main entry point."""
     parser = argparse.ArgumentParser(
         description="Generate embeddings for CNSC decision data"
-    )
-    parser.add_argument(
-        "--table",
-        choices=["argumentari", "citate", "all"],
-        default="all",
-        help="Which table to generate embeddings for (default: all)",
     )
     parser.add_argument(
         "--force",
@@ -198,36 +179,19 @@ async def main():
 
     print(f"\nCurrent embedding coverage:")
     print(f"  ArgumentareCritica: {stats['argumentari']['embedded']}/{stats['argumentari']['total']}")
-    print(f"  CitatVerbatim:      {stats['citate']['embedded']}/{stats['citate']['total']}")
     print()
 
     start_time = time.time()
-    total_generated = 0
 
     # Generate embeddings
-    if args.table in ("argumentari", "all"):
-        print("=== ArgumentareCritica ===")
-        count = await generate_embeddings_batched(
-            embedding_service,
-            "argumentari",
-            force=args.force,
-            limit=args.limit,
-            api_batch_size=args.batch_size,
-            rate_limit=args.rate_limit,
-        )
-        total_generated += count
-
-    if args.table in ("citate", "all"):
-        print("\n=== CitatVerbatim ===")
-        count = await generate_embeddings_batched(
-            embedding_service,
-            "citate",
-            force=args.force,
-            limit=args.limit,
-            api_batch_size=args.batch_size,
-            rate_limit=args.rate_limit,
-        )
-        total_generated += count
+    print("=== ArgumentareCritica ===")
+    total_generated = await generate_embeddings_batched(
+        embedding_service,
+        force=args.force,
+        limit=args.limit,
+        api_batch_size=args.batch_size,
+        rate_limit=args.rate_limit,
+    )
 
     # Show updated stats
     async with db_session.async_session_factory() as session:
@@ -240,7 +204,6 @@ async def main():
     print(f"Generated: {total_generated} embeddings in {elapsed:.1f}s ({elapsed/60:.1f}min)")
     print(f"\nUpdated coverage:")
     print(f"  ArgumentareCritica: {stats['argumentari']['embedded']}/{stats['argumentari']['total']}")
-    print(f"  CitatVerbatim:      {stats['citate']['embedded']}/{stats['citate']['total']}")
     print(f"{'=' * 60}")
 
 

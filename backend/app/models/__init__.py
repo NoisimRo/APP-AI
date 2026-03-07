@@ -2,11 +2,10 @@
 
 from app.models.decision import (
     DecizieCNSC,
-    SectiuneDecizie,
     ArgumentareCritica,
-    CitatVerbatim,
-    ReferintaArticol,
     NomenclatorCPV,
+    ActNormativ,
+    LegislatieFragment,
     # Legacy aliases
     Decision,
     DecisionChunk,
@@ -14,11 +13,10 @@ from app.models.decision import (
 
 __all__ = [
     "DecizieCNSC",
-    "SectiuneDecizie",
     "ArgumentareCritica",
-    "CitatVerbatim",
-    "ReferintaArticol",
     "NomenclatorCPV",
+    "ActNormativ",
+    "LegislatieFragment",
     "Decision",
     "DecisionChunk",
 ]

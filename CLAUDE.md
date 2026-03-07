@@ -82,48 +82,47 @@ DATABASE_URL="postgresql+asyncpg://..." python scripts/generate_embeddings.py
 ### Embedding Dimensions
 
 - **Model:** `gemini-embedding-001` (native output: 3072 dimensions, capped to 2000)
-- **DB columns:** `Vector(2000)` on `argumentare_critica`, `sectiuni_decizie`, `citate_verbatim`, `articole_legislatie`
+- **DB columns:** `Vector(2000)` on `argumentare_critica`, `legislatie_fragmente`
 - **Why 2000?** pgvector HNSW indexes have a 2000 dimension limit. We use `output_dimensionality=2000` in the Gemini API call. This is 2.6x better than the original 768 while keeping HNSW index support.
 - **History:** Started at 768 (text-embedding-004 convention) → tried 3072 (native) but hit pgvector HNSW limit → settled on 2000.
-- **Migration SQL** (run once, then regenerate all embeddings):
-  ```sql
-  -- Drop old HNSW indexes
-  DROP INDEX IF EXISTS ix_arg_embedding_hnsw;
-  DROP INDEX IF EXISTS ix_sectiuni_embedding_hnsw;
-  DROP INDEX IF EXISTS ix_citate_embedding_hnsw;
+- After dimension changes, regenerate embeddings: `python scripts/generate_embeddings.py --force`
 
-  -- Alter columns to 2000
-  ALTER TABLE argumentare_critica ALTER COLUMN embedding TYPE vector(2000);
-  ALTER TABLE sectiuni_decizie ALTER COLUMN embedding TYPE vector(2000);
-  ALTER TABLE citate_verbatim ALTER COLUMN embedding TYPE vector(2000);
-
-  -- Recreate HNSW indexes
-  CREATE INDEX ix_arg_embedding_hnsw ON argumentare_critica
-    USING hnsw (embedding vector_cosine_ops) WITH (m = 16, ef_construction = 64);
-  CREATE INDEX ix_sectiuni_embedding_hnsw ON sectiuni_decizie
-    USING hnsw (embedding vector_cosine_ops) WITH (m = 16, ef_construction = 64);
-  CREATE INDEX ix_citate_embedding_hnsw ON citate_verbatim
-    USING hnsw (embedding vector_cosine_ops) WITH (m = 16, ef_construction = 64);
-  ```
-- After migration, regenerate embeddings: `python scripts/generate_embeddings.py --force`
-
-### Key Tables (6 în producție)
+### Key Tables (5 în producție)
 
 | Table | Purpose | RAG? |
 |-------|---------|------|
 | `decizii_cnsc` | Main decision table | No |
 | `argumentare_critica` | Per-criticism argumentation (PRIMARY RAG unit) | Yes (2000-dim) |
-| `sectiuni_decizie` | Decision sections | Yes (2000-dim) |
-| `citate_verbatim` | Verbatim quotes | Yes (2000-dim) |
-| `referinte_articole` | Legal article references | No |
 | `nomenclator_cpv` | CPV codes nomenclator | No |
-
-### Tabele legislație (de creat)
-
-| Table | Purpose | RAG? |
-|-------|---------|------|
 | `acte_normative` | Master table acte legislative (Legea 98/2016, HG 395/2016, etc.) | No |
 | `legislatie_fragmente` | Fragmente legislație la granularitate maximă (articol/alineat/literă) | Yes (2000-dim) |
+
+### Tabele eliminate (2026-03-07)
+
+Următoarele tabele au fost eliminate deoarece erau goale și nefolosite:
+- `sectiuni_decizie` — funcționalitate acoperită de `argumentare_critica`
+- `citate_verbatim` — funcționalitate acoperită de `argumentare_critica`
+- `referinte_articole` — va fi reimplementat ulterior (vezi Future Plan)
+
+### Future Plan: Referințe Articole Legislative
+
+Pași necesari pentru a reimplementa funcționalitatea `referinte_articole`:
+
+1. **Extindere `generate_analysis.py`** — LLM-ul care analizează deciziile trebuie să extragă și referințele legislative (art. X din Legea Y) din fiecare ArgumentareCritica, cu informații despre cine a invocat (contestator/AC/CNSC) și dacă argumentul a fost câștigător
+2. **Creare tabel nou** cu FK la `legislatie_fragmente` (nu string) + FK la `argumentare_critica`, similar cu:
+   ```sql
+   CREATE TABLE referinte_legislative (
+     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+     argumentare_id UUID REFERENCES argumentare_critica(id) ON DELETE CASCADE,
+     fragment_id UUID REFERENCES legislatie_fragmente(id) ON DELETE SET NULL,
+     invocat_de VARCHAR(20),  -- 'contestator', 'ac', 'cnsc'
+     argument_castigator BOOLEAN,
+     text_context TEXT,
+     created_at TIMESTAMP NOT NULL DEFAULT now()
+   );
+   ```
+3. **Populare** — rularea analizei LLM pe toate deciziile existente pentru a extrage referințele
+4. **Integrare RAG** — folosirea referințelor pentru a îmbunătăți căutarea (ex: "ce decizii citează art. 57 din Legea 98/2016?")
 
 ### legislatie_fragmente (populated by import_legislatie.py)
 

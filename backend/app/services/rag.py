@@ -18,7 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from pydantic import BaseModel
 
 from app.core.logging import get_logger
-from app.models.decision import DecizieCNSC, ArgumentareCritica, ReferintaArticol
+from app.models.decision import DecizieCNSC, ArgumentareCritica
 from app.services.embedding import EmbeddingService
 from app.services.llm.gemini import GeminiProvider
 
@@ -172,8 +172,8 @@ class RAGService:
     ) -> tuple[list[DecizieCNSC], list[tuple[ArgumentareCritica, float]]]:
         """Search decisions by legal article references in text_integral.
 
-        Searches both the ReferintaArticol table and text_integral for
-        mentions of specific legal articles or court decisions.
+        Searches text_integral for mentions of specific legal articles
+        or court decisions.
         """
         if not references:
             return [], []

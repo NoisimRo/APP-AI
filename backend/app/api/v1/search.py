@@ -9,9 +9,7 @@ from app.core.logging import get_logger
 from app.db.session import get_session
 from app.models.decision import (
     ArgumentareCritica,
-    CitatVerbatim,
     DecizieCNSC,
-    ReferintaArticol,
 )
 from app.services.embedding import EmbeddingService
 
@@ -29,9 +27,6 @@ class SearchFilters(BaseModel):
     ruling: str | None = Field(None, description="Filter by ruling: ADMIS or RESPINS")
     year_from: int | None = Field(None, ge=2000, le=2100)
     year_to: int | None = Field(None, ge=2000, le=2100)
-    legal_article: str | None = Field(
-        None, description="Filter by legal article (e.g., 'art. 210')"
-    )
 
 
 class SearchResult(BaseModel):
@@ -109,11 +104,6 @@ async def semantic_search(
             stmt = stmt.where(
                 extract("year", DecizieCNSC.data_decizie) <= filters.year_to
             )
-        if filters.legal_article:
-            stmt = stmt.join(
-                ReferintaArticol,
-                ReferintaArticol.decizie_id == DecizieCNSC.id,
-            ).where(ReferintaArticol.articol.ilike(f"%{filters.legal_article}%"))
 
     stmt = stmt.order_by("distance")
 
@@ -172,81 +162,6 @@ async def semantic_search(
 
     return SearchResponse(
         query=query,
-        results=results,
-        total=total,
-        page=page,
-        page_size=page_size,
-    )
-
-
-@router.post("/by-article", response_model=SearchResponse)
-async def search_by_article(
-    article: str = Query(..., description="Legal article (e.g., 'art. 210')"),
-    act: str = Query(
-        "L98/2016", description="Legal act (e.g., 'L98/2016', 'L101/2016')"
-    ),
-    page: int = Query(1, ge=1),
-    page_size: int = Query(10, ge=1, le=100),
-    session: AsyncSession = Depends(get_session),
-) -> SearchResponse:
-    """
-    Search decisions by legal article.
-
-    Find all decisions that reference a specific article from Romanian
-    procurement legislation.
-    """
-    logger.info("search_by_article", article=article, act=act)
-
-    # Query ReferintaArticol joined with DecizieCNSC
-    stmt = (
-        select(
-            DecizieCNSC,
-            func.count(ReferintaArticol.id).label("ref_count"),
-        )
-        .join(ReferintaArticol, ReferintaArticol.decizie_id == DecizieCNSC.id)
-        .where(ReferintaArticol.act_normativ == act)
-        .where(ReferintaArticol.articol.ilike(f"%{article}%"))
-        .group_by(DecizieCNSC.id)
-        .order_by(func.count(ReferintaArticol.id).desc())
-    )
-
-    # Get total count
-    count_stmt = select(func.count()).select_from(stmt.subquery())
-    total = await session.scalar(count_stmt) or 0
-
-    # Apply pagination
-    offset = (page - 1) * page_size
-    stmt = stmt.offset(offset).limit(page_size)
-
-    result = await session.execute(stmt)
-    rows = result.all()
-
-    results: list[SearchResult] = []
-    max_refs = rows[0].ref_count if rows else 1
-
-    for row in rows:
-        dec = row.DecizieCNSC
-        ref_count = row.ref_count
-        score = min(1.0, ref_count / max_refs)
-
-        results.append(SearchResult(
-            decision_id=dec.external_id,
-            title=f"Decizia {dec.external_id} - {dec.solutie_contestatie or 'N/A'}",
-            excerpt=dec.text_integral[:300] + "...",
-            score=score,
-            metadata={
-                "numar_decizie": dec.numar_decizie,
-                "data_decizie": dec.data_decizie.isoformat() if dec.data_decizie else None,
-                "tip_contestatie": dec.tip_contestatie,
-                "solutie": dec.solutie_contestatie,
-                "reference_count": ref_count,
-                "article": article,
-                "act": act,
-            },
-        ))
-
-    return SearchResponse(
-        query=f"{article} din {act}",
         results=results,
         total=total,
         page=page,
