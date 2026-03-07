@@ -238,7 +238,10 @@ const App = () => {
   const [redFlagsText, setRedFlagsText] = useState("");
   const [redFlagsResults, setRedFlagsResults] = useState<any[]>([]);
   const [redFlagsTab, setRedFlagsTab] = useState<'manual' | 'upload'>('manual');
-  const [uploadedDocument, setUploadedDocument] = useState<{name: string, text: string} | null>(null);
+  const [uploadedDocDrafter, setUploadedDocDrafter] = useState<{name: string, text: string} | null>(null);
+  const [uploadedDocClarification, setUploadedDocClarification] = useState<{name: string, text: string} | null>(null);
+  const [uploadedDocRag, setUploadedDocRag] = useState<{name: string, text: string} | null>(null);
+  const [uploadedDocRedFlags, setUploadedDocRedFlags] = useState<{name: string, text: string} | null>(null);
   const [redFlagsProgress, setRedFlagsProgress] = useState("");
 
   // Decision Viewer State
@@ -537,6 +540,7 @@ const App = () => {
   const handleDocumentUpload = async (
     event: React.ChangeEvent<HTMLInputElement>,
     onTextExtracted?: (text: string) => void,
+    setUploadedDoc?: (doc: {name: string, text: string}) => void,
   ) => {
     const file = event.target.files?.[0];
     if (!file) return;
@@ -572,10 +576,9 @@ const App = () => {
       }
 
       const data = await response.json();
-      setUploadedDocument({
-        name: file.name,
-        text: data.text
-      });
+      if (setUploadedDoc) {
+        setUploadedDoc({ name: file.name, text: data.text });
+      }
       if (onTextExtracted) {
         onTextExtracted(data.text);
       }
@@ -589,8 +592,8 @@ const App = () => {
   };
 
   const handleRedFlags = async () => {
-    const textToAnalyze = redFlagsTab === 'upload' && uploadedDocument
-      ? uploadedDocument.text
+    const textToAnalyze = redFlagsTab === 'upload' && uploadedDocRedFlags
+      ? uploadedDocRedFlags.text
       : redFlagsText;
 
     if (!textToAnalyze || textToAnalyze.trim().length < 10) {
@@ -1174,7 +1177,7 @@ const App = () => {
             <input
               type="file"
               accept=".txt,.md,.pdf"
-              onChange={(e) => handleDocumentUpload(e, (text) => setDrafterContext(prev => ({...prev, facts: text})))}
+              onChange={(e) => handleDocumentUpload(e, (text) => setDrafterContext(prev => ({...prev, facts: text})), setUploadedDocDrafter)}
               className="block w-full text-sm text-slate-600
                 file:mr-4 file:py-1.5 file:px-3
                 file:rounded-lg file:border-0
@@ -1182,9 +1185,9 @@ const App = () => {
                 file:bg-blue-50 file:text-blue-700
                 hover:file:bg-blue-100"
             />
-            {uploadedDocument && mode === 'drafter' && (
+            {uploadedDocDrafter && (
               <p className="text-xs text-green-600 mt-2">
-                ✓ {uploadedDocument.name} ({uploadedDocument.text.length} caractere)
+                ✓ {uploadedDocDrafter.name} ({uploadedDocDrafter.text.length} caractere)
               </p>
             )}
           </div>
@@ -1330,260 +1333,262 @@ const App = () => {
         {mode === 'drafter' && renderDrafter()}
         {mode === 'chat' && renderChat()}
         {mode === 'redflags' && (
-          <div className="p-8 max-w-6xl mx-auto h-full overflow-y-auto flex flex-col">
-            <header className="mb-6">
-              <h2 className="text-2xl font-bold text-slate-800 flex items-center gap-2">
-                <AlertTriangle className="text-red-500"/> Red Flags Detector
+          <div className="h-full flex flex-col md:flex-row bg-white">
+            {/* Left panel — input */}
+            <div className="w-full md:w-1/3 border-r border-slate-200 p-6 overflow-y-auto bg-slate-50/50">
+              <h2 className="text-lg font-bold text-slate-800 mb-2 flex gap-2 items-center">
+                <AlertTriangle className="text-red-500" size={20}/> Red Flags Detector
               </h2>
-              <p className="text-slate-600">Identifică clauze restrictive în documentația de achiziții publice.</p>
-            </header>
+              <p className="text-xs text-slate-500 mb-6">Identifică clauze restrictive în documentația de achiziții publice.</p>
 
-            {/* Tabs */}
-            <div className="flex gap-2 mb-6 border-b border-slate-200">
-              <button
-                onClick={() => setRedFlagsTab('manual')}
-                className={`px-4 py-2 font-medium transition border-b-2 ${
-                  redFlagsTab === 'manual'
-                    ? 'border-red-600 text-red-600'
-                    : 'border-transparent text-slate-600 hover:text-slate-800'
-                }`}
-              >
-                Manual Input
-              </button>
-              <button
-                onClick={() => setRedFlagsTab('upload')}
-                className={`px-4 py-2 font-medium transition border-b-2 ${
-                  redFlagsTab === 'upload'
-                    ? 'border-red-600 text-red-600'
-                    : 'border-transparent text-slate-600 hover:text-slate-800'
-                }`}
-              >
-                Upload Document
-              </button>
+              {/* Tabs */}
+              <div className="flex gap-1 mb-4 border-b border-slate-200">
+                <button
+                  onClick={() => setRedFlagsTab('manual')}
+                  className={`px-3 py-2 text-sm font-medium transition border-b-2 ${
+                    redFlagsTab === 'manual'
+                      ? 'border-red-600 text-red-600'
+                      : 'border-transparent text-slate-500 hover:text-slate-700'
+                  }`}
+                >
+                  Manual Input
+                </button>
+                <button
+                  onClick={() => setRedFlagsTab('upload')}
+                  className={`px-3 py-2 text-sm font-medium transition border-b-2 ${
+                    redFlagsTab === 'upload'
+                      ? 'border-red-600 text-red-600'
+                      : 'border-transparent text-slate-500 hover:text-slate-700'
+                  }`}
+                >
+                  Upload Document
+                </button>
+              </div>
+
+              {/* Manual Input Tab */}
+              {redFlagsTab === 'manual' && (
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 uppercase mb-2">
+                      Documentație Achiziție
+                    </label>
+                    <textarea
+                      className="w-full p-3 border border-slate-300 rounded-lg h-48 text-sm focus:ring-2 focus:ring-red-500 outline-none transition shadow-sm font-mono"
+                      placeholder="Introduceți sau lipiți conținutul documentației..."
+                      value={redFlagsText}
+                      onChange={(e) => setRedFlagsText(e.target.value)}
+                    />
+                  </div>
+                  <button
+                    onClick={handleRedFlags}
+                    disabled={isLoading || !redFlagsText.trim()}
+                    className="w-full bg-red-600 text-white py-3 rounded-xl font-medium hover:bg-red-700 transition disabled:opacity-50 flex items-center gap-2 justify-center shadow-lg hover:shadow-xl"
+                  >
+                    {isLoading ? <Loader2 className="animate-spin" size={18} /> : <AlertTriangle size={18} />}
+                    {isLoading ? 'Analizare în curs...' : 'Analizează Red Flags'}
+                  </button>
+                  {isLoading && redFlagsProgress && (
+                    <p className="text-sm text-slate-500 text-center animate-pulse">
+                      {redFlagsProgress}
+                    </p>
+                  )}
+                </div>
+              )}
+
+              {/* Upload Document Tab */}
+              {redFlagsTab === 'upload' && (
+                <div className="space-y-4">
+                  <div className="bg-slate-50 p-4 rounded-lg border border-dashed border-slate-300">
+                    <label className="text-xs font-bold text-slate-500 uppercase mb-2 block">
+                      Încarcă Document (.txt, .md, .pdf)
+                    </label>
+                    <input
+                      type="file"
+                      accept=".txt,.md,.pdf"
+                      onChange={(e) => handleDocumentUpload(e, (text) => setRedFlagsText(text), setUploadedDocRedFlags)}
+                      className="block w-full text-sm text-slate-600
+                        file:mr-4 file:py-1.5 file:px-3
+                        file:rounded-lg file:border-0
+                        file:text-xs file:font-semibold
+                        file:bg-red-50 file:text-red-700
+                        hover:file:bg-red-100"
+                    />
+                    {uploadedDocRedFlags && (
+                      <p className="text-xs text-green-600 mt-2">
+                        ✓ {uploadedDocRedFlags.name} ({uploadedDocRedFlags.text.length} caractere)
+                      </p>
+                    )}
+                  </div>
+                  <button
+                    onClick={handleRedFlags}
+                    disabled={isLoading || !uploadedDocRedFlags}
+                    className="w-full bg-red-600 text-white py-3 rounded-xl font-medium hover:bg-red-700 transition disabled:opacity-50 flex items-center gap-2 justify-center shadow-lg hover:shadow-xl"
+                  >
+                    {isLoading ? <Loader2 className="animate-spin" size={18} /> : <AlertTriangle size={18} />}
+                    {isLoading ? 'Analizare în curs...' : 'Analizează Red Flags'}
+                  </button>
+                  {isLoading && redFlagsProgress && (
+                    <p className="text-sm text-slate-500 text-center animate-pulse">
+                      {redFlagsProgress}
+                    </p>
+                  )}
+                </div>
+              )}
             </div>
 
-            {/* Manual Input Tab */}
-            {redFlagsTab === 'manual' && (
-              <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm mb-6">
-                <label className="block font-bold text-slate-700 mb-3">
-                  Documentație Achiziție (Caiet Sarcini, Fișă Date, etc.)
-                </label>
-                <textarea
-                  className="w-full p-4 border border-slate-300 rounded-lg h-48 mb-4 focus:ring-2 focus:ring-red-500 outline-none font-mono text-sm"
-                  placeholder="Introduceți sau lipiți conținutul documentației..."
-                  value={redFlagsText}
-                  onChange={(e) => setRedFlagsText(e.target.value)}
-                />
-                <button
-                  onClick={handleRedFlags}
-                  disabled={isLoading || !redFlagsText.trim()}
-                  className="bg-red-600 text-white px-6 py-3 rounded-lg font-medium hover:bg-red-700 transition disabled:opacity-50 flex items-center gap-2 w-full justify-center"
-                >
-                  {isLoading ? <Loader2 className="animate-spin" size={18} /> : <AlertTriangle size={18} />}
-                  {isLoading ? 'Analizare în curs...' : 'Analizează Red Flags'}
-                </button>
-                {isLoading && redFlagsProgress && (
-                  <p className="text-sm text-slate-500 mt-3 text-center animate-pulse">
-                    {redFlagsProgress}
-                  </p>
-                )}
-              </div>
-            )}
-
-            {/* Upload Document Tab */}
-            {redFlagsTab === 'upload' && (
-              <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm mb-6">
-                <label className="block font-bold text-slate-700 mb-3">
-                  Încarcă Document (.txt, .md, .pdf)
-                </label>
-                <input
-                  type="file"
-                  accept=".txt,.md,.pdf"
-                  onChange={(e) => handleDocumentUpload(e, (text) => setRedFlagsText(text))}
-                  className="block w-full text-sm text-slate-600 mb-4
-                    file:mr-4 file:py-2 file:px-4
-                    file:rounded-lg file:border-0
-                    file:text-sm file:font-semibold
-                    file:bg-red-50 file:text-red-700
-                    hover:file:bg-red-100"
-                />
-                {uploadedDocument && (
-                  <div className="mb-4 p-4 bg-green-50 border border-green-200 rounded-lg">
-                    <p className="text-sm text-green-800">
-                      ✓ Document procesat: <span className="font-bold">{uploadedDocument.name}</span>
-                    </p>
-                    <p className="text-xs text-green-600 mt-1">
-                      {uploadedDocument.text.length} caractere extrase
-                    </p>
+            {/* Right panel — results */}
+            <div className="w-full md:w-2/3 p-8 overflow-y-auto bg-white">
+              {redFlagsResults.length > 0 ? (
+                <div className="space-y-4">
+                  <div className="bg-white p-4 rounded-lg border border-slate-200 flex items-center justify-between sticky top-0 z-10">
+                    <h3 className="font-bold text-slate-800">Rezultate Analiză</h3>
+                    <div className="flex gap-4 text-sm">
+                      <span className="text-red-600 font-bold">
+                        {redFlagsResults.filter(rf => rf.severity === 'CRITICĂ').length} Critice
+                      </span>
+                      <span className="text-orange-600 font-bold">
+                        {redFlagsResults.filter(rf => rf.severity === 'MEDIE').length} Medii
+                      </span>
+                      <span className="text-yellow-600 font-bold">
+                        {redFlagsResults.filter(rf => rf.severity === 'SCĂZUTĂ').length} Scăzute
+                      </span>
+                    </div>
                   </div>
-                )}
-                <button
-                  onClick={handleRedFlags}
-                  disabled={isLoading || !uploadedDocument}
-                  className="bg-red-600 text-white px-6 py-3 rounded-lg font-medium hover:bg-red-700 transition disabled:opacity-50 flex items-center gap-2 w-full justify-center"
-                >
-                  {isLoading ? <Loader2 className="animate-spin" size={18} /> : <AlertTriangle size={18} />}
-                  {isLoading ? 'Analizare în curs...' : 'Analizează Red Flags'}
-                </button>
-                {isLoading && redFlagsProgress && (
-                  <p className="text-sm text-slate-500 mt-3 text-center animate-pulse">
-                    {redFlagsProgress}
-                  </p>
-                )}
-              </div>
-            )}
 
-            {/* Results */}
-            {redFlagsResults.length > 0 && (
-              <div className="flex-1 space-y-4">
-                <div className="bg-white p-4 rounded-lg border border-slate-200 flex items-center justify-between">
-                  <h3 className="font-bold text-slate-800">Rezultate Analiză</h3>
-                  <div className="flex gap-4 text-sm">
-                    <span className="text-red-600 font-bold">
-                      {redFlagsResults.filter(rf => rf.severity === 'CRITICĂ').length} Critice
-                    </span>
-                    <span className="text-orange-600 font-bold">
-                      {redFlagsResults.filter(rf => rf.severity === 'MEDIE').length} Medii
-                    </span>
-                    <span className="text-yellow-600 font-bold">
-                      {redFlagsResults.filter(rf => rf.severity === 'SCĂZUTĂ').length} Scăzute
-                    </span>
-                  </div>
+                  {redFlagsResults.map((flag, idx) => (
+                    <div
+                      key={idx}
+                      className={`bg-white p-6 rounded-xl border-l-4 shadow-sm ${
+                        flag.severity === 'CRITICĂ'
+                          ? 'border-red-500'
+                          : flag.severity === 'MEDIE'
+                          ? 'border-orange-500'
+                          : 'border-yellow-500'
+                      }`}
+                    >
+                      <div className="flex items-start justify-between mb-3">
+                        <div className="flex items-center gap-2">
+                          <AlertTriangle
+                            className={
+                              flag.severity === 'CRITICĂ'
+                                ? 'text-red-500'
+                                : flag.severity === 'MEDIE'
+                                ? 'text-orange-500'
+                                : 'text-yellow-500'
+                            }
+                            size={20}
+                          />
+                          <span
+                            className={`text-xs px-3 py-1 rounded-full font-bold ${
+                              flag.severity === 'CRITICĂ'
+                                ? 'bg-red-100 text-red-700'
+                                : flag.severity === 'MEDIE'
+                                ? 'bg-orange-100 text-orange-700'
+                                : 'bg-yellow-100 text-yellow-700'
+                            }`}
+                          >
+                            {flag.severity}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="space-y-3 text-sm">
+                        <div>
+                          <p className="font-semibold text-slate-700 mb-1">Clauza Problematica:</p>
+                          <p className="bg-slate-50 p-3 rounded border border-slate-200 italic text-slate-600">
+                            "{flag.clause}"
+                          </p>
+                        </div>
+
+                        <div>
+                          <p className="font-semibold text-slate-700 mb-1">Problema:</p>
+                          <p className="text-slate-600">{flag.issue}</p>
+                        </div>
+
+                        {flag.legal_references && flag.legal_references.length > 0 && (
+                          <div>
+                            <p className="font-semibold text-slate-700 mb-1">Temei Legal:</p>
+                            <div className="space-y-2">
+                              {flag.legal_references.map((ref: any, refIdx: number) => (
+                                <details key={refIdx} className="group">
+                                  <summary className="cursor-pointer flex items-center gap-2 text-slate-700 hover:text-blue-700">
+                                    <span className="font-mono text-xs bg-emerald-50 text-emerald-700 px-2 py-1 rounded border border-emerald-200">
+                                      {ref.citare} din {ref.act_normativ}
+                                    </span>
+                                    <ChevronDown size={14} className="group-open:rotate-180 transition-transform text-slate-400" />
+                                  </summary>
+                                  {ref.text_extras && (
+                                    <p className="mt-1 ml-2 p-2 bg-emerald-50/50 rounded text-xs text-slate-600 border-l-2 border-emerald-300">
+                                      {ref.text_extras}
+                                    </p>
+                                  )}
+                                </details>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {flag.recommendation && (
+                          <div>
+                            <p className="font-semibold text-slate-700 mb-1">Recomandare:</p>
+                            <p className="text-slate-600">{flag.recommendation}</p>
+                          </div>
+                        )}
+
+                        {flag.decision_refs && flag.decision_refs.length > 0 && (
+                          <div>
+                            <p className="font-semibold text-slate-700 mb-1">Jurisprudenta CNSC:</p>
+                            <div className="flex gap-2 flex-wrap">
+                              {flag.decision_refs.map((ref: string) => (
+                                <span
+                                  key={ref}
+                                  className="text-xs bg-blue-50 text-blue-700 px-2 py-1 rounded border border-blue-200 font-mono"
+                                >
+                                  {ref}
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {(!flag.legal_references || flag.legal_references.length === 0) &&
+                         (!flag.decision_refs || flag.decision_refs.length === 0) && (
+                          <p className="text-xs text-slate-400 italic">
+                            Nu s-au gasit referinte legislative sau jurisprudenta CNSC relevanta in baza de date
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  ))}
                 </div>
-
-                {redFlagsResults.map((flag, idx) => (
-                  <div
-                    key={idx}
-                    className={`bg-white p-6 rounded-xl border-l-4 shadow-sm ${
-                      flag.severity === 'CRITICĂ'
-                        ? 'border-red-500'
-                        : flag.severity === 'MEDIE'
-                        ? 'border-orange-500'
-                        : 'border-yellow-500'
-                    }`}
-                  >
-                    <div className="flex items-start justify-between mb-3">
-                      <div className="flex items-center gap-2">
-                        <AlertTriangle
-                          className={
-                            flag.severity === 'CRITICĂ'
-                              ? 'text-red-500'
-                              : flag.severity === 'MEDIE'
-                              ? 'text-orange-500'
-                              : 'text-yellow-500'
-                          }
-                          size={20}
-                        />
-                        <span
-                          className={`text-xs px-3 py-1 rounded-full font-bold ${
-                            flag.severity === 'CRITICĂ'
-                              ? 'bg-red-100 text-red-700'
-                              : flag.severity === 'MEDIE'
-                              ? 'bg-orange-100 text-orange-700'
-                              : 'bg-yellow-100 text-yellow-700'
-                          }`}
-                        >
-                          {flag.severity}
-                        </span>
-                      </div>
-                    </div>
-
-                    <div className="space-y-3 text-sm">
-                      <div>
-                        <p className="font-semibold text-slate-700 mb-1">Clauza Problematica:</p>
-                        <p className="bg-slate-50 p-3 rounded border border-slate-200 italic text-slate-600">
-                          "{flag.clause}"
-                        </p>
-                      </div>
-
-                      <div>
-                        <p className="font-semibold text-slate-700 mb-1">Problema:</p>
-                        <p className="text-slate-600">{flag.issue}</p>
-                      </div>
-
-                      {flag.legal_references && flag.legal_references.length > 0 && (
-                        <div>
-                          <p className="font-semibold text-slate-700 mb-1">Temei Legal:</p>
-                          <div className="space-y-2">
-                            {flag.legal_references.map((ref: any, refIdx: number) => (
-                              <details key={refIdx} className="group">
-                                <summary className="cursor-pointer flex items-center gap-2 text-slate-700 hover:text-blue-700">
-                                  <span className="font-mono text-xs bg-emerald-50 text-emerald-700 px-2 py-1 rounded border border-emerald-200">
-                                    {ref.citare} din {ref.act_normativ}
-                                  </span>
-                                  <ChevronDown size={14} className="group-open:rotate-180 transition-transform text-slate-400" />
-                                </summary>
-                                {ref.text_extras && (
-                                  <p className="mt-1 ml-2 p-2 bg-emerald-50/50 rounded text-xs text-slate-600 border-l-2 border-emerald-300">
-                                    {ref.text_extras}
-                                  </p>
-                                )}
-                              </details>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-
-                      {flag.recommendation && (
-                        <div>
-                          <p className="font-semibold text-slate-700 mb-1">Recomandare:</p>
-                          <p className="text-slate-600">{flag.recommendation}</p>
-                        </div>
-                      )}
-
-                      {flag.decision_refs && flag.decision_refs.length > 0 && (
-                        <div>
-                          <p className="font-semibold text-slate-700 mb-1">Jurisprudenta CNSC:</p>
-                          <div className="flex gap-2 flex-wrap">
-                            {flag.decision_refs.map((ref: string) => (
-                              <span
-                                key={ref}
-                                className="text-xs bg-blue-50 text-blue-700 px-2 py-1 rounded border border-blue-200 font-mono"
-                              >
-                                {ref}
-                              </span>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-
-                      {(!flag.legal_references || flag.legal_references.length === 0) &&
-                       (!flag.decision_refs || flag.decision_refs.length === 0) && (
-                        <p className="text-xs text-slate-400 italic">
-                          Nu s-au gasit referinte legislative sau jurisprudenta CNSC relevanta in baza de date
-                        </p>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            {!isLoading && redFlagsResults.length === 0 && (
-              <div className="flex-1 flex items-center justify-center text-slate-400">
-                <div className="text-center">
-                  <AlertTriangle size={64} className="mx-auto mb-4 opacity-20" />
+              ) : (
+                <div className="flex flex-col items-center justify-center h-full text-slate-300">
+                  <AlertTriangle size={48} className="mb-4 opacity-20" />
                   <p className="text-lg font-medium">Rezultatele analizei vor apărea aici</p>
                   <p className="text-sm mt-2">
                     Introduceți text sau încărcați un document pentru a începe analiza
                   </p>
                 </div>
-              </div>
-            )}
+              )}
+            </div>
           </div>
         )}
         {mode === 'clarification' && handleClarification && (
-          <div className="p-8 max-w-4xl mx-auto">
-             <h2 className="text-2xl font-bold text-slate-800 mb-6 flex items-center gap-2"><Search className="text-purple-600" /> Asistent Clarificări</h2>
-             <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 mb-6">
-                <div className="bg-slate-50 p-4 rounded-lg border border-dashed border-slate-300 mb-4">
+          <div className="h-full flex flex-col md:flex-row bg-white">
+            {/* Left panel — input */}
+            <div className="w-full md:w-1/3 border-r border-slate-200 p-6 overflow-y-auto bg-slate-50/50">
+              <h2 className="text-lg font-bold text-slate-800 mb-6 flex gap-2 items-center">
+                <Search className="text-purple-600" size={20}/> Asistent Clarificări
+              </h2>
+              <div className="space-y-4">
+                <div className="bg-slate-50 p-4 rounded-lg border border-dashed border-slate-300">
                   <label className="text-xs font-bold text-slate-500 uppercase mb-2 block">
                     Încarcă document (.txt, .md, .pdf)
                   </label>
                   <input
                     type="file"
                     accept=".txt,.md,.pdf"
-                    onChange={(e) => handleDocumentUpload(e, (text) => setClarificationClause(text))}
+                    onChange={(e) => handleDocumentUpload(e, (text) => setClarificationClause(text), setUploadedDocClarification)}
                     className="block w-full text-sm text-slate-600
                       file:mr-4 file:py-1.5 file:px-3
                       file:rounded-lg file:border-0
@@ -1591,42 +1596,54 @@ const App = () => {
                       file:bg-purple-50 file:text-purple-700
                       hover:file:bg-purple-100"
                   />
-                  {uploadedDocument && mode === 'clarification' && (
+                  {uploadedDocClarification && (
                     <p className="text-xs text-green-600 mt-2">
-                      ✓ {uploadedDocument.name} ({uploadedDocument.text.length} caractere)
+                      ✓ {uploadedDocClarification.name} ({uploadedDocClarification.text.length} caractere)
                     </p>
                   )}
                 </div>
-                <label className="block font-bold text-slate-700 mb-3">Clauza Problematică</label>
-                <textarea
-                  className="w-full p-4 border border-slate-300 rounded-lg h-32 mb-4 focus:ring-2 focus:ring-purple-500 outline-none"
-                  placeholder="Paste text din documentație sau încarcă un document..."
-                  value={clarificationClause}
-                  onChange={(e) => setClarificationClause(e.target.value)}
-                />
-                <button 
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase mb-2">Clauza Problematică</label>
+                  <textarea
+                    className="w-full p-3 border border-slate-300 rounded-lg text-sm h-32 focus:ring-2 focus:ring-purple-500 outline-none transition shadow-sm"
+                    placeholder="Paste text din documentație sau încarcă un document..."
+                    value={clarificationClause}
+                    onChange={(e) => setClarificationClause(e.target.value)}
+                  />
+                </div>
+                <button
                   onClick={handleClarification}
                   disabled={isLoading || !clarificationClause}
-                  className="bg-purple-600 text-white px-6 py-3 rounded-lg font-medium hover:bg-purple-700 transition w-full"
+                  className="w-full bg-purple-600 text-white py-3 rounded-xl font-medium hover:bg-purple-700 transition flex justify-center items-center gap-2 shadow-lg hover:shadow-xl"
                 >
-                  {isLoading ? "Generare..." : "Generează Cerere Clarificare"}
+                  {isLoading ? <Loader2 className="animate-spin" size={18} /> : "Generează Cerere Clarificare"}
                 </button>
-             </div>
-             {generatedContent && (
-               <div>
-                 <div className="bg-white border border-slate-200 rounded-xl p-8 shadow-sm prose prose-slate max-w-none" dangerouslySetInnerHTML={{ __html: formatMarkdown(generatedContent) }} />
-                 {generatedDecisionRefs.length > 0 && (
-                   <div className="mt-4 p-4 bg-purple-50 border border-purple-200 rounded-xl">
-                     <p className="font-semibold text-slate-700 mb-2 text-sm">📚 Jurisprudență CNSC utilizată:</p>
-                     <div className="flex flex-wrap gap-2">
-                       {generatedDecisionRefs.map((ref: string) => (
-                         <span key={ref} className="text-xs bg-white text-purple-700 px-3 py-1.5 rounded-lg border border-purple-200 font-mono cursor-pointer hover:bg-purple-100 transition" onClick={() => openDecision(ref)}>{ref}</span>
-                       ))}
-                     </div>
-                   </div>
-                 )}
-               </div>
-             )}
+              </div>
+            </div>
+            {/* Right panel — output */}
+            <div className="w-full md:w-2/3 p-10 overflow-y-auto bg-white">
+              {generatedContent ? (
+                <div>
+                  <div className="prose prose-slate max-w-none" dangerouslySetInnerHTML={{ __html: formatMarkdown(generatedContent) }} />
+                  {generatedDecisionRefs.length > 0 && (
+                    <div className="mt-6 p-4 bg-purple-50 border border-purple-200 rounded-xl">
+                      <p className="font-semibold text-slate-700 mb-2 text-sm">Jurisprudență CNSC utilizată:</p>
+                      <div className="flex flex-wrap gap-2">
+                        {generatedDecisionRefs.map((ref: string) => (
+                          <span key={ref} className="text-xs bg-white text-purple-700 px-3 py-1.5 rounded-lg border border-purple-200 font-mono cursor-pointer hover:bg-purple-100 transition" onClick={() => openDecision(ref)}>{ref}</span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="flex flex-col items-center justify-center h-full text-slate-300">
+                  <Search size={48} className="mb-4 opacity-20"/>
+                  <p className="text-lg font-medium">Rezultatul va apărea aici</p>
+                  <p className="text-sm mt-2">Încarcă un document sau introdu textul clauzei problematice</p>
+                </div>
+              )}
+            </div>
           </div>
         )}
         {mode === 'rag' && handleRAGMemo && (
@@ -1644,7 +1661,7 @@ const App = () => {
                          <input
                            type="file"
                            accept=".txt,.md,.pdf"
-                           onChange={(e) => handleDocumentUpload(e, (text) => setMemoTopic(text))}
+                           onChange={(e) => handleDocumentUpload(e, (text) => setMemoTopic(text), setUploadedDocRag)}
                            className="block w-full text-sm text-slate-600
                              file:mr-4 file:py-1.5 file:px-3
                              file:rounded-lg file:border-0
@@ -1652,9 +1669,9 @@ const App = () => {
                              file:bg-teal-50 file:text-teal-700
                              hover:file:bg-teal-100"
                          />
-                         {uploadedDocument && mode === 'rag' && (
+                         {uploadedDocRag && (
                            <p className="text-xs text-green-600 mt-2">
-                             ✓ {uploadedDocument.name} ({uploadedDocument.text.length} caractere)
+                             ✓ {uploadedDocRag.name} ({uploadedDocRag.text.length} caractere)
                            </p>
                          )}
                        </div>
