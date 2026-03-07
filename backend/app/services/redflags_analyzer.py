@@ -8,7 +8,7 @@ Pass 1 — Dynamic Detection:
 
 Pass 2 — Grounding per Red Flag:
     For EACH detected issue, performs vector search against:
-    a) articole_legislatie — real articles from Legea 98/2016, HG 395/2016
+    a) legislatie_fragmente — real articles/alineats/litere from Legea 98/2016, HG 395/2016
     b) argumentare_critica — real CNSC decisions/jurisprudence
     Then composes a final LLM call with REAL context to produce the grounded
     red flag with verified legal references and recommendations.
@@ -22,7 +22,7 @@ from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.logging import get_logger
-from app.models.decision import ArgumentareCritica, ArticolLegislatie, DecizieCNSC
+from app.models.decision import ArgumentareCritica, LegislatieFragment, ActNormativ, DecizieCNSC
 from app.services.embedding import EmbeddingService
 from app.services.llm.gemini import GeminiProvider
 
@@ -186,22 +186,21 @@ Severitate:
         query_text: str,
         session: AsyncSession,
         limit: int = 3,
-    ) -> list[ArticolLegislatie]:
-        """Search legislation articles by vector similarity.
+    ) -> list[tuple[LegislatieFragment, str]]:
+        """Search legislation fragments by vector similarity.
 
         Args:
             query_text: Description of the issue to find relevant articles for.
             session: Database session.
-            limit: Maximum articles to return.
+            limit: Maximum fragments to return.
 
         Returns:
-            List of relevant ArticolLegislatie records.
+            List of (LegislatieFragment, act_denumire) tuples.
         """
-        # Check if any legislation articles exist
         has_articles = await session.scalar(
             select(func.count())
-            .select_from(ArticolLegislatie)
-            .where(ArticolLegislatie.embedding.isnot(None))
+            .select_from(LegislatieFragment)
+            .where(LegislatieFragment.embedding.isnot(None))
         )
 
         if not has_articles:
@@ -212,10 +211,12 @@ Severitate:
 
         stmt = (
             select(
-                ArticolLegislatie,
-                ArticolLegislatie.embedding.cosine_distance(query_vector).label("distance"),
+                LegislatieFragment,
+                ActNormativ,
+                LegislatieFragment.embedding.cosine_distance(query_vector).label("distance"),
             )
-            .where(ArticolLegislatie.embedding.isnot(None))
+            .join(ActNormativ, LegislatieFragment.act_id == ActNormativ.id)
+            .where(LegislatieFragment.embedding.isnot(None))
             .order_by("distance")
             .limit(limit)
         )
@@ -223,8 +224,10 @@ Severitate:
         result = await session.execute(stmt)
         rows = result.all()
 
-        # Filter by relevance threshold (cosine distance < 0.6)
-        relevant = [row.ArticolLegislatie for row in rows if row.distance < 0.6]
+        relevant = [
+            (row.LegislatieFragment, row.ActNormativ.denumire)
+            for row in rows if row.distance < 0.6
+        ]
 
         logger.info(
             "legislation_search",
@@ -329,14 +332,10 @@ Severitate:
         legislation_context = ""
         if legal_articles:
             parts = []
-            for art in legal_articles:
-                header = f"--- {art.act_normativ}, {art.citare} ---"
-                body = art.text_integral
-                if art.litere:
-                    litere_list = ", ".join(
-                        f"lit. {l['litera']}) {l['text']}" for l in art.litere
-                    )
-                    body += f"\nLitere: {litere_list}"
+            for frag, act_name in legal_articles:
+                header = f"--- {act_name}, {frag.citare} ---"
+                # Use articol_complet for richer context if available
+                body = frag.articol_complet or frag.text_fragment
                 parts.append(f"{header}\n{body}")
             legislation_context = "\n\n".join(parts)
 
@@ -459,13 +458,13 @@ Răspunde EXCLUSIV în format JSON:
                 grounded["decision_refs"] = []
 
             # Post-process: verify legal_references against actual articles found
-            # Build lookup: act_normativ → set of citare strings
+            # Build lookup: act_name → set of citare strings
             valid_citari = {
-                (art.act_normativ, art.citare) for art in legal_articles
+                (act_name, frag.citare) for frag, act_name in legal_articles
             }
             # Also index by article number for flexible matching
             valid_art_nums = {
-                (art.act_normativ, art.numar_articol) for art in legal_articles
+                (act_name, frag.numar_articol) for frag, act_name in legal_articles
             }
             legal_refs = grounded.get("legal_references", [])
             if isinstance(legal_refs, list):

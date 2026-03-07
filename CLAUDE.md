@@ -62,6 +62,23 @@ DATABASE_URL="postgresql+asyncpg://..." python scripts/generate_embeddings.py
 - HNSW indexes on embedding columns for fast vector search
 - Decision lookup supports: direct BO reference, vector search, keyword ILIKE fallback
 
+### ⚠️ REGULI OBLIGATORII — Schema Producție (`docs/expertap_db.md`)
+
+**`docs/expertap_db.md`** este **singura sursă de adevăr** pentru schema bazei de date din producție. Conține output-uri reale din producție (`\d`, `\dt+`, `\di+`, etc.). Regulile de mai jos sunt **obligatorii** și nu pot fi ignorate:
+
+1. **Înainte de a propune orice modificare SQL** (ALTER TABLE, CREATE TABLE, DROP, CREATE INDEX, etc.), Claude TREBUIE să citească `docs/expertap_db.md` pentru a înțelege starea actuală a producției.
+
+2. **După ce utilizatorul confirmă că a executat o comandă SQL în producție**, Claude TREBUIE **imediat** să actualizeze `docs/expertap_db.md`:
+   - Actualizează/adaugă output-ul `\d <table>` pentru tabelul afectat
+   - Adaugă o intrare în secțiunea "Changelog Schema Producție" cu data, comanda SQL, și cine a executat-o
+   - Actualizează "Ultima sincronizare cu producția" din header
+
+3. **Niciodată** nu se propun modificări SQL bazate doar pe modelele SQLAlchemy — producția poate diferi de cod (coloane adăugate manual, indexuri lipsă, dimensiuni diferite, etc.).
+
+4. **Când se creează o migrare Alembic nouă**, aceasta trebuie să fie consistentă cu `docs/expertap_db.md`, nu invers.
+
+5. **Dacă Claude detectează o discrepanță** între `docs/expertap_db.md`, modele SQLAlchemy, și/sau migrări Alembic, trebuie să semnaleze imediat utilizatorului și să ceară output din producție (`\d <table>`) pentru clarificare.
+
 ### Embedding Dimensions
 
 - **Model:** `gemini-embedding-001` (native output: 3072 dimensions, capped to 2000)
@@ -90,7 +107,7 @@ DATABASE_URL="postgresql+asyncpg://..." python scripts/generate_embeddings.py
   ```
 - After migration, regenerate embeddings: `python scripts/generate_embeddings.py --force`
 
-### Key Tables
+### Key Tables (6 în producție)
 
 | Table | Purpose | RAG? |
 |-------|---------|------|
@@ -100,23 +117,36 @@ DATABASE_URL="postgresql+asyncpg://..." python scripts/generate_embeddings.py
 | `citate_verbatim` | Verbatim quotes | Yes (2000-dim) |
 | `referinte_articole` | Legal article references | No |
 | `nomenclator_cpv` | CPV codes nomenclator | No |
-| `articole_legislatie` | Legislation articles at alineat level (Red Flags grounding) | Yes (2000-dim) |
 
-### ArticoleLegislatie Fields (populated by import_legislatie.py)
+### Tabele legislație (de creat)
 
-Stores legislation at **alineat** granularity — one row per alineat. Enables exact citations like `art. 2 alin. (2) lit. a) și b) din Legea nr. 98/2016`.
+| Table | Purpose | RAG? |
+|-------|---------|------|
+| `acte_normative` | Master table acte legislative (Legea 98/2016, HG 395/2016, etc.) | No |
+| `legislatie_fragmente` | Fragmente legislație la granularitate maximă (articol/alineat/literă) | Yes (2000-dim) |
 
-- `act_normativ` - legislative act: "Legea 98/2016", "HG 395/2016" (VARCHAR 100)
-- `numar_articol` - article number as integer for sorting (INTEGER)
-- `articol` - article label: "art. 2", "art. 178" (VARCHAR 50)
-- `alineat` - alineat number: 1, 2, 3... or NULL if no alineats (INTEGER)
-- `alineat_text` - formatted: "alin. (1)", "alin. (2)" (VARCHAR 20)
-- `litere` - litere within alineat (JSON): `[{"litera": "a", "text": "nediscriminarea"}, ...]`
-- `text_integral` - full text of the alineat including litere (TEXT)
-- `citare` - canonical citation: "art. 2 alin. (2)" or "art. 1" (VARCHAR 100, UNIQUE per act)
-- `capitol` - chapter context: "I - Dispoziții generale" (VARCHAR 500)
-- `sectiune` - section context: "1 - Obiect, scop și principii" (VARCHAR 500)
+### legislatie_fragmente (populated by import_legislatie.py)
+
+Stochează legislația la **granularitate maximă** — un rând per cea mai mică unitate juridică:
+- Articol (dacă nu are alineate)
+- Alineat (dacă nu are litere)
+- Literă (cea mai fină granularitate)
+
+Permite citări exacte: `art. 2 alin. (2) lit. a) din Legea nr. 98/2016`
+
+- `act_id` - FK → `acte_normative.id` (UUID)
+- `numar_articol` - number for sorting (INTEGER)
+- `articol` - label: "art. 2", "art. 178" (VARCHAR 30)
+- `alineat` - 1, 2, 3... or NULL (INTEGER)
+- `alineat_text` - "alin. (1)", "alin. (2)" (VARCHAR 20)
+- `litera` - "a", "b", "c"... or NULL (VARCHAR 5) — **un rând per literă**
+- `text_fragment` - text of this specific fragment (TEXT)
+- `articol_complet` - full article text for RAG context (TEXT)
+- `citare` - canonical: "art. 2 alin. (2) lit. a)" (VARCHAR 150)
+- `capitol`, `sectiune` - context (VARCHAR 500)
+- `keywords` - TSVECTOR for full-text search legal
 - `embedding` - Vector(2000) with HNSW index
+- UNIQUE constraint: `(act_id, numar_articol, COALESCE(alineat, 0), COALESCE(litera, ''))`
 
 **Import:** `python scripts/import_legislatie.py --dir date-expert-app/legislatie-ap`
 **Source files:** .md files in `date-expert-app/legislatie-ap/` (Legea 98/2016, HG 395/2016, etc.)
