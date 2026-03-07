@@ -93,7 +93,11 @@ class DecisionImporter:
 
         files = []
         skipped = 0
+        total_seen = 0
         for blob in blobs:
+            total_seen += 1
+            if total_seen % 500 == 0:
+                logger.info("gcs_listing_progress", seen=total_seen, collected=len(files), skipped=skipped)
             # Only process .txt files
             if blob.name.endswith('.txt'):
                 if skipped < offset:
@@ -106,6 +110,7 @@ class DecisionImporter:
         logger.info(
             "gcs_files_listed",
             count=len(files),
+            total_seen=total_seen,
             offset=offset,
             prefix=prefix,
         )
@@ -290,7 +295,8 @@ class DecisionImporter:
         cpv_map = await self._load_cpv_nomenclator()
         logger.info("cpv_nomenclator_loaded", count=len(cpv_map))
 
-        # Get list of files
+        # Get list of files (iterates GCS blobs — slow with large offsets)
+        logger.info("gcs_listing_starting", offset=offset, limit=limit)
         files = self.list_decision_files(limit=limit, offset=offset)
         stats["total_files"] = len(files)
 
