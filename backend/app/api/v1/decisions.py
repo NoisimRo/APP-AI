@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.logging import get_logger
 from app.db.session import get_session, is_db_available
-from app.models.decision import DecizieCNSC
+from app.models.decision import DecizieCNSC, NomenclatorCPV
 
 router = APIRouter()
 logger = get_logger(__name__)
@@ -99,6 +99,13 @@ async def list_decisions(
         query = query.where(DecizieCNSC.an_bo == year)
     if search:
         search_term = f"%{search.strip()}%"
+
+        # Search CPV nomenclator for matching descriptions → get CPV codes
+        cpv_subquery = (
+            select(NomenclatorCPV.cod_cpv)
+            .where(NomenclatorCPV.descriere.ilike(search_term))
+        )
+
         query = query.where(
             or_(
                 cast(DecizieCNSC.numar_bo, String).ilike(search_term),
@@ -106,7 +113,12 @@ async def list_decisions(
                 DecizieCNSC.autoritate_contractanta.ilike(search_term),
                 DecizieCNSC.cod_cpv.ilike(search_term),
                 DecizieCNSC.cpv_descriere.ilike(search_term),
+                DecizieCNSC.cpv_categorie.ilike(search_term),
+                DecizieCNSC.cpv_clasa.ilike(search_term),
                 DecizieCNSC.filename.ilike(search_term),
+                # Match decisions whose CPV code appears in nomenclator
+                # entries matching the search term
+                DecizieCNSC.cod_cpv.in_(cpv_subquery),
             )
         )
 
