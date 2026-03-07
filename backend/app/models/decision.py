@@ -13,7 +13,7 @@ from uuid import uuid4
 from pgvector.sqlalchemy import Vector
 from sqlalchemy import (
     JSON, Date, DateTime, ForeignKey, Index, Integer, Numeric, String, Text,
-    func, Boolean, Enum as SQLEnum, CheckConstraint
+    func,
 )
 from sqlalchemy.dialects.postgresql import UUID, ARRAY, TSVECTOR
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -78,7 +78,6 @@ class DecizieCNSC(Base):
     # Solution from text (detailed)
     solutie_contestatie: Mapped[Optional[str]] = mapped_column(
         String(20),
-        index=True
     )  # ADMIS, ADMIS_PARTIAL, RESPINS
     motiv_respingere: Mapped[Optional[str]] = mapped_column(String(50))  # nefondată, tardivă, etc.
 
@@ -111,17 +110,8 @@ class DecizieCNSC(Base):
     )
 
     # Relationships
-    sectiuni: Mapped[list["SectiuneDecizie"]] = relationship(
-        "SectiuneDecizie", back_populates="decizie", cascade="all, delete-orphan"
-    )
     argumentari: Mapped[list["ArgumentareCritica"]] = relationship(
         "ArgumentareCritica", back_populates="decizie", cascade="all, delete-orphan"
-    )
-    citate: Mapped[list["CitatVerbatim"]] = relationship(
-        "CitatVerbatim", back_populates="decizie", cascade="all, delete-orphan"
-    )
-    referinte_articole: Mapped[list["ReferintaArticol"]] = relationship(
-        "ReferintaArticol", back_populates="decizie", cascade="all, delete-orphan"
     )
 
     __table_args__ = (
@@ -143,78 +133,6 @@ class DecizieCNSC(Base):
 
     def __repr__(self) -> str:
         return f"<DecizieCNSC {self.external_id}: {self.solutie_contestatie}>"
-
-
-# =============================================================================
-# DECISION SECTIONS
-# =============================================================================
-
-class SectiuneDecizie(Base):
-    """A logical section of a decision.
-
-    Section types:
-    - antet
-    - solicitari_contestator
-    - istoric
-    - punct_vedere_ac
-    - interventie
-    - analiza_cnsc
-    - dispozitiv
-    """
-
-    __tablename__ = "sectiuni_decizie"
-
-    id: Mapped[str] = mapped_column(
-        UUID(as_uuid=False),
-        primary_key=True,
-        default=lambda: str(uuid4())
-    )
-    decizie_id: Mapped[str] = mapped_column(
-        UUID(as_uuid=False),
-        ForeignKey("decizii_cnsc.id", ondelete="CASCADE"),
-        index=True
-    )
-
-    # Section type
-    tip_sectiune: Mapped[str] = mapped_column(String(50), nullable=False)
-    ordine: Mapped[int] = mapped_column(Integer, nullable=False)
-
-    # For multiple intervenients
-    numar_intervenient: Mapped[Optional[int]] = mapped_column(Integer)
-
-    # Content
-    text_sectiune: Mapped[str] = mapped_column(Text, nullable=False)
-
-    # Embedding for RAG
-    embedding_id: Mapped[Optional[str]] = mapped_column(UUID(as_uuid=False))
-
-    # Vector embedding (2000 dimensions - max for pgvector HNSW index)
-    embedding: Mapped[Optional[list]] = mapped_column(Vector(2000))
-
-    # Timestamps
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime, server_default=func.now(), nullable=False
-    )
-
-    # Relationships
-    decizie: Mapped["DecizieCNSC"] = relationship(
-        "DecizieCNSC", back_populates="sectiuni"
-    )
-
-    __table_args__ = (
-        Index("ix_sectiuni_decizie", decizie_id),
-        Index("ix_sectiuni_tip", tip_sectiune),
-        Index(
-            "ix_sectiuni_embedding_hnsw",
-            embedding,
-            postgresql_using="hnsw",
-            postgresql_ops={"embedding": "vector_cosine_ops"},
-            postgresql_with={"m": 16, "ef_construction": 64},
-        ),
-    )
-
-    def __repr__(self) -> str:
-        return f"<SectiuneDecizie {self.decizie_id}:{self.tip_sectiune}>"
 
 
 # =============================================================================
@@ -296,9 +214,6 @@ class ArgumentareCritica(Base):
     decizie: Mapped["DecizieCNSC"] = relationship(
         "DecizieCNSC", back_populates="argumentari"
     )
-    referinte: Mapped[list["ReferintaArticol"]] = relationship(
-        "ReferintaArticol", back_populates="argumentare"
-    )
 
     __table_args__ = (
         Index("ix_arg_decizie", decizie_id),
@@ -315,151 +230,6 @@ class ArgumentareCritica(Base):
 
     def __repr__(self) -> str:
         return f"<ArgumentareCritica {self.cod_critica}: {self.castigator_critica}>"
-
-
-# =============================================================================
-# VERBATIM QUOTES
-# =============================================================================
-
-class CitatVerbatim(Base):
-    """Verbatim quotes from decisions for insertion in generated content.
-
-    These are EXACT quotes that can be safely inserted in generated
-    complaints/responses with [VERIFIED] tags.
-    """
-
-    __tablename__ = "citate_verbatim"
-
-    id: Mapped[str] = mapped_column(
-        UUID(as_uuid=False),
-        primary_key=True,
-        default=lambda: str(uuid4())
-    )
-
-    # Source
-    decizie_id: Mapped[str] = mapped_column(
-        UUID(as_uuid=False),
-        ForeignKey("decizii_cnsc.id", ondelete="CASCADE"),
-        index=True
-    )
-    sectiune_id: Mapped[Optional[str]] = mapped_column(
-        UUID(as_uuid=False),
-        ForeignKey("sectiuni_decizie.id", ondelete="SET NULL")
-    )
-    argumentare_id: Mapped[Optional[str]] = mapped_column(
-        UUID(as_uuid=False),
-        ForeignKey("argumentare_critica.id", ondelete="SET NULL")
-    )
-
-    # EXACT text for insertion
-    text_verbatim: Mapped[str] = mapped_column(Text, nullable=False)
-
-    # Position in original text (for verification)
-    pozitie_start: Mapped[Optional[int]] = mapped_column(Integer)
-    pozitie_end: Mapped[Optional[int]] = mapped_column(Integer)
-
-    # Context
-    tip_citat: Mapped[Optional[str]] = mapped_column(String(30))
-    # Types: 'argumentatie_cnsc', 'dispozitiv', 'referinta_legala'
-
-    # Embedding for search
-    embedding_id: Mapped[Optional[str]] = mapped_column(UUID(as_uuid=False))
-    embedding: Mapped[Optional[list]] = mapped_column(Vector(2000))
-
-    # Timestamps
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime, server_default=func.now(), nullable=False
-    )
-
-    # Relationships
-    decizie: Mapped["DecizieCNSC"] = relationship(
-        "DecizieCNSC", back_populates="citate"
-    )
-
-    __table_args__ = (
-        Index("ix_citate_decizie", decizie_id),
-        Index("ix_citate_tip", tip_citat),
-        Index(
-            "ix_citate_embedding_hnsw",
-            embedding,
-            postgresql_using="hnsw",
-            postgresql_ops={"embedding": "vector_cosine_ops"},
-            postgresql_with={"m": 16, "ef_construction": 64},
-        ),
-    )
-
-    def __repr__(self) -> str:
-        return f"<CitatVerbatim {self.decizie_id[:8]}...>"
-
-
-# =============================================================================
-# LEGAL ARTICLE REFERENCES
-# =============================================================================
-
-class ReferintaArticol(Base):
-    """References to legal articles in decisions.
-
-    Tracks which articles are invoked, by whom, and whether
-    the argument was successful.
-    """
-
-    __tablename__ = "referinte_articole"
-
-    id: Mapped[str] = mapped_column(
-        UUID(as_uuid=False),
-        primary_key=True,
-        default=lambda: str(uuid4())
-    )
-    decizie_id: Mapped[str] = mapped_column(
-        UUID(as_uuid=False),
-        ForeignKey("decizii_cnsc.id", ondelete="CASCADE"),
-        index=True
-    )
-    argumentare_id: Mapped[Optional[str]] = mapped_column(
-        UUID(as_uuid=False),
-        ForeignKey("argumentare_critica.id", ondelete="SET NULL")
-    )
-
-    # Article identification
-    act_normativ: Mapped[str] = mapped_column(String(50), nullable=False)
-    # e.g., "L98/2016", "HG395/2016", "L101/2016"
-    articol: Mapped[str] = mapped_column(String(30), nullable=False)
-    # e.g., "art. 210", "art. 196 alin. (2)"
-
-    # How it appears
-    tip_referinta: Mapped[Optional[str]] = mapped_column(String(20))
-    # 'trimitere', 'citat_partial', 'citat_integral'
-    text_citat: Mapped[Optional[str]] = mapped_column(Text)
-
-    # Who invokes and in what context
-    invocat_de: Mapped[Optional[str]] = mapped_column(String(20))
-    # 'contestator', 'ac', 'intervenient', 'cnsc'
-
-    # ★ Result: Was this argument successful?
-    argument_castigator: Mapped[Optional[bool]] = mapped_column(Boolean)
-
-    # Timestamps
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime, server_default=func.now(), nullable=False
-    )
-
-    # Relationships
-    decizie: Mapped["DecizieCNSC"] = relationship(
-        "DecizieCNSC", back_populates="referinte_articole"
-    )
-    argumentare: Mapped[Optional["ArgumentareCritica"]] = relationship(
-        "ArgumentareCritica", back_populates="referinte"
-    )
-
-    __table_args__ = (
-        Index("ix_ref_decizie", decizie_id),
-        Index("ix_ref_articol", act_normativ, articol),
-        Index("ix_ref_invocat", invocat_de),
-        Index("ix_ref_castigator", argument_castigator),
-    )
-
-    def __repr__(self) -> str:
-        return f"<ReferintaArticol {self.articol} ({self.act_normativ})>"
 
 
 # =============================================================================

@@ -22,11 +22,10 @@ from app.db.session import Base
 # Import all models to ensure they're registered with Base.metadata
 from app.models.decision import (
     DecizieCNSC,
-    SectiuneDecizie,
     ArgumentareCritica,
-    CitatVerbatim,
-    ReferintaArticol,
     NomenclatorCPV,
+    ActNormativ,
+    LegislatieFragment,
 )
 
 # this is the Alembic Config object, which provides

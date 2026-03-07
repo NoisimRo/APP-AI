@@ -18,7 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from pydantic import BaseModel
 
 from app.core.logging import get_logger
-from app.models.decision import DecizieCNSC, ArgumentareCritica, ReferintaArticol
+from app.models.decision import DecizieCNSC, ArgumentareCritica
 from app.services.embedding import EmbeddingService
 from app.services.llm.gemini import GeminiProvider
 
@@ -172,8 +172,8 @@ class RAGService:
     ) -> tuple[list[DecizieCNSC], list[tuple[ArgumentareCritica, float]]]:
         """Search decisions by legal article references in text_integral.
 
-        Searches both the ReferintaArticol table and text_integral for
-        mentions of specific legal articles or court decisions.
+        Searches text_integral for mentions of specific legal articles
+        or court decisions.
         """
         if not references:
             return [], []
@@ -395,6 +395,73 @@ class RAGService:
         logger.debug("extracted_keywords", keywords=keywords)
         return keywords
 
+    def _extract_verbatim_excerpt(
+        self,
+        text_integral: str,
+        chunks: list[tuple[ArgumentareCritica, float]],
+        max_chars: int = 4000,
+    ) -> str:
+        """Extract the most relevant verbatim excerpt from text_integral.
+
+        Searches for key phrases from matched ArgumentareCritica in the
+        original decision text and returns a window around the best match.
+        Falls back to the last portion of the text (which typically contains
+        CNSC's reasoning and ruling).
+
+        Args:
+            text_integral: Full decision text.
+            chunks: Matched ArgumentareCritica chunks with distances.
+            max_chars: Maximum characters to extract.
+
+        Returns:
+            Verbatim excerpt from text_integral.
+        """
+        if len(text_integral) <= max_chars:
+            return text_integral
+
+        # Build search phrases from the most relevant chunk's CNSC argumentation
+        # (CNSC reasoning is the most valuable for verbatim quoting)
+        best_pos = -1
+        for arg, _dist in sorted(chunks, key=lambda x: x[1]):
+            # Try to find CNSC argumentation text in original
+            search_texts = [
+                arg.argumentatie_cnsc,
+                arg.elemente_retinute_cnsc,
+                arg.argumente_contestator,
+            ]
+            for search_text in search_texts:
+                if not search_text:
+                    continue
+                # Use first ~80 chars as search key (enough to be unique)
+                search_key = search_text[:80].strip()
+                pos = text_integral.lower().find(search_key.lower())
+                if pos >= 0:
+                    best_pos = pos
+                    break
+            if best_pos >= 0:
+                break
+
+        if best_pos >= 0:
+            # Center the window around the found position
+            half_window = max_chars // 2
+            start = max(0, best_pos - half_window)
+            end = min(len(text_integral), start + max_chars)
+            # Adjust start if we hit the end
+            if end == len(text_integral):
+                start = max(0, end - max_chars)
+        else:
+            # Fallback: take the last portion (CNSC reasoning is typically at the end)
+            start = max(0, len(text_integral) - max_chars)
+            end = len(text_integral)
+
+        excerpt = text_integral[start:end]
+
+        # Add ellipsis indicators
+        prefix = "..." if start > 0 else ""
+        suffix = "..." if end < len(text_integral) else ""
+
+        return f"{prefix}{excerpt}{suffix}"
+
     def _build_context(
         self,
         decisions: list[DecizieCNSC],
@@ -403,8 +470,9 @@ class RAGService:
         """Build context strings from decisions and matched chunks for LLM.
 
         When vector search was used, builds rich context from the matched
-        ArgumentareCritica chunks (full argumentation text). Falls back to
-        truncated text_integral when no chunks are available.
+        ArgumentareCritica chunks (structured analysis) plus verbatim excerpts
+        from text_integral for direct quoting. Falls back to truncated
+        text_integral when no chunks are available.
         """
         contexts = []
 
@@ -414,6 +482,10 @@ class RAGService:
             chunks_by_decision: dict[str, list[tuple[ArgumentareCritica, float]]] = {}
             for arg, dist in matched_chunks:
                 chunks_by_decision.setdefault(arg.decizie_id, []).append((arg, dist))
+
+            # Budget: structured data + verbatim excerpts
+            # ~4000 chars per decision for verbatim text
+            verbatim_budget = max(2000, 20000 // max(len(chunks_by_decision), 1))
 
             for decizie_id, chunks in chunks_by_decision.items():
                 dec = decision_map.get(decizie_id)
@@ -430,6 +502,8 @@ class RAGService:
                     f"Soluție: {dec.solutie_contestatie or 'N/A'}",
                     f"Contestator: {dec.contestator or 'N/A'}",
                     f"Autoritate contractantă: {dec.autoritate_contractanta or 'N/A'}",
+                    "",
+                    "## Analiză structurată per critică:",
                     "",
                 ]
 
@@ -462,6 +536,17 @@ class RAGService:
                     if arg.castigator_critica and arg.castigator_critica != "unknown":
                         context_parts.append(f"Câștigător: {arg.castigator_critica}")
                     context_parts.append("")
+
+                # Add verbatim excerpt from text_integral for direct quoting
+                verbatim = self._extract_verbatim_excerpt(
+                    dec.text_integral, chunks, max_chars=verbatim_budget
+                )
+                context_parts.extend([
+                    "## Text original din decizie (pentru citare verbatim):",
+                    "",
+                    verbatim,
+                    "",
+                ])
 
                 contexts.append("\n".join(context_parts))
         else:
@@ -628,9 +713,12 @@ Reguli importante:
 6. Când discuți despre soluții, menționează argumentele CNSC
 7. Când în context există referințe la jurisprudență (decizii ale instanțelor naționale, CJUE, directive europene), citează-le exact așa cum apar
 8. NU te prezenta și NU folosi formulări de genul "În calitate de..." - răspunde direct la întrebare
+9. **CITĂRI VERBATIM**: Când susții un argument sau prezinți o concluzie, include citate exacte din textul original al deciziei, folosind ghilimele și referința deciziei. Exemplu: *Conform deciziei **BO2025_123**, CNSC a reținut că „textul exact din decizie”*. Secțiunea „Text original din decizie” conține fragmente verbatim — folosește-le pentru citări directe.
+10. Prezintă atât argumentele contestatorului, cât și cele ale autorității contractante și ale CNSC, cu citate verbatim din fiecare parte, pentru a oferi o imagine completă.
 
 Formatare:
 - Folosește **bold** pentru termeni cheie și referințe la decizii
+- Folosește „ghilimele românești” pentru citatele verbatim din decizii
 - Structurează răspunsul cu paragrafe clare, separate prin linii goale
 - Folosește liste numerotate (1. 2. 3.) pentru enumerări
 - Folosește titluri (## sau ###) pentru secțiuni distincte când răspunsul este lung
