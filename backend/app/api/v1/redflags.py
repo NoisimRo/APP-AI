@@ -1,5 +1,7 @@
 """Red flags detection API endpoints."""
 
+import asyncio
+
 from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -7,6 +9,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.logging import get_logger
 from app.db.session import get_session
 from app.services.redflags_analyzer import RedFlagsAnalyzer
+
+# Overall endpoint timeout (seconds) — generous for large documents
+ENDPOINT_TIMEOUT = 300
 
 router = APIRouter()
 logger = get_logger(__name__)
@@ -81,10 +86,13 @@ async def analyze_red_flags(
     try:
         analyzer = RedFlagsAnalyzer()
 
-        red_flags_data = await analyzer.analyze(
-            document_text=request.text,
-            session=session if request.use_jurisprudence else None,
-            use_jurisprudence=request.use_jurisprudence
+        red_flags_data = await asyncio.wait_for(
+            analyzer.analyze(
+                document_text=request.text,
+                session=session if request.use_jurisprudence else None,
+                use_jurisprudence=request.use_jurisprudence,
+            ),
+            timeout=ENDPOINT_TIMEOUT,
         )
 
         # Convert to Pydantic models
@@ -133,6 +141,19 @@ async def analyze_red_flags(
             ),
         )
 
+    except asyncio.TimeoutError:
+        logger.error(
+            "red_flags_analysis_timeout",
+            text_length=len(request.text),
+            timeout=ENDPOINT_TIMEOUT,
+        )
+        raise HTTPException(
+            status_code=504,
+            detail=(
+                f"Analiza a depășit timpul limită ({ENDPOINT_TIMEOUT}s). "
+                "Documentul este prea mare sau complex. Încercați cu o secțiune mai mică."
+            ),
+        )
     except Exception as e:
         logger.error("red_flags_analysis_error", error=str(e), exc_info=True)
         raise HTTPException(

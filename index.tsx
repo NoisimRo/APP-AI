@@ -197,6 +197,7 @@ const App = () => {
   const [redFlagsResults, setRedFlagsResults] = useState<any[]>([]);
   const [redFlagsTab, setRedFlagsTab] = useState<'manual' | 'upload'>('manual');
   const [uploadedDocument, setUploadedDocument] = useState<{name: string, text: string} | null>(null);
+  const [redFlagsProgress, setRedFlagsProgress] = useState("");
 
   // Decision Viewer State
   const [viewingDecision, setViewingDecision] = useState<any | null>(null);
@@ -513,9 +514,31 @@ const App = () => {
 
     setIsLoading(true);
     setRedFlagsResults([]);
+    setRedFlagsProgress("Se trimite documentul pentru analiză...");
+
+    // Progress simulation — shows user what's happening during long analysis
+    const charCount = textToAnalyze.length;
+    const isLargeDoc = charCount > 15000;
+    const progressTimer = setTimeout(() => {
+      setRedFlagsProgress(
+        isLargeDoc
+          ? "Document mare detectat — se analizează în secțiuni paralele..."
+          : "Se identifică clauzele problematice..."
+      );
+    }, 3000);
+    const progressTimer2 = setTimeout(() => {
+      setRedFlagsProgress("Se verifică cu legislația și jurisprudența CNSC...");
+    }, isLargeDoc ? 20000 : 15000);
+    const progressTimer3 = setTimeout(() => {
+      setRedFlagsProgress("Se fundamentează fiecare red flag cu articole reale...");
+    }, isLargeDoc ? 45000 : 30000);
+
+    // AbortController with 180s timeout for large documents
+    const controller = new AbortController();
+    const timeoutMs = isLargeDoc ? 180000 : 120000;
+    const fetchTimeout = setTimeout(() => controller.abort(), timeoutMs);
 
     try {
-      // Call backend Red Flags API
       const response = await fetch('/api/v1/redflags/', {
         method: 'POST',
         headers: {
@@ -524,21 +547,36 @@ const App = () => {
         body: JSON.stringify({
           text: textToAnalyze,
           use_jurisprudence: true
-        })
+        }),
+        signal: controller.signal,
       });
 
       if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+        const errorData = await response.json().catch(() => null);
+        const detail = errorData?.detail || `Eroare server (${response.status})`;
+        throw new Error(detail);
       }
 
       const data = await response.json();
       setRedFlagsResults(data.red_flags || []);
 
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
-      alert('Eroare la analiza documentului. Verifică că backend-ul este pornit.');
+      if (err.name === 'AbortError') {
+        alert(
+          `Analiza a depășit timpul limită (${timeoutMs / 1000}s). ` +
+          'Documentul poate fi prea complex. Încearcă cu o secțiune mai mică.'
+        );
+      } else {
+        alert(`Eroare la analiză: ${err.message || 'Verifică că backend-ul este pornit.'}`);
+      }
     } finally {
+      clearTimeout(progressTimer);
+      clearTimeout(progressTimer2);
+      clearTimeout(progressTimer3);
+      clearTimeout(fetchTimeout);
       setIsLoading(false);
+      setRedFlagsProgress("");
     }
   };
 
@@ -1200,6 +1238,11 @@ const App = () => {
                   {isLoading ? <Loader2 className="animate-spin" size={18} /> : <AlertTriangle size={18} />}
                   {isLoading ? 'Analizare în curs...' : 'Analizează Red Flags'}
                 </button>
+                {isLoading && redFlagsProgress && (
+                  <p className="text-sm text-slate-500 mt-3 text-center animate-pulse">
+                    {redFlagsProgress}
+                  </p>
+                )}
               </div>
             )}
 
@@ -1238,6 +1281,11 @@ const App = () => {
                   {isLoading ? <Loader2 className="animate-spin" size={18} /> : <AlertTriangle size={18} />}
                   {isLoading ? 'Analizare în curs...' : 'Analizează Red Flags'}
                 </button>
+                {isLoading && redFlagsProgress && (
+                  <p className="text-sm text-slate-500 mt-3 text-center animate-pulse">
+                    {redFlagsProgress}
+                  </p>
+                )}
               </div>
             )}
 
