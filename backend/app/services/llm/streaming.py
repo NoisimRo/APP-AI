@@ -18,6 +18,7 @@ async def create_sse_response(
     temperature: float = 0.1,
     max_tokens: int = 8192,
     metadata: dict | None = None,
+    strip_preamble: bool = False,
 ) -> StreamingResponse:
     """Create an SSE StreamingResponse from an LLM stream.
 
@@ -29,6 +30,7 @@ async def create_sse_response(
         temperature: Generation temperature.
         max_tokens: Maximum output tokens.
         metadata: Optional metadata to send as final event (e.g. citations, decision_refs).
+        strip_preamble: If True, discard any text before the first ## heading.
 
     Returns:
         FastAPI StreamingResponse with text/event-stream content type.
@@ -36,6 +38,10 @@ async def create_sse_response(
 
     async def event_generator():
         try:
+            # Buffer to strip preamble text before first ## heading
+            preamble_buffer = ""
+            preamble_passed = not strip_preamble
+
             async for chunk in llm.stream(
                 prompt=prompt,
                 context=context,
@@ -43,6 +49,22 @@ async def create_sse_response(
                 temperature=temperature,
                 max_tokens=max_tokens,
             ):
+                if not preamble_passed:
+                    preamble_buffer += chunk
+                    # Check if we've reached the first ## heading
+                    heading_pos = preamble_buffer.find("## ")
+                    if heading_pos >= 0:
+                        # Discard everything before the heading, emit from ## onwards
+                        remaining = preamble_buffer[heading_pos:]
+                        preamble_passed = True
+                        if remaining:
+                            yield f"data: {json.dumps({'text': remaining})}\n\n"
+                    elif len(preamble_buffer) > 500:
+                        # Safety: if no heading found after 500 chars, flush everything
+                        preamble_passed = True
+                        yield f"data: {json.dumps({'text': preamble_buffer})}\n\n"
+                    continue
+
                 yield f"data: {json.dumps({'text': chunk})}\n\n"
 
             # Send final event with metadata

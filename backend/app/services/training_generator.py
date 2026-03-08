@@ -493,7 +493,13 @@ Materialul TREBUIE să conțină EXACT aceste 4 secțiuni, în această ordine:
 3. ## Rezolvare — rezolvarea completă cu temeiuri legale exacte (articole, alineate) și jurisprudență CNSC
 4. ## Note Trainer — sfaturi pentru formator, puncte cheie, greșeli frecvente, timp alocat
 
-Lungimea țintă ({lungime_info}) se aplică INDEPENDENT la FIECARE secțiune. De exemplu, la nivel "scurt", fiecare din cele 4 secțiuni are ~200 cuvinte — NU se omite nicio secțiune, ci fiecare este mai concisă. Rezolvarea și Notele Trainer sunt la fel de importante ca Enunțul — nu le scurta disproporționat și nu le omite niciodată."""
+Lungimea țintă ({lungime_info}) se aplică INDEPENDENT la FIECARE secțiune. NU se omite nicio secțiune, ci fiecare este mai concisă. Rezolvarea și Notele Trainer sunt la fel de importante ca Enunțul.
+
+INTERDICȚII STRICTE:
+- NU adăuga introduceri, preambuluri sau texte explicative înainte de ## Enunț. Începe DIRECT cu ## Enunț.
+- NU adăuga concluzii, rezumate sau texte după ## Note Trainer.
+- NU adăuga paragrafe de context general de tipul "Acest material vizează..." sau "Acest test este conceput pentru...". Intră DIRECT în subiect.
+- Fiecare cuvânt contează — zero text de umplutură, zero generalități."""
 
         return prompt
 
@@ -519,7 +525,7 @@ Lungimea țintă ({lungime_info}) se aplică INDEPENDENT la FIECARE secțiune. D
             tip_material, nivel_dificultate, lungime, context
         )
 
-        user_prompt = f"Generează un material didactic pe tema: {tema}"
+        user_prompt = f"Tema: {tema}\n\nÎncepe DIRECT cu ## Enunț (fără introducere, fără preambul)."
         if context_suplimentar:
             user_prompt += f"\n\nContext suplimentar de la trainer: {context_suplimentar}"
 
@@ -538,6 +544,9 @@ Lungimea țintă ({lungime_info}) se aplică INDEPENDENT la FIECARE secțiune. D
             temperature=0.4,
             max_tokens=max_tokens,
         )
+
+        # Strip any preamble text before the first ## heading
+        response = self._strip_preamble(response)
 
         # Parse sections from response
         sections = self._parse_sections(response)
@@ -580,7 +589,7 @@ Lungimea țintă ({lungime_info}) se aplică INDEPENDENT la FIECARE secțiune. D
             tip_material, nivel_dificultate, lungime, context
         )
 
-        user_prompt = f"Generează un material didactic pe tema: {tema}"
+        user_prompt = f"Tema: {tema}\n\nÎncepe DIRECT cu ## Enunț (fără introducere, fără preambul)."
         if context_suplimentar:
             user_prompt += f"\n\nContext suplimentar de la trainer: {context_suplimentar}"
 
@@ -594,6 +603,15 @@ Lungimea țintă ({lungime_info}) se aplică INDEPENDENT la FIECARE secțiune. D
         }
 
         return user_prompt, system_prompt, metadata
+
+    @staticmethod
+    def _strip_preamble(text: str) -> str:
+        """Remove any text before the first ## heading."""
+        import re
+        match = re.search(r'^(## )', text, re.MULTILINE)
+        if match and match.start() > 0:
+            return text[match.start():]
+        return text
 
     @staticmethod
     def _parse_sections(text: str) -> dict:

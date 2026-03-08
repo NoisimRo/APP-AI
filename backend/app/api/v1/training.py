@@ -152,6 +152,7 @@ async def generate_material_stream(
             temperature=0.4,
             max_tokens=max_tokens,
             metadata=metadata,
+            strip_preamble=True,
         )
 
     except Exception as e:
