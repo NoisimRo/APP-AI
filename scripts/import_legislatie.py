@@ -357,8 +357,8 @@ def parse_legislation(raw_text: str) -> list[dict]:
                     "text_fragment": alin_data["text"],
                     "articol_complet": article_text,
                     "citare": citare,
-                    "capitol": current_capitol,
-                    "sectiune": current_sectiune,
+                    "capitol": current_capitol[:500] if current_capitol else None,
+                    "sectiune": current_sectiune[:500] if current_sectiune else None,
                 })
 
         current_art_lines = []
@@ -691,8 +691,8 @@ async def _update_existing(
                         text_fragment=rec_data["text_fragment"],
                         articol_complet=rec_data["articol_complet"],
                         citare=rec_data["citare"],
-                        capitol=rec_data["capitol"],
-                        sectiune=rec_data["sectiune"],
+                        capitol=(rec_data["capitol"] or "")[:500] or None,
+                        sectiune=(rec_data["sectiune"] or "")[:500] or None,
                         articol=rec_data["articol"],
                         alineat_text=rec_data["alineat_text"],
                         embedding=emb,
@@ -823,8 +823,8 @@ async def _embed_and_insert(
                 text_fragment=rec_data["text_fragment"],
                 articol_complet=rec_data["articol_complet"],
                 citare=rec_data["citare"],
-                capitol=rec_data["capitol"],
-                sectiune=rec_data["sectiune"],
+                capitol=(rec_data["capitol"] or "")[:500] or None,
+                sectiune=(rec_data["sectiune"] or "")[:500] or None,
                 embedding=emb,
             )
             session.add(record)
@@ -994,7 +994,14 @@ async def main():
     print()
 
     if not args.dry_run:
-        await init_db()
+        db_ok = await init_db()
+        if not db_ok:
+            print("ERROR: Could not connect to database.")
+            print("Make sure DATABASE_URL is exported:")
+            print('  export DATABASE_URL="postgresql+asyncpg://..."')
+            print("Or use inline syntax:")
+            print('  DATABASE_URL="..." python scripts/import_legislatie.py')
+            sys.exit(1)
 
     from app.services.llm.gemini import GeminiProvider
     llm = GeminiProvider()

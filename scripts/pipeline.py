@@ -21,8 +21,8 @@ Future automation (Cloud Run Job + Cloud Scheduler):
     See CLAUDE.md for instructions on setting up daily automated runs.
 """
 
-import asyncio
 import argparse
+import re
 import subprocess
 import sys
 import time
@@ -31,8 +31,8 @@ from pathlib import Path
 SCRIPTS_DIR = Path(__file__).parent
 
 
-def run_step(script_name: str, args: list[str], step_label: str) -> bool:
-    """Run a pipeline step as a subprocess.
+def run_step(script_name: str, args: list[str], step_label: str) -> tuple[bool, str]:
+    """Run a pipeline step as a subprocess, streaming output and capturing it.
 
     Args:
         script_name: Script filename in scripts/ directory.
@@ -40,10 +40,10 @@ def run_step(script_name: str, args: list[str], step_label: str) -> bool:
         step_label: Human-readable label for output.
 
     Returns:
-        True if step succeeded, False otherwise.
+        Tuple of (success, captured_output).
     """
     script_path = SCRIPTS_DIR / script_name
-    cmd = [sys.executable, str(script_path)] + args
+    cmd = [sys.executable, "-u", str(script_path)] + args
 
     print(f"\n{'=' * 60}")
     print(f"STEP: {step_label}")
@@ -51,15 +51,36 @@ def run_step(script_name: str, args: list[str], step_label: str) -> bool:
     print(f"{'=' * 60}\n")
 
     start = time.time()
-    result = subprocess.run(cmd, env=None)  # Inherit parent env (DATABASE_URL, etc.)
-    elapsed = time.time() - start
+    captured_lines = []
 
-    if result.returncode == 0:
+    # Stream output line-by-line while capturing it
+    proc = subprocess.Popen(
+        cmd,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        bufsize=1,
+    )
+    for line in proc.stdout:
+        print(line, end="", flush=True)
+        captured_lines.append(line)
+    proc.wait()
+
+    elapsed = time.time() - start
+    output = "".join(captured_lines)
+
+    if proc.returncode == 0:
         print(f"\n>>> {step_label} completed in {elapsed:.1f}s")
-        return True
+        return True, output
     else:
-        print(f"\n>>> {step_label} FAILED (exit code {result.returncode}) after {elapsed:.1f}s")
-        return False
+        print(f"\n>>> {step_label} FAILED (exit code {proc.returncode}) after {elapsed:.1f}s")
+        return False, output
+
+
+def parse_imported_count(output: str) -> int | None:
+    """Parse PIPELINE_NEW_IMPORTED=N from import step output."""
+    match = re.search(r"PIPELINE_NEW_IMPORTED=(\d+)", output)
+    return int(match.group(1)) if match else None
 
 
 def main():
@@ -105,6 +126,7 @@ def main():
 
     pipeline_start = time.time()
     results = {}
+    new_imported = None  # Track how many decisions were imported
 
     print("=" * 60)
     print("ExpertAP Data Pipeline")
@@ -120,21 +142,33 @@ def main():
         import_args = ["--skip-embeddings"]
         if args.limit:
             import_args.extend(["--limit", str(args.limit)])
-        results["import"] = run_step(
+        success, output = run_step(
             "import_decisions_from_gcs.py", import_args, "Import decisions from GCS"
         )
-        # Import failures are non-fatal (some files may fail but others succeed)
+        results["import"] = success
+        new_imported = parse_imported_count(output)
+        if new_imported is not None:
+            print(f"\n>>> New decisions imported: {new_imported}")
 
     # Step 2: LLM Analysis
     if "analyze" in steps_to_run:
         analyze_args = []
         if args.limit:
             analyze_args.extend(["--limit", str(args.limit)])
-        if args.force:
-            analyze_args.append("--force")
-        results["analyze"] = run_step(
-            "generate_analysis.py", analyze_args, "LLM Analysis (ArgumentareCritica)"
-        )
+        elif new_imported is not None and new_imported > 0 and not args.force:
+            # Auto-limit to newly imported decisions (avoid processing 1000s of old ones)
+            analyze_args.extend(["--limit", str(new_imported)])
+            print(f"\n>>> Auto-limiting analysis to {new_imported} newly imported decisions")
+        elif new_imported == 0:
+            print("\n>>> No new decisions imported — skipping analysis")
+            results["analyze"] = True
+        if "analyze" not in results:
+            if args.force:
+                analyze_args.append("--force")
+            success, _ = run_step(
+                "generate_analysis.py", analyze_args, "LLM Analysis (ArgumentareCritica)"
+            )
+            results["analyze"] = success
 
     # Step 3: Embeddings
     if "embed" in steps_to_run:
@@ -143,9 +177,14 @@ def main():
             embed_args.extend(["--limit", str(args.limit)])
         if args.force:
             embed_args.append("--force")
-        results["embed"] = run_step(
-            "generate_embeddings.py", embed_args, "Generate Embeddings"
-        )
+        if new_imported == 0 and not args.force:
+            print("\n>>> No new decisions — skipping embeddings")
+            results["embed"] = True
+        else:
+            success, _ = run_step(
+                "generate_embeddings.py", embed_args, "Generate Embeddings"
+            )
+            results["embed"] = success
 
     # Pipeline summary
     total_elapsed = time.time() - pipeline_start
