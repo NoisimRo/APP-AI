@@ -72,10 +72,10 @@ DIFFICULTY_LEVELS = {
 }
 
 LENGTH_OPTIONS = {
-    "scurt": "aproximativ 200 de cuvinte (câteva rânduri)",
-    "mediu": "aproximativ 400 de cuvinte (jumătate de pagină)",
-    "lung": "aproximativ 800 de cuvinte (o pagină)",
-    "extins": "aproximativ 1500 de cuvinte (2+ pagini)",
+    "scurt": "~200 cuvinte PER SECȚIUNE (enunț concis, cerințe clare, rezolvare succintă dar completă, note trainer esențiale)",
+    "mediu": "~400 cuvinte PER SECȚIUNE (detalii suficiente, argumentare solidă, exemple relevante)",
+    "lung": "~800 cuvinte PER SECȚIUNE (analiză detaliată, multiple exemple, argumentare extinsă)",
+    "extins": "~1500 cuvinte PER SECȚIUNE (analiză exhaustivă, jurisprudență multiplă, toate perspectivele acoperite)",
 }
 
 # --- Type-specific prompt templates ---
@@ -486,7 +486,20 @@ LUNGIME ȚINTĂ: {lungime_info}
 INSTRUCȚIUNI SPECIFICE PENTRU ACEST TIP DE MATERIAL:
 {material_prompt}
 
-IMPORTANT: Respectă EXACT structura cu secțiunile ## Enunț, ## Cerințe, ## Rezolvare, ## Note Trainer. Fiecare secțiune trebuie separată clar."""
+IMPORTANT — STRUCTURĂ OBLIGATORIE:
+Materialul TREBUIE să conțină EXACT aceste 4 secțiuni, în această ordine:
+1. ## Enunț — prezentarea situației/scenariului
+2. ## Cerințe — ce trebuie să facă participanții
+3. ## Rezolvare — rezolvarea completă cu temeiuri legale exacte (articole, alineate) și jurisprudență CNSC
+4. ## Note Trainer — sfaturi pentru formator, puncte cheie, greșeli frecvente, timp alocat
+
+Lungimea țintă ({lungime_info}) se aplică INDEPENDENT la FIECARE secțiune. NU se omite nicio secțiune, ci fiecare este mai concisă. Rezolvarea și Notele Trainer sunt la fel de importante ca Enunțul.
+
+INTERDICȚII STRICTE:
+- NU adăuga introduceri, preambuluri sau texte explicative înainte de ## Enunț. Începe DIRECT cu ## Enunț.
+- NU adăuga concluzii, rezumate sau texte după ## Note Trainer.
+- NU adăuga paragrafe de context general de tipul "Acest material vizează..." sau "Acest test este conceput pentru...". Intră DIRECT în subiect.
+- Fiecare cuvânt contează — zero text de umplutură, zero generalități."""
 
         return prompt
 
@@ -512,18 +525,18 @@ IMPORTANT: Respectă EXACT structura cu secțiunile ## Enunț, ## Cerințe, ## R
             tip_material, nivel_dificultate, lungime, context
         )
 
-        user_prompt = f"Generează un material didactic pe tema: {tema}"
+        user_prompt = f"Tema: {tema}\n\nÎncepe DIRECT cu ## Enunț (fără introducere, fără preambul)."
         if context_suplimentar:
             user_prompt += f"\n\nContext suplimentar de la trainer: {context_suplimentar}"
 
-        # Map length to approximate token budget
+        # Token budget per length (4 sections × words per section × ~1.5 tokens/word)
         token_budgets = {
-            "scurt": 2048,
-            "mediu": 4096,
-            "lung": 8192,
-            "extins": 16384,
+            "scurt": 4096,     # 4 × ~200 words
+            "mediu": 8192,     # 4 × ~400 words
+            "lung": 16384,     # 4 × ~800 words
+            "extins": 24576,   # 4 × ~1500 words
         }
-        max_tokens = token_budgets.get(lungime, 4096)
+        max_tokens = token_budgets.get(lungime, 8192)
 
         response = await self.llm.complete(
             prompt=user_prompt,
@@ -531,6 +544,9 @@ IMPORTANT: Respectă EXACT structura cu secțiunile ## Enunț, ## Cerințe, ## R
             temperature=0.4,
             max_tokens=max_tokens,
         )
+
+        # Strip any preamble text before the first ## heading
+        response = self._strip_preamble(response)
 
         # Parse sections from response
         sections = self._parse_sections(response)
@@ -573,7 +589,7 @@ IMPORTANT: Respectă EXACT structura cu secțiunile ## Enunț, ## Cerințe, ## R
             tip_material, nivel_dificultate, lungime, context
         )
 
-        user_prompt = f"Generează un material didactic pe tema: {tema}"
+        user_prompt = f"Tema: {tema}\n\nÎncepe DIRECT cu ## Enunț (fără introducere, fără preambul)."
         if context_suplimentar:
             user_prompt += f"\n\nContext suplimentar de la trainer: {context_suplimentar}"
 
@@ -587,6 +603,15 @@ IMPORTANT: Respectă EXACT structura cu secțiunile ## Enunț, ## Cerințe, ## R
         }
 
         return user_prompt, system_prompt, metadata
+
+    @staticmethod
+    def _strip_preamble(text: str) -> str:
+        """Remove any text before the first ## heading."""
+        import re
+        match = re.search(r'^(## )', text, re.MULTILINE)
+        if match and match.start() > 0:
+            return text[match.start():]
+        return text
 
     @staticmethod
     def _parse_sections(text: str) -> dict:

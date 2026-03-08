@@ -29,7 +29,7 @@ logger = get_logger(__name__)
 class TrainingGenerateRequest(BaseModel):
     """Request payload for training material generation."""
 
-    tema: str = Field(..., min_length=3, max_length=5000)
+    tema: str = Field(..., min_length=3, max_length=20000)
     tip_material: Literal[
         "speta", "studiu_caz", "situational", "palarii", "dezbatere",
         "quiz", "joc_rol", "erori", "comparativ", "cronologie"
@@ -136,14 +136,14 @@ async def generate_material_stream(
             session=session,
         )
 
-        # Map length to token budget
+        # Token budget per length (4 sections × words per section × ~1.5 tokens/word)
         token_budgets = {
-            "scurt": 2048,
-            "mediu": 4096,
-            "lung": 8192,
-            "extins": 16384,
+            "scurt": 4096,     # 4 × ~200 words
+            "mediu": 8192,     # 4 × ~400 words
+            "lung": 16384,     # 4 × ~800 words
+            "extins": 24576,   # 4 × ~1500 words
         }
-        max_tokens = token_budgets.get(request.lungime, 4096)
+        max_tokens = token_budgets.get(request.lungime, 8192)
 
         return await create_sse_response(
             llm=generator.llm,
@@ -152,6 +152,7 @@ async def generate_material_stream(
             temperature=0.4,
             max_tokens=max_tokens,
             metadata=metadata,
+            strip_preamble=True,
         )
 
     except Exception as e:
