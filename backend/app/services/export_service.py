@@ -1,6 +1,7 @@
 """Export service for generating DOCX, PDF, and MD files from training materials."""
 
 import io
+import os
 import re
 from datetime import datetime
 
@@ -143,29 +144,47 @@ def export_docx(content: str, title: str, metadata: dict | None = None) -> bytes
     return buffer.getvalue()
 
 
+def _find_dejavu_font() -> str:
+    """Find DejaVu Sans font path on the system."""
+    candidates = [
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+        "/usr/share/fonts/TTF/DejaVuSans.ttf",
+        "/usr/share/fonts/dejavu/DejaVuSans.ttf",
+    ]
+    for path in candidates:
+        if os.path.exists(path):
+            return path.rsplit("/", 1)[0]  # return directory
+    raise FileNotFoundError("DejaVu Sans font not found. Install fonts-dejavu-core.")
+
+
 def export_pdf(content: str, title: str, metadata: dict | None = None) -> bytes:
-    """Export content as PDF bytes using fpdf2."""
+    """Export content as PDF bytes using fpdf2 with Unicode font support."""
     from fpdf import FPDF
+
+    font_dir = _find_dejavu_font()
 
     class TrainingPDF(FPDF):
         def header(self):
-            self.set_font("Helvetica", "I", 8)
+            self.set_font("DejaVu", "I", 8)
             self.set_text_color(160, 160, 160)
             self.cell(0, 10, "ExpertAP TrainingAP", align="R", new_x="LMARGIN", new_y="NEXT")
 
         def footer(self):
             self.set_y(-15)
-            self.set_font("Helvetica", "I", 8)
+            self.set_font("DejaVu", "I", 8)
             self.set_text_color(160, 160, 160)
             self.cell(0, 10, f"Pagina {self.page_no()}/{{nb}}", align="C")
 
     pdf = TrainingPDF()
+    pdf.add_font("DejaVu", "", os.path.join(font_dir, "DejaVuSans.ttf"))
+    pdf.add_font("DejaVu", "B", os.path.join(font_dir, "DejaVuSans-Bold.ttf"))
+    pdf.add_font("DejaVu", "I", os.path.join(font_dir, "DejaVuSansMono-Oblique.ttf"))
     pdf.alias_nb_pages()
     pdf.set_auto_page_break(auto=True, margin=20)
     pdf.add_page()
 
     # Title
-    pdf.set_font("Helvetica", "B", 18)
+    pdf.set_font("DejaVu", "B", 18)
     pdf.set_text_color(30, 41, 59)
     pdf.multi_cell(0, 10, title, align="C")
     pdf.ln(3)
@@ -176,11 +195,11 @@ def export_pdf(content: str, title: str, metadata: dict | None = None) -> bytes:
         if metadata.get("tip_name"):
             meta_parts.append(f"Tip: {metadata['tip_name']}")
         if metadata.get("nivel"):
-            nivel_labels = {"usor": "Usor", "mediu": "Mediu", "dificil": "Dificil", "foarte_dificil": "Foarte Dificil"}
+            nivel_labels = {"usor": "Ușor", "mediu": "Mediu", "dificil": "Dificil", "foarte_dificil": "Foarte Dificil"}
             meta_parts.append(f"Nivel: {nivel_labels.get(metadata['nivel'], metadata['nivel'])}")
     meta_parts.append(f"Generat: {datetime.now().strftime('%d.%m.%Y %H:%M')}")
 
-    pdf.set_font("Helvetica", "I", 9)
+    pdf.set_font("DejaVu", "I", 9)
     pdf.set_text_color(128, 128, 128)
     pdf.cell(0, 6, " | ".join(meta_parts), align="C", new_x="LMARGIN", new_y="NEXT")
     pdf.ln(8)
@@ -190,28 +209,27 @@ def export_pdf(content: str, title: str, metadata: dict | None = None) -> bytes:
     for elem in elements:
         if elem["type"] in ("heading1", "heading2"):
             pdf.ln(4)
-            pdf.set_font("Helvetica", "B", 14)
+            pdf.set_font("DejaVu", "B", 14)
             pdf.set_text_color(30, 41, 59)
-            # Strip markdown bold markers from heading text
             heading_text = elem["text"].replace("**", "")
             pdf.multi_cell(0, 7, heading_text)
             pdf.ln(2)
         elif elem["type"] == "heading3":
             pdf.ln(2)
-            pdf.set_font("Helvetica", "B", 12)
+            pdf.set_font("DejaVu", "B", 12)
             pdf.set_text_color(51, 65, 85)
             heading_text = elem["text"].replace("**", "")
             pdf.multi_cell(0, 6, heading_text)
             pdf.ln(1)
         elif elem["type"] == "bullet":
-            pdf.set_font("Helvetica", "", 10)
+            pdf.set_font("DejaVu", "", 10)
             pdf.set_text_color(30, 41, 59)
             clean_text = elem["text"].replace("**", "")
             pdf.cell(8)
-            pdf.multi_cell(0, 5, f"  {clean_text}")
+            pdf.multi_cell(0, 5, f"\u2022 {clean_text}")
             pdf.ln(1)
         elif elem["type"] == "numbered":
-            pdf.set_font("Helvetica", "", 10)
+            pdf.set_font("DejaVu", "", 10)
             pdf.set_text_color(30, 41, 59)
             clean_text = elem["text"].replace("**", "")
             pdf.cell(8)
@@ -220,13 +238,13 @@ def export_pdf(content: str, title: str, metadata: dict | None = None) -> bytes:
         elif elem["type"] == "table_row":
             if re.match(r"^\|[\s\-:|]+\|$", elem["text"]):
                 continue
-            pdf.set_font("Helvetica", "", 9)
+            pdf.set_font("DejaVu", "", 9)
             pdf.set_text_color(30, 41, 59)
             cells = [c.strip() for c in elem["text"].split("|")[1:-1]]
             clean_cells = [c.replace("**", "") for c in cells]
             pdf.multi_cell(0, 5, " | ".join(clean_cells))
         else:
-            pdf.set_font("Helvetica", "", 10)
+            pdf.set_font("DejaVu", "", 10)
             pdf.set_text_color(30, 41, 59)
             clean_text = elem["text"].replace("**", "")
             pdf.multi_cell(0, 5, clean_text)
