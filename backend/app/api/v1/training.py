@@ -29,7 +29,7 @@ logger = get_logger(__name__)
 class TrainingGenerateRequest(BaseModel):
     """Request payload for training material generation."""
 
-    tema: str = Field(..., min_length=3, max_length=5000)
+    tema: str = Field(..., min_length=3, max_length=20000)
     tip_material: Literal[
         "speta", "studiu_caz", "situational", "palarii", "dezbatere",
         "quiz", "joc_rol", "erori", "comparativ", "cronologie"
