@@ -364,8 +364,8 @@ class DecisionImporter:
                     logger.info(
                         "batch_committed",
                         batch_num=i // batch_size + 1,
-                        processed=min(i + batch_size, len(files)),
-                        total=len(files),
+                        processed=min(i + batch_size, len(new_files)),
+                        total=len(new_files),
                     )
                 except Exception as e:
                     await session.rollback()
