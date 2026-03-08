@@ -126,7 +126,7 @@ class DecisionAnalysisService:
                 prompt=prompt,
                 system_prompt=ANALYSIS_SYSTEM_PROMPT,
                 temperature=0.05,
-                max_tokens=16384,
+                max_tokens=65536,
             )
 
             # Parse JSON from response
@@ -148,7 +148,12 @@ class DecisionAnalysisService:
             raise
 
     def _parse_response(self, response: str) -> list[dict]:
-        """Parse LLM response into list of argumentation dicts."""
+        """Parse LLM response into list of argumentation dicts.
+
+        If JSON is truncated (e.g. due to max_tokens), attempts to recover
+        complete objects for diagnostic purposes, then re-raises the error
+        so the decision remains unanalyzed and will be retried.
+        """
         # Strip markdown code fences if present
         text = response.strip()
         if text.startswith("```json"):
@@ -159,7 +164,28 @@ class DecisionAnalysisService:
             text = text[:-3]
         text = text.strip()
 
-        parsed = json.loads(text)
+        try:
+            parsed = json.loads(text)
+        except json.JSONDecodeError as e:
+            # Attempt to recover complete JSON objects for diagnostics
+            recovered = self._recover_json_objects(text)
+            if recovered:
+                logger.warning(
+                    "json_truncated_partial_recovery",
+                    recovered_count=len(recovered),
+                    recovered_critici=[r.get("cod_critica", "?") for r in recovered],
+                    original_error=str(e),
+                    response_length=len(text),
+                )
+            else:
+                logger.error(
+                    "json_truncated_no_recovery",
+                    original_error=str(e),
+                    response_length=len(text),
+                    response_tail=text[-200:] if len(text) > 200 else text,
+                )
+            # Re-raise so the decision stays unanalyzed for retry
+            raise
 
         if isinstance(parsed, dict):
             parsed = [parsed]
@@ -177,6 +203,55 @@ class DecisionAnalysisService:
                 item["castigator_critica"] = "unknown"
 
         return parsed
+
+    @staticmethod
+    def _recover_json_objects(text: str) -> list[dict]:
+        """Extract complete JSON objects from a truncated JSON array.
+
+        Walks through the text tracking brace depth to find complete {...}
+        pairs. Used only for diagnostic logging — results are NOT saved.
+        """
+        objects = []
+        i = 0
+        while i < len(text):
+            obj_start = text.find("{", i)
+            if obj_start == -1:
+                break
+            depth = 0
+            in_string = False
+            escape_next = False
+            obj_end = -1
+            for j in range(obj_start, len(text)):
+                ch = text[j]
+                if escape_next:
+                    escape_next = False
+                    continue
+                if ch == "\\":
+                    if in_string:
+                        escape_next = True
+                    continue
+                if ch == '"':
+                    in_string = not in_string
+                    continue
+                if in_string:
+                    continue
+                if ch == "{":
+                    depth += 1
+                elif ch == "}":
+                    depth -= 1
+                    if depth == 0:
+                        obj_end = j
+                        break
+            if obj_end == -1:
+                break
+            try:
+                obj = json.loads(text[obj_start:obj_end + 1])
+                if isinstance(obj, dict) and "cod_critica" in obj:
+                    objects.append(obj)
+            except json.JSONDecodeError:
+                pass
+            i = obj_end + 1
+        return objects
 
     async def analyze_and_store(
         self,
