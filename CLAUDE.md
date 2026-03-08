@@ -46,6 +46,9 @@ DATABASE_URL="postgresql+asyncpg://..." python scripts/generate_embeddings.py
 | `backend/app/api/v1/redflags.py` | Red Flags API endpoint |
 | `scripts/import_decisions_from_gcs.py` | GCS → database import pipeline |
 | `scripts/import_legislatie.py` | Legislation .md → DB import (alineat-level) |
+| `backend/app/services/training_generator.py` | TrainingAP: generare materiale didactice (RAG + LLM) |
+| `backend/app/services/export_service.py` | Export materiale DOCX/PDF/MD |
+| `backend/app/api/v1/training.py` | TrainingAP API endpoints (generate, stream, export) |
 
 ## Code Conventions
 
@@ -261,3 +264,86 @@ Currently all pipeline steps are manual CLI commands. For continuous updates:
    ```
 
 3. **What happens daily**: New GCS files get imported → analyzed by LLM → embeddings generated → RAG search updated. No user intervention needed.
+
+## TrainingAP Module (adăugat 2026-03-08)
+
+Modul pentru generarea de materiale didactice destinate formării specialiștilor în achiziții publice. Materialele sunt fundamentate pe legislație reală (`legislatie_fragmente`) și jurisprudență CNSC reală (`argumentare_critica`) prin RAG.
+
+### Fișiere cheie TrainingAP
+
+| Fișier | Scop |
+|--------|------|
+| `backend/app/services/training_generator.py` | Serviciu principal: RAG context search + system prompts per tip material + generare LLM |
+| `backend/app/services/export_service.py` | Export materiale în DOCX (python-docx), PDF (fpdf2), MD |
+| `backend/app/api/v1/training.py` | API: `GET /types`, `POST /generate`, `POST /generate/stream`, `POST /export` |
+
+### Tipuri de materiale (10)
+
+| Cod | Tip | Descriere |
+|-----|-----|-----------|
+| `speta` | Speță practică | Scenariu realist cu analiză juridică |
+| `studiu_caz` | Studiu de caz | Analiză aprofundată cu multiple perspective |
+| `situational` | Întrebări situaționale | Scenarii decizionale "Ce ați face dacă..." |
+| `palarii` | Pălăriile Gânditoare | 6 perspective (de Bono) |
+| `dezbatere` | Dezbatere Pro & Contra | Argumente pro/contra cu temei legal |
+| `quiz` | Quiz cu variante | Întrebări MCQ (A/B/C/D) cu explicații |
+| `joc_rol` | Joc de rol | Scenarii cu roluri și instrucțiuni per participant |
+| `erori` | Identificare erori | Document cu greșeli deliberate de identificat |
+| `comparativ` | Analiză comparativă | Compararea a două abordări pe aceeași temă |
+| `cronologie` | Cronologie procedurală | Ordonarea pașilor unei proceduri |
+
+### Parametri: 4 niveluri dificultate (`usor`/`mediu`/`dificil`/`foarte_dificil`), 4 lungimi (`scurt`/`mediu`/`lung`/`extins`)
+
+### Structura output-ului: Enunț → Cerințe → Rezolvare (cu referințe legale + jurisprudență) → Note Trainer
+
+### Frontend: Secțiune "Formare" în sidebar, pagina cu layout 2 panouri (formular + output cu 3 tab-uri), butoane export DOCX/PDF/MD
+
+### Starea curentă (Faza 1 — MVP)
+- ✅ Generare individuală cu streaming SSE
+- ✅ 10 tipuri de materiale cu prompt-uri specializate
+- ✅ Integrare RAG (legislație + jurisprudență din DB)
+- ✅ Export DOCX / PDF / MD
+- ✅ 4 niveluri dificultate + 4 opțiuni lungime
+- ✅ UI complet cu formular, tabs, export, citations
+
+### Faza 2 — Generare în lot (batch) [DE IMPLEMENTAT]
+- Posibilitate de a genera un pachet de materiale: ex. "5 spețe + 10 quiz-uri pe tema X"
+- UI: selector cantitate per tip material, generare secvențială cu progress bar
+- Export pachet complet într-un singur DOCX/PDF (toate materialele concatenate)
+- Endpoint nou: `POST /api/v1/training/generate/batch`
+
+### Faza 3 — Salvare în baza de date și reutilizare [DE IMPLEMENTAT]
+- **Tabel nou `training_materials`** în PostgreSQL:
+  ```sql
+  CREATE TABLE training_materials (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    tip_material VARCHAR(30) NOT NULL,
+    tema TEXT NOT NULL,
+    nivel_dificultate VARCHAR(20) NOT NULL,
+    lungime VARCHAR(20) NOT NULL,
+    full_content TEXT NOT NULL,
+    material TEXT,
+    cerinte TEXT,
+    rezolvare TEXT,
+    note_trainer TEXT,
+    legislatie_citata TEXT[],
+    jurisprudenta_citata TEXT[],
+    metadata JSONB DEFAULT '{}',
+    created_at TIMESTAMP NOT NULL DEFAULT now(),
+    updated_at TIMESTAMP NOT NULL DEFAULT now()
+  );
+  ```
+- **Model SQLAlchemy** nou în `backend/app/models/` (sau extindere `decision.py`)
+- **Istoric materiale**: pagină cu lista materialelor salvate, filtrare pe tip/temă/nivel
+- **Reutilizare**: re-deschidere material salvat, re-generare cu parametri modificați
+- **Organizare pe colecții/dosare** tematice (ex: "Training Evaluare Oferte", "Workshop CNSC")
+- **Căutare** în materialele salvate (full-text pe temă + conținut)
+- **Endpoint-uri noi**: `GET /api/v1/training/materials` (list), `GET /api/v1/training/materials/{id}`, `DELETE /api/v1/training/materials/{id}`
+- **Frontend**: tab "Materialele mele" în pagina TrainingAP, cu grid/list view
+
+### Faza 4 — Îmbunătățiri UX [DE IMPLEMENTAT]
+- **Undo/Regenerare**: buton de regenerare a materialului cu aceiași parametri dar output diferit
+- **Editare manuală**: posibilitatea de a edita materialul generat înainte de export/salvare
+- **Teme predefinite**: dropdown cu teme populare (ex: "Evaluarea ofertelor", "Contestarea procedurii", "Conflictul de interese")
+- **Template-uri personalizate**: trainer-ul poate salva prompt-uri/instrucțiuni custom reutilizabile
+- **Preview print**: vizualizare print-friendly înainte de export
