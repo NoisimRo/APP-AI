@@ -36,7 +36,7 @@ class TrainingGenerateRequest(BaseModel):
     ] = "speta"
     nivel_dificultate: Literal["usor", "mediu", "dificil", "foarte_dificil"] = "mediu"
     lungime: Literal["scurt", "mediu", "lung", "extins"] = "mediu"
-    context_suplimentar: str = Field(default="", max_length=5000)
+    context_suplimentar: str = Field(default="", max_length=50000)
 
 
 class TrainingExportRequest(BaseModel):
