@@ -18,7 +18,7 @@ from app.services.training_generator import (
     LENGTH_OPTIONS,
 )
 from app.services.export_service import export_markdown, export_docx, export_pdf
-from app.services.llm.gemini import GeminiProvider
+from app.services.llm.factory import get_active_llm_provider
 from app.services.llm.streaming import create_sse_response
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -91,7 +91,8 @@ async def generate_material(
         lungime=request.lungime,
     )
 
-    generator = TrainingGenerator()
+    llm = await get_active_llm_provider(session)
+    generator = TrainingGenerator(llm_provider=llm)
 
     try:
         result = await generator.generate(
@@ -135,7 +136,8 @@ async def generate_material_stream(
         tip=request.tip_material,
     )
 
-    generator = TrainingGenerator()
+    llm = await get_active_llm_provider(session)
+    generator = TrainingGenerator(llm_provider=llm)
 
     try:
         user_prompt, system_prompt, metadata = await generator.prepare_for_streaming(

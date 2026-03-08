@@ -12,7 +12,7 @@ from app.core.logging import get_logger
 from app.db.session import get_session
 from app.models.decision import ArgumentareCritica, DecizieCNSC
 from app.services.embedding import EmbeddingService
-from app.services.llm.gemini import GeminiProvider
+from app.services.llm.factory import get_active_llm_provider, get_embedding_provider
 from app.services.llm.streaming import create_sse_response
 
 router = APIRouter()
@@ -43,8 +43,7 @@ async def _build_drafter_context(
     Returns:
         Tuple of (prompt, decision_refs).
     """
-    llm = GeminiProvider(model="gemini-3.1-pro-preview")
-    embedding_service = EmbeddingService(llm_provider=llm)
+    embedding_service = EmbeddingService(llm_provider=get_embedding_provider())
 
     jurisprudence_context = ""
     decision_refs: list[str] = []
@@ -183,7 +182,7 @@ async def draft_complaint(
     )
 
     prompt, decision_refs = await _build_drafter_context(request, session)
-    llm = GeminiProvider(model="gemini-3.1-pro-preview")
+    llm = await get_active_llm_provider(session)
 
     try:
         response_text = await llm.complete(
@@ -213,7 +212,7 @@ async def draft_complaint_stream(
     logger.info("draft_complaint_stream_request", facts_length=len(request.facts))
 
     prompt, decision_refs = await _build_drafter_context(request, session)
-    llm = GeminiProvider(model="gemini-3.1-pro-preview")
+    llm = await get_active_llm_provider(session)
 
     return await create_sse_response(
         llm=llm,

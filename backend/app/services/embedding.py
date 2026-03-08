@@ -13,7 +13,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.logging import get_logger
 from app.models.decision import ArgumentareCritica
-from app.services.llm.gemini import GeminiProvider
+from app.services.llm.base import LLMProvider
+from app.services.llm.factory import get_embedding_provider
 
 logger = get_logger(__name__)
 
@@ -24,8 +25,8 @@ MAX_EMBEDDING_TEXT_LENGTH = 8000
 class EmbeddingService:
     """Service for generating and managing vector embeddings."""
 
-    def __init__(self, llm_provider: Optional[GeminiProvider] = None):
-        self.llm = llm_provider or GeminiProvider(model="gemini-3.1-pro-preview")
+    def __init__(self, llm_provider: Optional[LLMProvider] = None):
+        self.llm = llm_provider or get_embedding_provider()
 
     # -------------------------------------------------------------------------
     # Text composition (chunking)

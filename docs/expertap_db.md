@@ -7,8 +7,9 @@
  public | argumentare_critica  | table | expertap | permanent   | heap          | 4320 kB    |
  public | decizii_cnsc         | table | expertap | permanent   | heap          | 78 MB      |
  public | legislatie_fragmente | table | expertap | permanent   | heap          | 8192 bytes |
+ public | llm_settings         | table | expertap | permanent   | heap          | 8192 bytes |
  public | nomenclator_cpv      | table | expertap | permanent   | heap          | 8192 bytes |
-(5 rows)
+(6 rows)
 
 
 # \d decizii_cnsc
@@ -157,6 +158,21 @@ Foreign-key constraints:
     "legislatie_fragmente_act_id_fkey" FOREIGN KEY (act_id) REFERENCES acte_normative(id) ON DELETE CASCADE
 
 
+# \d llm_settings
+                            Table "public.llm_settings"
+       Column        |            Type             | Collation | Nullable | Default
+---------------------+-----------------------------+-----------+----------+---------
+ id                  | integer                     |           | not null | 1
+ active_provider     | character varying(30)       |           | not null | 'gemini'::character varying
+ active_model        | character varying(100)      |           |          |
+ gemini_api_key_enc  | text                        |           |          |
+ anthropic_api_key_enc | text                      |           |          |
+ openai_api_key_enc  | text                        |           |          |
+ updated_at          | timestamp without time zone |           | not null | now()
+Indexes:
+    "llm_settings_pkey" PRIMARY KEY, btree (id)
+
+
 # \dx
                                     List of installed extensions
   Name   | Version |   Schema   |                            Description
@@ -169,7 +185,7 @@ Foreign-key constraints:
 
 ---
 
-# Ultima sincronizare cu producția: 2026-03-07
+# Ultima sincronizare cu producția: 2026-03-08
 
 # Changelog Schema Producție
 
@@ -181,3 +197,4 @@ Foreign-key constraints:
 | 2026-03-07 | `DROP TABLE IF EXISTS sectiuni_decizie CASCADE` | Utilizator | DA |
 | 2026-03-07 | `DROP TABLE IF EXISTS referinte_articole CASCADE` | Utilizator | DA |
 | 2026-03-07 | `DROP INDEX IF EXISTS ix_decizii_cnsc_solutie_contestatie` (duplicate of ix_decizii_solutie) | Utilizator | DA |
+| 2026-03-08 | `CREATE TABLE llm_settings (id INTEGER PRIMARY KEY DEFAULT 1, active_provider VARCHAR(30) NOT NULL DEFAULT 'gemini', active_model VARCHAR(100), gemini_api_key_enc TEXT, anthropic_api_key_enc TEXT, openai_api_key_enc TEXT, updated_at TIMESTAMP NOT NULL DEFAULT now()); INSERT INTO llm_settings (id, active_provider) VALUES (1, 'gemini');` | Utilizator | DA |

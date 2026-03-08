@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.logging import get_logger
 from app.db.session import get_session
 from app.services.rag import RAGService
+from app.services.llm.factory import get_active_llm_provider
 from app.services.llm.streaming import create_sse_response
 
 router = APIRouter()
@@ -64,8 +65,9 @@ async def chat(
     )
 
     try:
-        # Initialize RAG service
-        rag = RAGService()
+        # Initialize RAG service with active provider
+        llm = await get_active_llm_provider(session)
+        rag = RAGService(llm_provider=llm)
 
         # Convert chat history to format expected by RAG
         history = [
@@ -124,7 +126,8 @@ async def chat_stream(
     logger.info("chat_stream_request", message_length=len(request.message))
 
     try:
-        rag = RAGService()
+        llm = await get_active_llm_provider(session)
+        rag = RAGService(llm_provider=llm)
 
         history = [
             {"role": msg.role, "content": msg.content}

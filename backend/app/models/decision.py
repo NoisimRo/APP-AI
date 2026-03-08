@@ -426,6 +426,34 @@ class LegislatieFragment(Base):
 
 
 # =============================================================================
+# LLM SETTINGS (single-row global config)
+# =============================================================================
+
+class LLMSettings(Base):
+    """Global LLM provider settings — single-row table (id=1 always).
+
+    Stores the active provider, model, and encrypted API keys.
+    """
+
+    __tablename__ = "llm_settings"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, default=1)
+    active_provider: Mapped[str] = mapped_column(
+        String(30), nullable=False, default="gemini"
+    )  # "gemini", "anthropic", "openai"
+    active_model: Mapped[Optional[str]] = mapped_column(String(100))
+    gemini_api_key_enc: Mapped[Optional[str]] = mapped_column(Text)
+    anthropic_api_key_enc: Mapped[Optional[str]] = mapped_column(Text)
+    openai_api_key_enc: Mapped[Optional[str]] = mapped_column(Text)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+
+    def __repr__(self) -> str:
+        return f"<LLMSettings provider={self.active_provider} model={self.active_model}>"
+
+
+# =============================================================================
 # LEGACY COMPATIBILITY (if needed)
 # =============================================================================
 

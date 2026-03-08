@@ -24,7 +24,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.logging import get_logger
 from app.models.decision import ArgumentareCritica, LegislatieFragment, ActNormativ, DecizieCNSC
 from app.services.embedding import EmbeddingService
-from app.services.llm.gemini import GeminiProvider
+from app.services.llm.base import LLMProvider
+from app.services.llm.factory import get_llm_provider, get_embedding_provider
 
 logger = get_logger(__name__)
 
@@ -51,9 +52,9 @@ class RedFlagsAnalyzer:
     2. Grounding: Each clause is grounded with real legislation + jurisprudence
     """
 
-    def __init__(self, llm_provider: Optional[GeminiProvider] = None):
-        self.llm = llm_provider or GeminiProvider(model="gemini-3.1-pro-preview")
-        self.embedding_service = EmbeddingService(llm_provider=self.llm)
+    def __init__(self, llm_provider: Optional[LLMProvider] = None):
+        self.llm = llm_provider or get_llm_provider()
+        self.embedding_service = EmbeddingService(llm_provider=get_embedding_provider())
 
     # =========================================================================
     # PASS 1: Dynamic clause detection
