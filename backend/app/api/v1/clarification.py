@@ -12,7 +12,7 @@ from app.core.logging import get_logger
 from app.db.session import get_session
 from app.models.decision import ArgumentareCritica, DecizieCNSC
 from app.services.embedding import EmbeddingService
-from app.services.llm.gemini import GeminiProvider
+from app.services.llm.factory import get_active_llm_provider, get_embedding_provider
 
 router = APIRouter()
 logger = get_logger(__name__)
@@ -39,8 +39,8 @@ async def generate_clarification(
     """Generate a formal clarification request with RAG jurisprudence."""
     logger.info("clarification_request", clause_length=len(request.clause))
 
-    llm = GeminiProvider(model="gemini-3.1-pro-preview")
-    embedding_service = EmbeddingService(llm_provider=llm)
+    llm = await get_active_llm_provider(session)
+    embedding_service = EmbeddingService(llm_provider=get_embedding_provider())
 
     # Step 1: Search for relevant CNSC jurisprudence via vector search
     jurisprudence_context = ""

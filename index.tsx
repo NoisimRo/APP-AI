@@ -38,7 +38,18 @@ import {
 
 // --- Types ---
 
-type AppMode = 'dashboard' | 'datalake' | 'drafter' | 'redflags' | 'chat' | 'clarification' | 'rag' | 'training';
+type AppMode = 'dashboard' | 'datalake' | 'drafter' | 'redflags' | 'chat' | 'clarification' | 'rag' | 'training' | 'settings';
+
+interface LLMProviderInfo {
+  configured: boolean;
+  models: string[];
+}
+
+interface LLMSettingsData {
+  active_provider: string;
+  active_model: string | null;
+  providers: Record<string, LLMProviderInfo>;
+}
 
 interface UploadedFile {
   id: string;
@@ -346,6 +357,16 @@ const App = () => {
   const [uploadedDocTrainingPlan, setUploadedDocTrainingPlan] = useState<{name: string, text: string} | null>(null);
   const [trainingBatchProgress, setTrainingBatchProgress] = useState<{current: number, total: number, results: string[]} | null>(null);
 
+  // LLM Settings States
+  const [llmSettings, setLlmSettings] = useState<LLMSettingsData | null>(null);
+  const [settingsProvider, setSettingsProvider] = useState("gemini");
+  const [settingsModel, setSettingsModel] = useState("");
+  const [settingsApiKey, setSettingsApiKey] = useState("");
+  const [settingsSaving, setSettingsSaving] = useState(false);
+  const [settingsTesting, setSettingsTesting] = useState(false);
+  const [settingsTestResult, setSettingsTestResult] = useState<{success: boolean, response_time_ms: number, error?: string} | null>(null);
+  const [settingsMessage, setSettingsMessage] = useState<{type: 'success' | 'error', text: string} | null>(null);
+
   // Decision Viewer State
   const [viewingDecision, setViewingDecision] = useState<any | null>(null);
   const [isLoadingDecision, setIsLoadingDecision] = useState(false);
@@ -407,6 +428,73 @@ const App = () => {
     };
     fetchStats();
   }, []);
+
+  // Fetch LLM settings on mount
+  const fetchLLMSettings = async () => {
+    try {
+      const response = await fetch('/api/v1/settings/llm');
+      if (response.ok) {
+        const data: LLMSettingsData = await response.json();
+        setLlmSettings(data);
+        setSettingsProvider(data.active_provider);
+        setSettingsModel(data.active_model || '');
+      }
+    } catch (error) {
+      console.error('Failed to fetch LLM settings:', error);
+    }
+  };
+
+  useEffect(() => {
+    fetchLLMSettings();
+  }, []);
+
+  const handleSaveSettings = async () => {
+    setSettingsSaving(true);
+    setSettingsMessage(null);
+    try {
+      const body: any = {
+        active_provider: settingsProvider,
+        active_model: settingsModel || null,
+      };
+      if (settingsApiKey.trim()) {
+        body.api_key = settingsApiKey.trim();
+      }
+      const response = await fetch('/api/v1/settings/llm', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      if (response.ok) {
+        const data: LLMSettingsData = await response.json();
+        setLlmSettings(data);
+        setSettingsApiKey('');
+        setSettingsMessage({ type: 'success', text: 'Setări salvate cu succes!' });
+      } else {
+        const err = await response.json();
+        setSettingsMessage({ type: 'error', text: err.detail || 'Eroare la salvare' });
+      }
+    } catch (error) {
+      setSettingsMessage({ type: 'error', text: 'Eroare de rețea' });
+    } finally {
+      setSettingsSaving(false);
+    }
+  };
+
+  const handleTestConnection = async () => {
+    setSettingsTesting(true);
+    setSettingsTestResult(null);
+    try {
+      const response = await fetch('/api/v1/settings/llm/test', { method: 'POST' });
+      if (response.ok) {
+        const data = await response.json();
+        setSettingsTestResult(data);
+      }
+    } catch (error) {
+      setSettingsTestResult({ success: false, response_time_ms: 0, error: 'Eroare de rețea' });
+    } finally {
+      setSettingsTesting(false);
+    }
+  };
 
   // Fetch decisions for Data Lake (paginated + search)
   const fetchDecisions = async (page: number = 1, search?: string) => {
@@ -866,14 +954,29 @@ const App = () => {
            <div className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3 px-2">Formare</div>
            <SidebarItem icon={GraduationCap} label="TrainingAP" active={mode === 'training'} onClick={() => setMode('training')} />
         </div>
+
+        <div>
+           <div className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3 px-2">Sistem</div>
+           <SidebarItem icon={Settings} label="Setări LLM" active={mode === 'settings'} onClick={() => setMode('settings')} />
+        </div>
       </nav>
 
-      <div className="p-4 border-t border-slate-800 bg-slate-900/50">
+      <div className="p-4 border-t border-slate-800 bg-slate-900/50 cursor-pointer hover:bg-slate-800/50 transition-colors" onClick={() => setMode('settings')}>
          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-blue-500 to-purple-500 flex items-center justify-center text-white font-bold text-xs">AI</div>
+            <div className={`w-8 h-8 rounded-full flex items-center justify-center text-white font-bold text-xs ${
+              llmSettings?.active_provider === 'anthropic'
+                ? 'bg-gradient-to-tr from-orange-500 to-amber-500'
+                : 'bg-gradient-to-tr from-blue-500 to-purple-500'
+            }`}>AI</div>
             <div>
-               <p className="text-sm text-white font-medium">Gemini 3 Pro</p>
-               <p className="text-xs text-green-400">System Operational</p>
+               <p className="text-sm text-white font-medium">{
+                 llmSettings?.active_model
+                   ? llmSettings.active_model.replace(/-preview$/, '').replace(/^gemini-/, 'Gemini ').replace(/^claude-/, 'Claude ')
+                   : llmSettings?.active_provider === 'anthropic' ? 'Claude' : 'Gemini'
+               }</p>
+               <p className={`text-xs ${llmSettings?.providers?.[llmSettings.active_provider]?.configured ? 'text-green-400' : 'text-yellow-400'}`}>
+                 {llmSettings?.providers?.[llmSettings.active_provider]?.configured ? 'Operațional' : 'Neconfigurat'}
+               </p>
             </div>
          </div>
       </div>
@@ -1994,6 +2097,146 @@ const App = () => {
     );
   };
 
+  const renderSettings = () => {
+    const providerLabels: Record<string, string> = { gemini: 'Google Gemini', anthropic: 'Anthropic Claude', openai: 'OpenAI' };
+    const providerColors: Record<string, string> = { gemini: 'blue', anthropic: 'orange', openai: 'green' };
+    const models = llmSettings?.providers?.[settingsProvider]?.models || [];
+    const keyFieldNames: Record<string, string> = { gemini: 'GEMINI_API_KEY', anthropic: 'ANTHROPIC_API_KEY', openai: 'OPENAI_API_KEY' };
+
+    return (
+      <div className="h-full overflow-y-auto bg-slate-50/50 p-8">
+        <div className="max-w-2xl mx-auto">
+          <h2 className="text-2xl font-bold text-slate-800 mb-1 flex items-center gap-3">
+            <Settings className="text-blue-500" size={24} /> Setări Model LLM
+          </h2>
+          <p className="text-sm text-slate-500 mb-8">Configurează providerul și modelul de limbaj utilizat de ExpertAP.</p>
+
+          {/* Provider Selection */}
+          <div className="bg-white rounded-xl border border-slate-200 p-6 mb-6 shadow-sm">
+            <h3 className="text-sm font-bold text-slate-600 uppercase tracking-wider mb-4">Provider activ</h3>
+            <div className="grid grid-cols-3 gap-3">
+              {Object.entries(providerLabels).map(([key, label]) => {
+                const isActive = settingsProvider === key;
+                const isConfigured = llmSettings?.providers?.[key]?.configured;
+                const color = providerColors[key];
+                return (
+                  <button
+                    key={key}
+                    onClick={() => {
+                      setSettingsProvider(key);
+                      const providerModels = llmSettings?.providers?.[key]?.models || [];
+                      setSettingsModel(providerModels[0] || '');
+                      setSettingsTestResult(null);
+                      setSettingsMessage(null);
+                    }}
+                    className={`p-4 rounded-lg border-2 transition-all text-left ${
+                      isActive
+                        ? `border-${color}-500 bg-${color}-50 ring-2 ring-${color}-200`
+                        : 'border-slate-200 hover:border-slate-300 bg-white'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between mb-1">
+                      <span className={`text-sm font-bold ${isActive ? `text-${color}-700` : 'text-slate-700'}`}>{label}</span>
+                      {isConfigured && <span className="text-xs text-green-600 bg-green-50 px-1.5 py-0.5 rounded">Configurat</span>}
+                    </div>
+                    <span className="text-xs text-slate-400">{(llmSettings?.providers?.[key]?.models || []).length} modele</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Model Selection */}
+          <div className="bg-white rounded-xl border border-slate-200 p-6 mb-6 shadow-sm">
+            <h3 className="text-sm font-bold text-slate-600 uppercase tracking-wider mb-4">Model</h3>
+            <select
+              value={settingsModel}
+              onChange={(e) => setSettingsModel(e.target.value)}
+              className="w-full border border-slate-300 rounded-lg px-4 py-3 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white"
+            >
+              <option value="">Implicit ({models[0] || 'auto'})</option>
+              {models.map((m: string) => (
+                <option key={m} value={m}>{m}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* API Key */}
+          <div className="bg-white rounded-xl border border-slate-200 p-6 mb-6 shadow-sm">
+            <h3 className="text-sm font-bold text-slate-600 uppercase tracking-wider mb-4">Cheie API — {providerLabels[settingsProvider]}</h3>
+            <div className="flex items-center gap-2 mb-2">
+              {llmSettings?.providers?.[settingsProvider]?.configured ? (
+                <span className="text-xs text-green-600 bg-green-50 px-2 py-1 rounded-full font-medium">Cheie configurată</span>
+              ) : (
+                <span className="text-xs text-yellow-600 bg-yellow-50 px-2 py-1 rounded-full font-medium">Cheie lipsă</span>
+              )}
+              <span className="text-xs text-slate-400">Env: {keyFieldNames[settingsProvider]}</span>
+            </div>
+            <input
+              type="password"
+              value={settingsApiKey}
+              onChange={(e) => setSettingsApiKey(e.target.value)}
+              placeholder={llmSettings?.providers?.[settingsProvider]?.configured ? 'Lasă gol pentru a păstra cheia existentă' : 'Introdu cheia API...'}
+              className="w-full border border-slate-300 rounded-lg px-4 py-3 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            />
+            <p className="text-xs text-slate-400 mt-2">Cheia este criptată înainte de stocare. Poți seta și din variabila de mediu.</p>
+          </div>
+
+          {/* Actions */}
+          <div className="flex gap-3 mb-6">
+            <button
+              onClick={handleSaveSettings}
+              disabled={settingsSaving}
+              className="flex-1 bg-blue-600 text-white py-3 rounded-lg font-medium hover:bg-blue-700 disabled:opacity-50 transition-colors"
+            >
+              {settingsSaving ? 'Se salvează...' : 'Salvează setările'}
+            </button>
+            <button
+              onClick={handleTestConnection}
+              disabled={settingsTesting}
+              className="flex-1 border border-slate-300 text-slate-700 py-3 rounded-lg font-medium hover:bg-slate-50 disabled:opacity-50 transition-colors"
+            >
+              {settingsTesting ? 'Se testează...' : 'Testează conexiunea'}
+            </button>
+          </div>
+
+          {/* Messages */}
+          {settingsMessage && (
+            <div className={`p-4 rounded-lg mb-4 text-sm font-medium ${
+              settingsMessage.type === 'success' ? 'bg-green-50 text-green-700 border border-green-200' : 'bg-red-50 text-red-700 border border-red-200'
+            }`}>
+              {settingsMessage.text}
+            </div>
+          )}
+
+          {settingsTestResult && (
+            <div className={`p-4 rounded-lg mb-4 border ${
+              settingsTestResult.success ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'
+            }`}>
+              <div className="flex items-center gap-2 mb-1">
+                <span className={`text-sm font-bold ${settingsTestResult.success ? 'text-green-700' : 'text-red-700'}`}>
+                  {settingsTestResult.success ? 'Conexiune reușită' : 'Conexiune eșuată'}
+                </span>
+              </div>
+              {settingsTestResult.success && (
+                <p className="text-xs text-green-600">Timp de răspuns: {settingsTestResult.response_time_ms}ms</p>
+              )}
+              {settingsTestResult.error && (
+                <p className="text-xs text-red-600 mt-1">{settingsTestResult.error}</p>
+              )}
+            </div>
+          )}
+
+          {/* Info note */}
+          <div className="bg-slate-100 rounded-lg p-4 text-xs text-slate-500">
+            <p className="font-medium text-slate-600 mb-1">Notă importantă:</p>
+            <p>Embedding-urile rămân întotdeauna pe Gemini, indiferent de providerul ales pentru chat/generare. Schimbarea modelului de embedding ar necesita regenerarea tuturor vectorilor din baza de date.</p>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   const renderChat = () => (
     <div className="flex flex-col h-full bg-white">
       <div className="border-b border-slate-100 p-4 flex justify-between items-center bg-white">
@@ -2447,6 +2690,7 @@ const App = () => {
            </div>
         )}
         {mode === 'training' && renderTraining()}
+        {mode === 'settings' && renderSettings()}
       </main>
 
       {/* Decision Viewer Modal */}

@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.logging import get_logger
 from app.db.session import get_session
+from app.services.llm.factory import get_active_llm_provider
 from app.services.redflags_analyzer import RedFlagsAnalyzer
 
 # Overall endpoint timeout (seconds) — generous for large documents
@@ -84,7 +85,8 @@ async def analyze_red_flags(
     )
 
     try:
-        analyzer = RedFlagsAnalyzer()
+        llm = await get_active_llm_provider(session)
+        analyzer = RedFlagsAnalyzer(llm_provider=llm)
 
         red_flags_data = await asyncio.wait_for(
             analyzer.analyze(

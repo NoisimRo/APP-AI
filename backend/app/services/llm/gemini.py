@@ -23,15 +23,16 @@ class GeminiProvider(LLMProvider):
         self,
         model: str = "gemini-3.1-pro-preview",
         embedding_model: str = "gemini-embedding-001",
+        api_key: str | None = None,
     ):
         self._model_name = model
         self._embedding_model = embedding_model
 
-        settings = get_settings()
-        if not settings.gemini_api_key:
+        key = api_key or get_settings().gemini_api_key
+        if not key:
             raise ValueError("GEMINI_API_KEY is required for GeminiProvider")
 
-        self._client = genai.Client(api_key=settings.gemini_api_key)
+        self._client = genai.Client(api_key=key)
 
         logger.info(
             "gemini_provider_initialized",

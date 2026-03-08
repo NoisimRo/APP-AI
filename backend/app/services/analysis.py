@@ -19,7 +19,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.logging import get_logger
 from app.models.decision import DecizieCNSC, ArgumentareCritica
-from app.services.llm.gemini import GeminiProvider
+from app.services.llm.base import LLMProvider
+from app.services.llm.factory import get_llm_provider
 
 logger = get_logger(__name__)
 
@@ -98,8 +99,8 @@ Returnează DOAR JSON-ul cu argumentația per critică, fără alte explicații.
 class DecisionAnalysisService:
     """Service for extracting structured argumentation from decision text."""
 
-    def __init__(self, llm_provider: Optional[GeminiProvider] = None):
-        self.llm = llm_provider or GeminiProvider(model="gemini-3.1-pro-preview")
+    def __init__(self, llm_provider: Optional[LLMProvider] = None):
+        self.llm = llm_provider or get_llm_provider()
 
     async def analyze_decision(
         self,

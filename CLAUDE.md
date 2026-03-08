@@ -25,7 +25,7 @@ DATABASE_URL="postgresql+asyncpg://..." python scripts/generate_embeddings.py
 
 - **Frontend:** Single `index.tsx` file (React 19 + Vite + TailwindCSS)
 - **Backend:** `backend/app/` - FastAPI with async SQLAlchemy
-- **LLM:** Google Gemini via `google-genai` SDK (`backend/app/services/llm/gemini.py`)
+- **LLM:** Multi-provider (Gemini + Claude) via factory pattern (`backend/app/services/llm/factory.py`). Embeddings always on Gemini.
 - **RAG Pipeline:** `backend/app/services/rag.py` - vector search on ArgumentareCritica → LLM generation
 - **Database Models:** `backend/app/models/decision.py` - DecizieCNSC, ArgumentareCritica, etc.
 
@@ -36,6 +36,10 @@ DATABASE_URL="postgresql+asyncpg://..." python scripts/generate_embeddings.py
 | `index.tsx` | Entire frontend (single-file React app) |
 | `backend/app/services/rag.py` | RAG search + response generation |
 | `backend/app/services/llm/gemini.py` | Gemini LLM provider |
+| `backend/app/services/llm/anthropic.py` | Anthropic Claude LLM provider |
+| `backend/app/services/llm/factory.py` | LLM provider factory + `get_active_llm_provider()` |
+| `backend/app/core/encryption.py` | Fernet encryption for API keys |
+| `backend/app/api/v1/settings.py` | LLM Settings API (GET/PUT/test) |
 | `backend/app/services/embedding.py` | Embedding generation service |
 | `backend/app/services/analysis.py` | LLM decision analysis (ArgumentareCritica extraction) |
 | `backend/app/models/decision.py` | All database models |
@@ -90,7 +94,7 @@ DATABASE_URL="postgresql+asyncpg://..." python scripts/generate_embeddings.py
 - **History:** Started at 768 (text-embedding-004 convention) → tried 3072 (native) but hit pgvector HNSW limit → settled on 2000.
 - After dimension changes, regenerate embeddings: `python scripts/generate_embeddings.py --force`
 
-### Key Tables (5 în producție)
+### Key Tables (6 în producție)
 
 | Table | Purpose | RAG? |
 |-------|---------|------|
@@ -99,6 +103,7 @@ DATABASE_URL="postgresql+asyncpg://..." python scripts/generate_embeddings.py
 | `nomenclator_cpv` | CPV codes nomenclator | No |
 | `acte_normative` | Master table acte legislative (Legea 98/2016, HG 395/2016, etc.) | No |
 | `legislatie_fragmente` | Fragmente legislație la granularitate maximă (articol/alineat/literă) | Yes (2000-dim) |
+| `llm_settings` | LLM provider config (single-row: active provider, model, encrypted API keys) | No |
 
 ### Tabele eliminate (2026-03-07)
 

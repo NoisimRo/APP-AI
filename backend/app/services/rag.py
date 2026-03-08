@@ -27,7 +27,8 @@ from app.models.decision import (
     LegislatieFragment, ActNormativ,
 )
 from app.services.embedding import EmbeddingService
-from app.services.llm.gemini import GeminiProvider
+from app.services.llm.base import LLMProvider
+from app.services.llm.factory import get_llm_provider, get_embedding_provider
 
 logger = get_logger(__name__)
 
@@ -43,14 +44,14 @@ class Citation(BaseModel):
 class RAGService:
     """Service for retrieval-augmented generation over CNSC decisions."""
 
-    def __init__(self, llm_provider: Optional[GeminiProvider] = None):
+    def __init__(self, llm_provider: Optional[LLMProvider] = None):
         """Initialize RAG service.
 
         Args:
-            llm_provider: Optional LLM provider. If not provided, creates new GeminiProvider.
+            llm_provider: Optional LLM provider for chat. If not provided, uses factory default.
         """
-        self.llm = llm_provider or GeminiProvider(model="gemini-3.1-pro-preview")
-        self.embedding_service = EmbeddingService(llm_provider=self.llm)
+        self.llm = llm_provider or get_llm_provider()
+        self.embedding_service = EmbeddingService(llm_provider=get_embedding_provider())
 
     async def search_by_vector(
         self,
