@@ -104,14 +104,14 @@ class DecisionAnalysisService:
     async def analyze_decision(
         self,
         decision: DecizieCNSC,
-    ) -> list[dict]:
+    ) -> tuple[list[dict], list[str]]:
         """Analyze a single decision and extract argumentation.
 
         Args:
             decision: The decision to analyze.
 
         Returns:
-            List of dicts with per-criticism argumentation.
+            Tuple of (list of argumentation dicts, list of warning messages).
         """
         prompt = ANALYSIS_PROMPT_TEMPLATE.format(
             external_id=decision.external_id,
@@ -126,18 +126,19 @@ class DecisionAnalysisService:
                 prompt=prompt,
                 system_prompt=ANALYSIS_SYSTEM_PROMPT,
                 temperature=0.05,
-                max_tokens=16384,
+                max_tokens=65536,
             )
 
             # Parse JSON from response
-            argumentari = self._parse_response(response)
+            argumentari, warnings = self._parse_response(response)
 
             logger.info(
                 "decision_analyzed",
                 external_id=decision.external_id,
                 critici_found=len(argumentari),
+                warnings=warnings if warnings else None,
             )
-            return argumentari
+            return argumentari, warnings
 
         except Exception as e:
             logger.error(
@@ -147,8 +148,18 @@ class DecisionAnalysisService:
             )
             raise
 
-    def _parse_response(self, response: str) -> list[dict]:
-        """Parse LLM response into list of argumentation dicts."""
+    def _parse_response(self, response: str) -> tuple[list[dict], list[str]]:
+        """Parse LLM response into list of argumentation dicts.
+
+        If JSON is truncated (e.g. due to max_tokens), recovers complete
+        objects and returns them with warnings about what was lost.
+
+        Returns:
+            Tuple of (parsed objects, warning messages).
+            Raises only if zero objects can be recovered.
+        """
+        warnings = []
+
         # Strip markdown code fences if present
         text = response.strip()
         if text.startswith("```json"):
@@ -159,7 +170,37 @@ class DecisionAnalysisService:
             text = text[:-3]
         text = text.strip()
 
-        parsed = json.loads(text)
+        try:
+            parsed = json.loads(text)
+        except json.JSONDecodeError as e:
+            # JSON truncat — recuperăm obiectele complete
+            recovered = self._recover_json_objects(text)
+            if recovered:
+                truncated_tail = text[-300:] if len(text) > 300 else text
+                recovered_codes = [r.get("cod_critica", "?") for r in recovered]
+                warning_msg = (
+                    f"JSON trunchiat la {len(text)} caractere. "
+                    f"Recuperate {len(recovered)} critici ({', '.join(recovered_codes)}). "
+                    f"Critici trunchiate/pierdute după ultima completă. "
+                    f"Eroare: {e}"
+                )
+                warnings.append(warning_msg)
+                logger.warning(
+                    "json_truncated_partial_save",
+                    recovered_count=len(recovered),
+                    recovered_critici=recovered_codes,
+                    original_error=str(e),
+                    response_length=len(text),
+                )
+                parsed = recovered
+            else:
+                logger.error(
+                    "json_truncated_no_recovery",
+                    original_error=str(e),
+                    response_length=len(text),
+                    response_tail=text[-200:] if len(text) > 200 else text,
+                )
+                raise
 
         if isinstance(parsed, dict):
             parsed = [parsed]
@@ -168,15 +209,70 @@ class DecisionAnalysisService:
             raise ValueError(f"Expected JSON array, got {type(parsed).__name__}")
 
         # Validate required fields
+        valid_items = []
         for item in parsed:
             if "cod_critica" not in item:
-                raise ValueError("Missing required field: cod_critica")
+                warnings.append(f"Obiect JSON ignorat — lipsește cod_critica: {str(item)[:100]}")
+                continue
             # Normalize castigator
             castigator = item.get("castigator_critica", "unknown")
             if castigator not in ("contestator", "autoritate", "partial", "unknown"):
                 item["castigator_critica"] = "unknown"
+            valid_items.append(item)
 
-        return parsed
+        if not valid_items:
+            raise ValueError("No valid argumentation objects found in response")
+
+        return valid_items, warnings
+
+    @staticmethod
+    def _recover_json_objects(text: str) -> list[dict]:
+        """Extract complete JSON objects from a truncated JSON array.
+
+        Walks through the text tracking brace depth to find complete {...}
+        pairs. Recovered objects are saved; truncated ones are logged as warnings.
+        """
+        objects = []
+        i = 0
+        while i < len(text):
+            obj_start = text.find("{", i)
+            if obj_start == -1:
+                break
+            depth = 0
+            in_string = False
+            escape_next = False
+            obj_end = -1
+            for j in range(obj_start, len(text)):
+                ch = text[j]
+                if escape_next:
+                    escape_next = False
+                    continue
+                if ch == "\\":
+                    if in_string:
+                        escape_next = True
+                    continue
+                if ch == '"':
+                    in_string = not in_string
+                    continue
+                if in_string:
+                    continue
+                if ch == "{":
+                    depth += 1
+                elif ch == "}":
+                    depth -= 1
+                    if depth == 0:
+                        obj_end = j
+                        break
+            if obj_end == -1:
+                break
+            try:
+                obj = json.loads(text[obj_start:obj_end + 1])
+                if isinstance(obj, dict) and "cod_critica" in obj:
+                    objects.append(obj)
+            except json.JSONDecodeError:
+                pass
+            i = obj_end + 1
+        return objects
 
     async def analyze_and_store(
         self,
@@ -219,7 +315,19 @@ class DecisionAnalysisService:
             )
 
         # Analyze with LLM
-        argumentari = await self.analyze_decision(decision)
+        argumentari, analysis_warnings = await self.analyze_decision(decision)
+
+        # Store warnings on the decision record if any
+        if analysis_warnings:
+            existing_warnings = decision.parse_warnings or []
+            # Prefix analysis warnings to distinguish from import warnings
+            new_warnings = [f"[ANALYSIS] {w}" for w in analysis_warnings]
+            decision.parse_warnings = existing_warnings + new_warnings
+            logger.warning(
+                "decision_analysis_warnings_saved",
+                external_id=decision.external_id,
+                warnings=analysis_warnings,
+            )
 
         # Create records
         created = 0
