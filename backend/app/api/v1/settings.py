@@ -41,7 +41,16 @@ PROVIDER_MODELS = {
         "claude-opus-4-5",
         "claude-sonnet-4-5",
     ],
-    "openai": [],
+    "openai": [
+        "gpt-4.1",
+        "gpt-4.1-mini",
+        "gpt-4.1-nano",
+        "gpt-4o",
+        "gpt-4o-mini",
+        "o3",
+        "o3-mini",
+        "o4-mini",
+    ],
 }
 
 # Default model per provider
@@ -262,6 +271,11 @@ async def test_llm_connection(
             )
         elif "invalid x-api-key" in error_msg.lower() or "invalid api key" in error_msg.lower():
             error_msg = "Cheia API este invalidă. Verificați că ați copiat cheia corect."
+        elif "insufficient_quota" in error_msg or "exceeded your current quota" in error_msg:
+            error_msg = (
+                "Cota OpenAI depășită. Verificați la platform.openai.com/usage "
+                "că aveți credite disponibile."
+            )
         elif "NoneType" in error_msg and "subscriptable" in error_msg:
             error_msg = (
                 "Gemini a returnat un răspuns gol. Încercați alt model sau verificați cheia API."
