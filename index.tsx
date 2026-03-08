@@ -81,7 +81,11 @@ const fetchStream = async (
     let detail = `HTTP ${response.status}`;
     try {
       const errBody = await response.json();
-      detail = errBody.detail || JSON.stringify(errBody);
+      const d = errBody.detail;
+      if (typeof d === 'string') detail = d;
+      else if (Array.isArray(d)) detail = d.map((e: any) => e.msg || JSON.stringify(e)).join('; ');
+      else if (d) detail = JSON.stringify(d);
+      else detail = JSON.stringify(errBody);
     } catch { /* ignore parse errors */ }
     onError(detail);
     return;
@@ -99,7 +103,7 @@ const fetchStream = async (
       if (part.startsWith('data: ')) {
         try {
           const data = JSON.parse(part.slice(6));
-          if (data.error) { onError(data.error); return; }
+          if (data.error) { onError(typeof data.error === 'string' ? data.error : JSON.stringify(data.error)); return; }
           if (data.text) onChunk(data.text);
           if (data.done) onDone(data);
         } catch { /* ignore malformed SSE */ }
@@ -138,25 +142,25 @@ const fileToBase64 = (file: File): Promise<string> => {
 
 // --- Markdown Formatter ---
 
-// Map heading keywords to Font Awesome icons
-const headingIcon = (title: string): string => {
+// Map heading keywords to emoji
+const headingEmoji = (title: string): string => {
   const t = title.toLowerCase();
-  if (t.includes('enun')) return '<i class="fa-solid fa-file-lines" style="color:#d97706"></i>';
-  if (t.includes('cerin')) return '<i class="fa-solid fa-list-check" style="color:#2563eb"></i>';
-  if (t.includes('rezolv')) return '<i class="fa-solid fa-scale-balanced" style="color:#16a34a"></i>';
-  if (t.includes('note') && t.includes('trainer')) return '<i class="fa-solid fa-chalkboard-user" style="color:#9333ea"></i>';
-  if (t.includes('scenariu')) return '<i class="fa-solid fa-theater-masks" style="color:#d97706"></i>';
-  if (t.includes('context')) return '<i class="fa-solid fa-circle-info" style="color:#0ea5e9"></i>';
-  if (t.includes('argumen') || t.includes('pro') || t.includes('contra')) return '<i class="fa-solid fa-comments" style="color:#2563eb"></i>';
-  if (t.includes('concluzi') || t.includes('concluz')) return '<i class="fa-solid fa-flag-checkered" style="color:#16a34a"></i>';
-  if (t.includes('răspuns') || t.includes('soluți') || t.includes('varianta corect')) return '<i class="fa-solid fa-circle-check" style="color:#16a34a"></i>';
-  if (t.includes('întrebare') || t.includes('quiz')) return '<i class="fa-solid fa-circle-question" style="color:#f59e0b"></i>';
-  if (t.includes('rol')) return '<i class="fa-solid fa-users" style="color:#8b5cf6"></i>';
-  if (t.includes('erori') || t.includes('greșel')) return '<i class="fa-solid fa-triangle-exclamation" style="color:#ef4444"></i>';
-  if (t.includes('cronolog') || t.includes('pași') || t.includes('etap')) return '<i class="fa-solid fa-timeline" style="color:#0ea5e9"></i>';
-  if (t.includes('compar')) return '<i class="fa-solid fa-code-compare" style="color:#6366f1"></i>';
-  if (t.includes('legisl') || t.includes('legal') || t.includes('temei')) return '<i class="fa-solid fa-gavel" style="color:#b45309"></i>';
-  if (t.includes('jurispruden')) return '<i class="fa-solid fa-landmark" style="color:#7c3aed"></i>';
+  if (t.includes('enun')) return '📋';
+  if (t.includes('cerin')) return '✅';
+  if (t.includes('rezolv')) return '⚖️';
+  if (t.includes('note') && t.includes('trainer')) return '🎓';
+  if (t.includes('scenariu')) return '🎭';
+  if (t.includes('context')) return 'ℹ️';
+  if (t.includes('argumen') || t.includes('pro') || t.includes('contra')) return '💬';
+  if (t.includes('concluzi') || t.includes('concluz')) return '🏁';
+  if (t.includes('răspuns') || t.includes('soluți') || t.includes('varianta corect')) return '✔️';
+  if (t.includes('întrebare') || t.includes('quiz')) return '❓';
+  if (t.includes('rol')) return '👥';
+  if (t.includes('erori') || t.includes('greșel')) return '⚠️';
+  if (t.includes('cronolog') || t.includes('pași') || t.includes('etap')) return '📅';
+  if (t.includes('compar')) return '🔀';
+  if (t.includes('legisl') || t.includes('legal') || t.includes('temei')) return '⚖️';
+  if (t.includes('jurispruden')) return '🏛️';
   return '';
 };
 
@@ -172,23 +176,23 @@ const formatMarkdown = (text: string): string => {
     .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
     // Italic: *text*
     .replace(/\*(.+?)\*/g, '<em>$1</em>')
-    // Headers with icons
+    // Headers with emoji
     .replace(/^### (.+)$/gm, (_m, title) => {
-      const icon = headingIcon(title);
-      return `<h3 style="font-size:1rem;font-weight:700;margin:1rem 0 0.4rem 0;color:#1e293b;display:flex;align-items:center;gap:0.4rem">${icon ? icon + ' ' : ''}${title}</h3>`;
+      const em = headingEmoji(title);
+      return `<h3 style="font-size:1rem;font-weight:700;margin:1rem 0 0.4rem 0;color:#1e293b">${em ? em + ' ' : ''}${title}</h3>`;
     })
     .replace(/^## (.+)$/gm, (_m, title) => {
-      const icon = headingIcon(title);
-      return `<h2 style="font-size:1.1rem;font-weight:700;margin:1.2rem 0 0.4rem 0;color:#1e293b;display:flex;align-items:center;gap:0.5rem">${icon ? icon + ' ' : ''}${title}</h2>`;
+      const em = headingEmoji(title);
+      return `<h2 style="font-size:1.1rem;font-weight:700;margin:1.2rem 0 0.4rem 0;color:#1e293b">${em ? em + ' ' : ''}${title}</h2>`;
     })
     .replace(/^# (.+)$/gm, (_m, title) => {
-      const icon = headingIcon(title);
-      return `<h1 style="font-size:1.25rem;font-weight:700;margin:1.2rem 0 0.4rem 0;color:#1e293b;display:flex;align-items:center;gap:0.5rem">${icon ? icon + ' ' : ''}${title}</h1>`;
+      const em = headingEmoji(title);
+      return `<h1 style="font-size:1.25rem;font-weight:700;margin:1.2rem 0 0.4rem 0;color:#1e293b">${em ? em + ' ' : ''}${title}</h1>`;
     })
     // Numbered lists: 1. item — compact spacing
     .replace(/^(\d+)\.\s+(.+)$/gm, '<div style="display:flex;gap:0.5rem;margin:0.1rem 0 0.1rem 1rem;line-height:1.5"><span style="color:#64748b;min-width:1.2rem;font-weight:600">$1.</span><span>$2</span></div>')
     // Bullet lists: - item — compact spacing with FA icon
-    .replace(/^[-•]\s+(.+)$/gm, '<div style="display:flex;gap:0.5rem;margin:0.1rem 0 0.1rem 1rem;line-height:1.5"><span style="color:#d97706;font-size:0.5rem;margin-top:0.45rem"><i class="fa-solid fa-diamond"></i></span><span>$1</span></div>')
+    .replace(/^[-•]\s+(.+)$/gm, '<div style="display:flex;gap:0.5rem;margin:0.1rem 0 0.1rem 1rem;line-height:1.5"><span style="color:#d97706;font-size:0.6rem;margin-top:0.5rem">◆</span><span>$1</span></div>')
     // Horizontal rules
     .replace(/^---$/gm, '<hr style="border:none;border-top:1px solid #e2e8f0;margin:1rem 0"/>')
     // Paragraphs: double newlines
