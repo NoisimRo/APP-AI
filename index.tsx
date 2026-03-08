@@ -647,10 +647,10 @@ const App = () => {
     if (!file) return;
 
     // Check file type
-    const allowedTypes = ['.txt', '.md', '.pdf'];
+    const allowedTypes = ['.txt', '.md', '.pdf', '.doc', '.docx'];
     const extension = '.' + file.name.split('.').pop()?.toLowerCase();
     if (!allowedTypes.includes(extension)) {
-      alert('Tip de fișier nesuportat. Folosește .txt, .md sau .pdf');
+      alert('Tip de fișier nesuportat. Folosește .txt, .md, .pdf, .doc sau .docx');
       return;
     }
 
@@ -1303,7 +1303,7 @@ const App = () => {
             </label>
             <input
               type="file"
-              accept=".txt,.md,.pdf"
+              accept=".txt,.md,.pdf,.doc,.docx"
               onChange={(e) => handleDocumentUpload(e, (text) => setDrafterContext(prev => ({...prev, facts: text})), setUploadedDocDrafter)}
               className="block w-full text-sm text-slate-600
                 file:mr-4 file:py-1.5 file:px-3
@@ -1690,7 +1690,7 @@ const App = () => {
                 <div className="bg-slate-50 p-3 rounded-lg border border-dashed border-slate-300 mb-2">
                   <input
                     type="file"
-                    accept=".txt,.md,.pdf"
+                    accept=".txt,.md,.pdf,.doc,.docx"
                     onChange={(e) => handleDocumentUpload(e, (text) => setTrainingProgramPlan(text), setUploadedDocTrainingPlan)}
                     className="block w-full text-sm text-slate-600 file:mr-4 file:py-1 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-amber-50 file:text-amber-700 hover:file:bg-amber-100"
                   />
@@ -1775,7 +1775,7 @@ const App = () => {
                   <div className="bg-slate-50 p-3 rounded-lg border border-dashed border-slate-300 mt-2 mb-2">
                     <input
                       type="file"
-                      accept=".txt,.md,.pdf"
+                      accept=".txt,.md,.pdf,.doc,.docx"
                       onChange={(e) => handleDocumentUpload(e, (text) => setTrainingContext(text), setUploadedDocTrainingContext)}
                       className="block w-full text-sm text-slate-600 file:mr-4 file:py-1 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-amber-50 file:text-amber-700 hover:file:bg-amber-100"
                     />
@@ -2102,7 +2102,7 @@ const App = () => {
                     </label>
                     <input
                       type="file"
-                      accept=".txt,.md,.pdf"
+                      accept=".txt,.md,.pdf,.doc,.docx"
                       onChange={(e) => handleDocumentUpload(e, (text) => setRedFlagsText(text), setUploadedDocRedFlags)}
                       className="block w-full text-sm text-slate-600
                         file:mr-4 file:py-1.5 file:px-3
@@ -2285,7 +2285,7 @@ const App = () => {
                   </label>
                   <input
                     type="file"
-                    accept=".txt,.md,.pdf"
+                    accept=".txt,.md,.pdf,.doc,.docx"
                     onChange={(e) => handleDocumentUpload(e, (text) => setClarificationClause(text), setUploadedDocClarification)}
                     className="block w-full text-sm text-slate-600
                       file:mr-4 file:py-1.5 file:px-3
@@ -2359,7 +2359,7 @@ const App = () => {
                          </label>
                          <input
                            type="file"
-                           accept=".txt,.md,.pdf"
+                           accept=".txt,.md,.pdf,.doc,.docx"
                            onChange={(e) => handleDocumentUpload(e, (text) => setMemoTopic(text), setUploadedDocRag)}
                            className="block w-full text-sm text-slate-600
                              file:mr-4 file:py-1.5 file:px-3
