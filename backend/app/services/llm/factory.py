@@ -193,7 +193,9 @@ def _create_provider(
         return AnthropicProvider(api_key=api_key, **kwargs)
 
     if provider_type == "openai":
-        raise NotImplementedError("OpenAI provider not yet implemented")
+        from app.services.llm.openai import OpenAIProvider
+
+        return OpenAIProvider(api_key=api_key, **kwargs)
 
     if provider_type == "vertex":
         raise NotImplementedError("Vertex AI provider not yet implemented")
