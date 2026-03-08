@@ -326,6 +326,7 @@ const App = () => {
   // Training States
   const [trainingTema, setTrainingTema] = useState("");
   const [trainingTip, setTrainingTip] = useState("speta");
+  const [trainingSelectedTypes, setTrainingSelectedTypes] = useState<string[]>(["speta", "quiz"]);
   const [trainingNivel, setTrainingNivel] = useState("mediu");
   const [trainingLungime, setTrainingLungime] = useState("mediu");
   const [trainingContext, setTrainingContext] = useState("");
@@ -647,10 +648,10 @@ const App = () => {
     if (!file) return;
 
     // Check file type
-    const allowedTypes = ['.txt', '.md', '.pdf'];
+    const allowedTypes = ['.txt', '.md', '.pdf', '.doc', '.docx'];
     const extension = '.' + file.name.split('.').pop()?.toLowerCase();
     if (!allowedTypes.includes(extension)) {
-      alert('Tip de fișier nesuportat. Folosește .txt, .md sau .pdf');
+      alert('Tip de fișier nesuportat. Folosește .txt, .md, .pdf, .doc sau .docx');
       return;
     }
 
@@ -1303,7 +1304,7 @@ const App = () => {
             </label>
             <input
               type="file"
-              accept=".txt,.md,.pdf"
+              accept=".txt,.md,.pdf,.doc,.docx"
               onChange={(e) => handleDocumentUpload(e, (text) => setDrafterContext(prev => ({...prev, facts: text})), setUploadedDocDrafter)}
               className="block w-full text-sm text-slate-600
                 file:mr-4 file:py-1.5 file:px-3
@@ -1402,9 +1403,9 @@ const App = () => {
     cronologie: { name: "Cronologie procedurală", desc: "Ordonarea pașilor unei proceduri" },
   };
 
-  const buildTrainingRequestBody = () => ({
+  const buildTrainingRequestBody = (tipOverride?: string) => ({
     tema: trainingTema,
-    tip_material: trainingTip,
+    tip_material: tipOverride || trainingTip,
     nivel_dificultate: trainingNivel,
     lungime: trainingLungime,
     context_suplimentar: trainingContext,
@@ -1412,23 +1413,34 @@ const App = () => {
     program_plan: trainingMode === 'program' ? trainingProgramPlan : undefined,
   });
 
+  // Toggle a material type in multi-select
+  const toggleTrainingType = (key: string) => {
+    setTrainingSelectedTypes(prev =>
+      prev.includes(key) ? prev.filter(k => k !== key) : [...prev, key]
+    );
+  };
+
   const handleTrainingGenerate = async () => {
     if (!trainingTema.trim() || trainingLoading) return;
 
-    // Program mode — LLM generates the full program
-    if (trainingMode === 'program') {
+    const resetUI = () => {
       setTrainingLoading(true);
       setTrainingResult("");
       setTrainingMeta(null);
       setTrainingActiveTab('material');
       setTrainingEditing(false);
       setTrainingEditedResult(null);
+    };
+
+    // Program mode — LLM generates the full program
+    if (trainingMode === 'program') {
+      resetUI();
 
       await fetchStream(
         '/api/v1/training/generate/stream',
         {
-          ...buildTrainingRequestBody(),
-          tip_material: 'program_formare',
+          ...buildTrainingRequestBody('program_formare'),
+          selected_types: trainingSelectedTypes.length > 0 ? trainingSelectedTypes : undefined,
         },
         (text) => setTrainingResult(prev => prev + text),
         (meta) => { setTrainingMeta(meta); setTrainingLoading(false); },
@@ -1437,51 +1449,44 @@ const App = () => {
       return;
     }
 
-    // Batch mode — generate multiple materials sequentially
+    // Batch mode — generate multiple materials sequentially, streaming each into view
     if (trainingMode === 'batch' && trainingBatchCount > 1) {
-      setTrainingLoading(true);
-      setTrainingResult("");
-      setTrainingMeta(null);
-      setTrainingActiveTab('material');
-      setTrainingEditing(false);
-      setTrainingEditedResult(null);
-      const results: string[] = [];
+      resetUI();
       setTrainingBatchProgress({ current: 0, total: trainingBatchCount, results: [] });
 
+      // Determine type sequence: cycle through selected types
+      const typesToUse = trainingSelectedTypes.length > 0 ? trainingSelectedTypes : [trainingTip];
+
       for (let i = 0; i < trainingBatchCount; i++) {
+        const tipForThis = typesToUse[i % typesToUse.length];
+        const tipName = trainingMaterialTypes[tipForThis]?.name || tipForThis;
         setTrainingBatchProgress(prev => prev ? { ...prev, current: i + 1 } : null);
-        let materialText = '';
+
+        // Add header for this material before streaming begins
+        const header = `\n\n---\n\n# Material ${i + 1} din ${trainingBatchCount} — ${tipName}\n\n`;
+        setTrainingResult(prev => prev + header);
+
         await fetchStream(
           '/api/v1/training/generate/stream',
           {
-            ...buildTrainingRequestBody(),
+            ...buildTrainingRequestBody(tipForThis),
             batch_index: i + 1,
             batch_total: trainingBatchCount,
           },
-          (text) => { materialText += text; },
+          // Stream each chunk directly into the visible result
+          (text) => setTrainingResult(prev => prev + text),
           () => {},
-          (error) => { materialText += `\n\n**Eroare:** ${error}`; },
+          (error) => { setTrainingResult(prev => prev + `\n\n**Eroare:** ${error}`); },
         );
-        results.push(materialText);
-        setTrainingBatchProgress(prev => prev ? { ...prev, results: [...results] } : null);
       }
 
-      const combined = results.map((r, i) =>
-        `---\n\n# Material ${i + 1} din ${trainingBatchCount}\n\n${r}`
-      ).join('\n\n');
-      setTrainingResult(combined);
       setTrainingBatchProgress(null);
       setTrainingLoading(false);
       return;
     }
 
     // Individual mode (default)
-    setTrainingLoading(true);
-    setTrainingResult("");
-    setTrainingMeta(null);
-    setTrainingActiveTab('material');
-    setTrainingEditing(false);
-    setTrainingEditedResult(null);
+    resetUI();
 
     await fetchStream(
       '/api/v1/training/generate/stream',
@@ -1625,8 +1630,8 @@ const App = () => {
               {trainingPublicTinta.length > 100 && <CharCounter value={trainingPublicTinta} maxLength={5000} />}
             </div>
 
-            {/* Tip material — hidden in program mode (LLM decides) */}
-            {trainingMode !== 'program' && (
+            {/* Tip material — single select for individual, multi-select for batch/program */}
+            {trainingMode === 'individual' ? (
               <div>
                 <label className="block text-xs font-bold text-slate-700 uppercase mb-2">Tip Material</label>
                 <select
@@ -1638,6 +1643,42 @@ const App = () => {
                     <option key={key} value={key}>{val.name} — {val.desc}</option>
                   ))}
                 </select>
+              </div>
+            ) : (
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase mb-2">
+                  Tipuri Materiale {trainingMode === 'batch' ? '(se alternează)' : '(selectează tipurile dorite)'}
+                </label>
+                <div className="grid grid-cols-2 gap-1.5">
+                  {Object.entries(trainingMaterialTypes).map(([key, val]) => {
+                    const isSelected = trainingSelectedTypes.includes(key);
+                    return (
+                      <button
+                        key={key}
+                        onClick={() => toggleTrainingType(key)}
+                        className={`flex items-center gap-2 py-1.5 px-2.5 rounded-lg text-xs font-medium transition border text-left ${
+                          isSelected
+                            ? 'bg-amber-50 text-amber-700 border-amber-300'
+                            : 'bg-white text-slate-500 border-slate-200 hover:border-amber-300'
+                        }`}
+                      >
+                        <span className={`w-3.5 h-3.5 rounded border flex items-center justify-center shrink-0 ${
+                          isSelected ? 'bg-amber-500 border-amber-500 text-white' : 'border-slate-300'
+                        }`}>
+                          {isSelected && <CheckSquare size={10} />}
+                        </span>
+                        <span className="truncate">{val.name}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+                {trainingSelectedTypes.length === 0 && (
+                  <p className="text-[10px] text-amber-600 mt-1">
+                    {trainingMode === 'batch'
+                      ? 'Selectează cel puțin un tip. Se va folosi tipul implicit.'
+                      : 'Dacă nu selectezi nimic, LLM-ul va alege automat.'}
+                  </p>
+                )}
               </div>
             )}
 
@@ -1690,7 +1731,7 @@ const App = () => {
                 <div className="bg-slate-50 p-3 rounded-lg border border-dashed border-slate-300 mb-2">
                   <input
                     type="file"
-                    accept=".txt,.md,.pdf"
+                    accept=".txt,.md,.pdf,.doc,.docx"
                     onChange={(e) => handleDocumentUpload(e, (text) => setTrainingProgramPlan(text), setUploadedDocTrainingPlan)}
                     className="block w-full text-sm text-slate-600 file:mr-4 file:py-1 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-amber-50 file:text-amber-700 hover:file:bg-amber-100"
                   />
@@ -1775,7 +1816,7 @@ const App = () => {
                   <div className="bg-slate-50 p-3 rounded-lg border border-dashed border-slate-300 mt-2 mb-2">
                     <input
                       type="file"
-                      accept=".txt,.md,.pdf"
+                      accept=".txt,.md,.pdf,.doc,.docx"
                       onChange={(e) => handleDocumentUpload(e, (text) => setTrainingContext(text), setUploadedDocTrainingContext)}
                       className="block w-full text-sm text-slate-600 file:mr-4 file:py-1 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-amber-50 file:text-amber-700 hover:file:bg-amber-100"
                     />
@@ -2102,7 +2143,7 @@ const App = () => {
                     </label>
                     <input
                       type="file"
-                      accept=".txt,.md,.pdf"
+                      accept=".txt,.md,.pdf,.doc,.docx"
                       onChange={(e) => handleDocumentUpload(e, (text) => setRedFlagsText(text), setUploadedDocRedFlags)}
                       className="block w-full text-sm text-slate-600
                         file:mr-4 file:py-1.5 file:px-3
@@ -2285,7 +2326,7 @@ const App = () => {
                   </label>
                   <input
                     type="file"
-                    accept=".txt,.md,.pdf"
+                    accept=".txt,.md,.pdf,.doc,.docx"
                     onChange={(e) => handleDocumentUpload(e, (text) => setClarificationClause(text), setUploadedDocClarification)}
                     className="block w-full text-sm text-slate-600
                       file:mr-4 file:py-1.5 file:px-3
@@ -2359,7 +2400,7 @@ const App = () => {
                          </label>
                          <input
                            type="file"
-                           accept=".txt,.md,.pdf"
+                           accept=".txt,.md,.pdf,.doc,.docx"
                            onChange={(e) => handleDocumentUpload(e, (text) => setMemoTopic(text), setUploadedDocRag)}
                            className="block w-full text-sm text-slate-600
                              file:mr-4 file:py-1.5 file:px-3

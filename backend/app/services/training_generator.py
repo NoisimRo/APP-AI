@@ -502,6 +502,7 @@ class TrainingGenerator:
         program_plan: str = "",
         batch_index: int | None = None,
         batch_total: int | None = None,
+        selected_types: list[str] | None = None,
     ) -> str:
         """Build the system prompt for material generation."""
         material_info = MATERIAL_TYPES.get(tip_material, MATERIAL_TYPES["speta"])
@@ -523,6 +524,16 @@ Adaptează limbajul, complexitatea exemplelor și perspectiva materialului pentr
         else:
             public_section = "\nPUBLIC ȚINTĂ: General — specialiști în achiziții publice (autorități contractante, operatori economici, consultanți).\n"
 
+        # Build selected types constraint
+        selected_types_section = ""
+        if selected_types and tip_material == "program_formare":
+            type_names = [MATERIAL_TYPES.get(t, {}).get("name", t) for t in selected_types]
+            selected_types_section = f"""
+TIPURI DE MATERIALE SELECTATE DE TRAINER: {', '.join(type_names)}
+Folosește EXCLUSIV aceste tipuri de materiale în program. Alternează între ele pentru varietate.
+NU folosi alte tipuri decât cele specificate.
+"""
+
         # Build program plan section
         program_section = ""
         if program_plan and tip_material == "program_formare":
@@ -531,7 +542,6 @@ PLANUL DE FORMARE FURNIZAT DE TRAINER:
 {program_plan}
 
 Folosește acest plan ca bază pentru structurarea programului. Respectă modulele, tematicile și competențele vizate.
-Alege tipurile de materiale cele mai potrivite pentru fiecare tematică din plan.
 """
 
         # Build batch section
@@ -560,10 +570,57 @@ NIVEL DE DIFICULTATE: {nivel_info}
 LUNGIME ȚINTĂ: {lungime_info}
 
 {context}
-{program_section}{batch_section}
+{program_section}{selected_types_section}{batch_section}
 INSTRUCȚIUNI SPECIFICE PENTRU ACEST TIP DE MATERIAL:
 {material_prompt}
+"""
 
+        # Program formare has its own structure; all other types use the fixed 4-section structure
+        if tip_material == "program_formare":
+            prompt += f"""
+IMPORTANT — STRUCTURĂ PROGRAM COMPLET:
+Programul TREBUIE structurat astfel:
+
+## Enunț
+Prezentarea generală a programului: titlu, obiective, competențe, durată, public țintă, structură pe module.
+
+Apoi, pentru FIECARE modul/sesiune din program, generează un material didactic COMPLET folosind cel mai potrivit format.
+Folosește heading-uri ### Modulul N: [Titlu] pentru fiecare modul.
+
+Sub fiecare modul, include:
+- **Tip material ales**: (speță / quiz / studiu de caz / joc de rol / dezbatere / erori / comparativ / cronologie) + justificare
+- **Durată**: timpul estimat
+- **Obiectiv**: competența vizată
+- **Enunț complet**: scenariul/întrebările/situația — suficient de detaliat pentru a fi utilizat direct
+- **Instrucțiuni pentru participanți**: ce trebuie să facă concret
+- **Rezolvare completă**: cu temeiuri legale exacte (articole, alineate) și jurisprudență CNSC unde e cazul
+
+## Cerințe
+Sinteză: lista tuturor materialelor din program cu tipul, durata, și competența vizată (tabel).
+
+## Rezolvare
+Rezolvările detaliate consolidate pentru TOATE materialele, grupate per modul. Fiecare rezolvare trebuie să includă articole de lege exacte și, unde există, jurisprudență CNSC.
+
+## Note Trainer
+- Agenda completă cu timing per activitate (tabel)
+- Sfaturi de facilitare per modul
+- Materiale necesare
+- Metode de evaluare a competențelor
+- Adaptări pentru diferite niveluri de experiență
+
+IMPORTANT:
+- Generează MINIMUM 4-5 module cu materiale variate (nu repeta același tip).
+- Alternează tipurile: speță → quiz → dezbatere → joc de rol → studiu de caz → erori, etc.
+- Fiecare material trebuie să fie COMPLET și utilizabil direct, nu doar un schelet.
+- Scrie EXTENSIV — un program complet înseamnă un document voluminos cu toate materialele incluse.
+- NU te opri după 1-2 module. Continuă până termini TOATE modulele din program.
+
+INTERDICȚII STRICTE:
+- NU adăuga introduceri sau preambuluri înainte de ## Enunț.
+- NU adăuga concluzii după ## Note Trainer.
+- Zero text de umplutură."""
+        else:
+            prompt += f"""
 IMPORTANT — STRUCTURĂ OBLIGATORIE:
 Materialul TREBUIE să conțină EXACT aceste 4 secțiuni, în această ordine:
 1. ## Enunț — prezentarea situației/scenariului
@@ -593,6 +650,7 @@ INTERDICȚII STRICTE:
         program_plan: str = "",
         batch_index: int | None = None,
         batch_total: int | None = None,
+        selected_types: list[str] | None = None,
     ) -> dict:
         """Generate a training material (non-streaming).
 
@@ -609,11 +667,14 @@ INTERDICȚII STRICTE:
             program_plan=program_plan,
             batch_index=batch_index,
             batch_total=batch_total,
+            selected_types=selected_types,
         )
 
         user_prompt = f"Tema: {tema}\n\nÎncepe DIRECT cu ## Enunț (fără introducere, fără preambul)."
         if context_suplimentar:
             user_prompt += f"\n\nContext suplimentar de la trainer: {context_suplimentar}"
+        if tip_material == "program_formare":
+            user_prompt += "\n\nGenerează programul COMPLET cu TOATE modulele și materialele. Scrie extensiv — fiecare material din program trebuie să fie complet și utilizabil direct."
 
         # Token budget per length (4 sections × words per section × ~1.5 tokens/word)
         token_budgets = {
@@ -623,6 +684,8 @@ INTERDICȚII STRICTE:
             "extins": 24576,   # 4 × ~1500 words
         }
         max_tokens = token_budgets.get(lungime, 8192)
+        if tip_material == "program_formare":
+            max_tokens = 65536
 
         response = await self.llm.complete(
             prompt=user_prompt,
@@ -665,6 +728,7 @@ INTERDICȚII STRICTE:
         program_plan: str = "",
         batch_index: int | None = None,
         batch_total: int | None = None,
+        selected_types: list[str] | None = None,
     ) -> tuple[str, str, dict]:
         """Prepare prompt and system prompt for streaming generation.
 
@@ -681,11 +745,14 @@ INTERDICȚII STRICTE:
             program_plan=program_plan,
             batch_index=batch_index,
             batch_total=batch_total,
+            selected_types=selected_types,
         )
 
         user_prompt = f"Tema: {tema}\n\nÎncepe DIRECT cu ## Enunț (fără introducere, fără preambul)."
         if context_suplimentar:
             user_prompt += f"\n\nContext suplimentar de la trainer: {context_suplimentar}"
+        if tip_material == "program_formare":
+            user_prompt += "\n\nGenerează programul COMPLET cu TOATE modulele și materialele. Scrie extensiv — fiecare material din program trebuie să fie complet și utilizabil direct."
 
         metadata = {
             "legislatie_citata": legislation_refs,

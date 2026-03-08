@@ -2,6 +2,7 @@
 
 Supports:
 - PDF files (.pdf)
+- Word documents (.doc, .docx)
 - Text files (.txt)
 - Markdown files (.md)
 """
@@ -15,6 +16,12 @@ try:
     PDF_AVAILABLE = True
 except ImportError:
     PDF_AVAILABLE = False
+
+try:
+    from docx import Document as DocxDocument
+    DOCX_AVAILABLE = True
+except ImportError:
+    DOCX_AVAILABLE = False
 
 from app.core.logging import get_logger
 
@@ -74,6 +81,53 @@ class DocumentProcessor:
             logger.error("pdf_extraction_error", error=str(e))
             raise Exception(f"Eroare la procesarea PDF: {str(e)}")
 
+    def extract_text_from_docx(self, docx_bytes: bytes) -> str:
+        """Extract text from DOCX file.
+
+        Args:
+            docx_bytes: DOCX file content as bytes
+
+        Returns:
+            Extracted text content
+        """
+        if not DOCX_AVAILABLE:
+            raise RuntimeError(
+                "python-docx is not installed. Install with: pip install python-docx"
+            )
+
+        try:
+            docx_file = BytesIO(docx_bytes)
+            doc = DocxDocument(docx_file)
+
+            text_parts = []
+            for para in doc.paragraphs:
+                if para.text.strip():
+                    text_parts.append(para.text)
+
+            # Also extract text from tables
+            for table in doc.tables:
+                for row in table.rows:
+                    row_text = " | ".join(
+                        cell.text.strip() for cell in row.cells if cell.text.strip()
+                    )
+                    if row_text:
+                        text_parts.append(row_text)
+
+            full_text = "\n".join(text_parts)
+
+            logger.info(
+                "docx_text_extracted",
+                paragraphs=len(doc.paragraphs),
+                tables=len(doc.tables),
+                chars=len(full_text),
+            )
+
+            return full_text
+
+        except Exception as e:
+            logger.error("docx_extraction_error", error=str(e))
+            raise Exception(f"Eroare la procesarea DOCX: {str(e)}")
+
     def extract_text_from_file(
         self,
         file_content: bytes,
@@ -108,6 +162,10 @@ class DocumentProcessor:
         if extension == 'pdf' or (mime_type and 'pdf' in mime_type):
             return self.extract_text_from_pdf(file_content)
 
+        # Word documents (.doc, .docx)
+        elif extension in ['doc', 'docx'] or (mime_type and 'wordprocessingml' in mime_type):
+            return self.extract_text_from_docx(file_content)
+
         # Text files (.txt, .md)
         elif extension in ['txt', 'md', 'markdown']:
             try:
@@ -127,7 +185,7 @@ class DocumentProcessor:
         else:
             raise ValueError(
                 f"Tip de fișier nesuportat: {extension}. "
-                f"Tipuri acceptate: PDF, TXT, MD"
+                f"Tipuri acceptate: PDF, DOCX, DOC, TXT, MD"
             )
 
     def extract_text_from_base64(
