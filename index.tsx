@@ -222,7 +222,7 @@ const CharCounter = ({ value, maxLength }: { value: string; maxLength: number })
 const CRITIQUE_LEGEND: Record<string, string> = {
   D1: "Cerințe restrictive — experiență similară, calificare, specificații tehnice",
   D2: "Criterii de atribuire / factori de evaluare netransparenți sau subiectivi",
-  D3: "Denumiri de produse/mărci fără sintagma „sau echivalent"",
+  D3: 'Denumiri de produse/mărci fără sintagma \u201Esau echivalent\u201D',
   D4: "Lipsa răspuns clar la solicitările de clarificări",
   D5: "Forma de constituire a garanției de participare",
   D6: "Clauze contractuale inechitabile sau excesive",
