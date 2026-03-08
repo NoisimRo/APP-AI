@@ -42,6 +42,7 @@ class TrainingGenerateRequest(BaseModel):
     program_plan: str = Field(default="", max_length=50000, description="Training program plan for program_formare mode")
     batch_index: int | None = Field(default=None, description="Current batch index (1-based)")
     batch_total: int | None = Field(default=None, description="Total batch count")
+    selected_types: list[str] | None = Field(default=None, description="Selected material types for program/batch modes")
 
 
 class TrainingExportRequest(BaseModel):
@@ -103,6 +104,7 @@ async def generate_material(
             program_plan=request.program_plan,
             batch_index=request.batch_index,
             batch_total=request.batch_total,
+            selected_types=request.selected_types,
             session=session,
         )
 
@@ -146,6 +148,7 @@ async def generate_material_stream(
             program_plan=request.program_plan,
             batch_index=request.batch_index,
             batch_total=request.batch_total,
+            selected_types=request.selected_types,
             session=session,
         )
 

@@ -502,6 +502,7 @@ class TrainingGenerator:
         program_plan: str = "",
         batch_index: int | None = None,
         batch_total: int | None = None,
+        selected_types: list[str] | None = None,
     ) -> str:
         """Build the system prompt for material generation."""
         material_info = MATERIAL_TYPES.get(tip_material, MATERIAL_TYPES["speta"])
@@ -523,6 +524,16 @@ Adaptează limbajul, complexitatea exemplelor și perspectiva materialului pentr
         else:
             public_section = "\nPUBLIC ȚINTĂ: General — specialiști în achiziții publice (autorități contractante, operatori economici, consultanți).\n"
 
+        # Build selected types constraint
+        selected_types_section = ""
+        if selected_types and tip_material == "program_formare":
+            type_names = [MATERIAL_TYPES.get(t, {}).get("name", t) for t in selected_types]
+            selected_types_section = f"""
+TIPURI DE MATERIALE SELECTATE DE TRAINER: {', '.join(type_names)}
+Folosește EXCLUSIV aceste tipuri de materiale în program. Alternează între ele pentru varietate.
+NU folosi alte tipuri decât cele specificate.
+"""
+
         # Build program plan section
         program_section = ""
         if program_plan and tip_material == "program_formare":
@@ -531,7 +542,6 @@ PLANUL DE FORMARE FURNIZAT DE TRAINER:
 {program_plan}
 
 Folosește acest plan ca bază pentru structurarea programului. Respectă modulele, tematicile și competențele vizate.
-Alege tipurile de materiale cele mai potrivite pentru fiecare tematică din plan.
 """
 
         # Build batch section
@@ -560,7 +570,7 @@ NIVEL DE DIFICULTATE: {nivel_info}
 LUNGIME ȚINTĂ: {lungime_info}
 
 {context}
-{program_section}{batch_section}
+{program_section}{selected_types_section}{batch_section}
 INSTRUCȚIUNI SPECIFICE PENTRU ACEST TIP DE MATERIAL:
 {material_prompt}
 """
@@ -640,6 +650,7 @@ INTERDICȚII STRICTE:
         program_plan: str = "",
         batch_index: int | None = None,
         batch_total: int | None = None,
+        selected_types: list[str] | None = None,
     ) -> dict:
         """Generate a training material (non-streaming).
 
@@ -656,6 +667,7 @@ INTERDICȚII STRICTE:
             program_plan=program_plan,
             batch_index=batch_index,
             batch_total=batch_total,
+            selected_types=selected_types,
         )
 
         user_prompt = f"Tema: {tema}\n\nÎncepe DIRECT cu ## Enunț (fără introducere, fără preambul)."
@@ -716,6 +728,7 @@ INTERDICȚII STRICTE:
         program_plan: str = "",
         batch_index: int | None = None,
         batch_total: int | None = None,
+        selected_types: list[str] | None = None,
     ) -> tuple[str, str, dict]:
         """Prepare prompt and system prompt for streaming generation.
 
@@ -732,6 +745,7 @@ INTERDICȚII STRICTE:
             program_plan=program_plan,
             batch_index=batch_index,
             batch_total=batch_total,
+            selected_types=selected_types,
         )
 
         user_prompt = f"Tema: {tema}\n\nÎncepe DIRECT cu ## Enunț (fără introducere, fără preambul)."
