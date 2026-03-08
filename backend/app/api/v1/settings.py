@@ -230,8 +230,8 @@ async def test_llm_connection(
         start = time.monotonic()
         response = await llm.complete(
             prompt="Răspunde cu un singur cuvânt: care este capitala României?",
-            temperature=0.0,
-            max_tokens=20,
+            temperature=0.1,
+            max_tokens=100,
         )
         elapsed_ms = int((time.monotonic() - start) * 1000)
 
@@ -251,11 +251,27 @@ async def test_llm_connection(
         )
 
     except Exception as e:
+        error_msg = str(e)
+
+        # Provide friendlier error messages for common issues
+        if "credit balance is too low" in error_msg:
+            error_msg = (
+                "Balanța de credite Anthropic este insuficientă. "
+                "Verificați la console.anthropic.com/settings/billing că aveți credite active "
+                "și că cheia API aparține organizației corecte."
+            )
+        elif "invalid x-api-key" in error_msg.lower() or "invalid api key" in error_msg.lower():
+            error_msg = "Cheia API este invalidă. Verificați că ați copiat cheia corect."
+        elif "NoneType" in error_msg and "subscriptable" in error_msg:
+            error_msg = (
+                "Gemini a returnat un răspuns gol. Încercați alt model sau verificați cheia API."
+            )
+
         logger.error("llm_test_failed", provider=provider_type, error=str(e))
         return LLMTestResponse(
             success=False,
             provider=provider_type,
             model=model or DEFAULT_MODELS.get(provider_type, "unknown"),
             response_time_ms=0,
-            error=str(e),
+            error=error_msg,
         )

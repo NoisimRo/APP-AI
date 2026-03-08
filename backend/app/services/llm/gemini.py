@@ -68,7 +68,22 @@ class GeminiProvider(LLMProvider):
                     max_output_tokens=max_tokens,
                 ),
             )
-            return response.text
+
+            # Handle empty/blocked responses (safety filters, empty candidates)
+            if not response.candidates:
+                block_reason = getattr(response, "prompt_feedback", None)
+                raise ValueError(
+                    f"Gemini a returnat un răspuns gol (fără candidați). "
+                    f"Motiv posibil: filtru de siguranță. Feedback: {block_reason}"
+                )
+
+            text = response.text
+            if text is None:
+                raise ValueError(
+                    "Gemini a returnat un răspuns gol (text=None). "
+                    "Verificați modelul și parametrii."
+                )
+            return text
 
         except Exception as e:
             logger.error("gemini_completion_error", error=str(e))
