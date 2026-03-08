@@ -42,6 +42,9 @@ PROVIDER_MODELS = {
         "claude-sonnet-4-5",
     ],
     "openai": [
+        "gpt-5.4-2026-03-05",
+        "gpt-5-2025-08-07",
+        "gpt-5-mini-2025-08-07",
         "gpt-4.1",
         "gpt-4.1-mini",
         "gpt-4.1-nano",
@@ -57,7 +60,7 @@ PROVIDER_MODELS = {
 DEFAULT_MODELS = {
     "gemini": "gemini-3.1-pro-preview",
     "anthropic": "claude-sonnet-4-6",
-    "openai": "gpt-4o",
+    "openai": "gpt-5.4-2026-03-05",
 }
 
 
