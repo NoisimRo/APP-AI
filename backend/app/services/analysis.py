@@ -104,14 +104,14 @@ class DecisionAnalysisService:
     async def analyze_decision(
         self,
         decision: DecizieCNSC,
-    ) -> list[dict]:
+    ) -> tuple[list[dict], list[str]]:
         """Analyze a single decision and extract argumentation.
 
         Args:
             decision: The decision to analyze.
 
         Returns:
-            List of dicts with per-criticism argumentation.
+            Tuple of (list of argumentation dicts, list of warning messages).
         """
         prompt = ANALYSIS_PROMPT_TEMPLATE.format(
             external_id=decision.external_id,
@@ -130,14 +130,15 @@ class DecisionAnalysisService:
             )
 
             # Parse JSON from response
-            argumentari = self._parse_response(response)
+            argumentari, warnings = self._parse_response(response)
 
             logger.info(
                 "decision_analyzed",
                 external_id=decision.external_id,
                 critici_found=len(argumentari),
+                warnings=warnings if warnings else None,
             )
-            return argumentari
+            return argumentari, warnings
 
         except Exception as e:
             logger.error(
@@ -147,13 +148,18 @@ class DecisionAnalysisService:
             )
             raise
 
-    def _parse_response(self, response: str) -> list[dict]:
+    def _parse_response(self, response: str) -> tuple[list[dict], list[str]]:
         """Parse LLM response into list of argumentation dicts.
 
-        If JSON is truncated (e.g. due to max_tokens), attempts to recover
-        complete objects for diagnostic purposes, then re-raises the error
-        so the decision remains unanalyzed and will be retried.
+        If JSON is truncated (e.g. due to max_tokens), recovers complete
+        objects and returns them with warnings about what was lost.
+
+        Returns:
+            Tuple of (parsed objects, warning messages).
+            Raises only if zero objects can be recovered.
         """
+        warnings = []
+
         # Strip markdown code fences if present
         text = response.strip()
         if text.startswith("```json"):
@@ -167,16 +173,26 @@ class DecisionAnalysisService:
         try:
             parsed = json.loads(text)
         except json.JSONDecodeError as e:
-            # Attempt to recover complete JSON objects for diagnostics
+            # JSON truncat — recuperăm obiectele complete
             recovered = self._recover_json_objects(text)
             if recovered:
+                truncated_tail = text[-300:] if len(text) > 300 else text
+                recovered_codes = [r.get("cod_critica", "?") for r in recovered]
+                warning_msg = (
+                    f"JSON trunchiat la {len(text)} caractere. "
+                    f"Recuperate {len(recovered)} critici ({', '.join(recovered_codes)}). "
+                    f"Critici trunchiate/pierdute după ultima completă. "
+                    f"Eroare: {e}"
+                )
+                warnings.append(warning_msg)
                 logger.warning(
-                    "json_truncated_partial_recovery",
+                    "json_truncated_partial_save",
                     recovered_count=len(recovered),
-                    recovered_critici=[r.get("cod_critica", "?") for r in recovered],
+                    recovered_critici=recovered_codes,
                     original_error=str(e),
                     response_length=len(text),
                 )
+                parsed = recovered
             else:
                 logger.error(
                     "json_truncated_no_recovery",
@@ -184,8 +200,7 @@ class DecisionAnalysisService:
                     response_length=len(text),
                     response_tail=text[-200:] if len(text) > 200 else text,
                 )
-            # Re-raise so the decision stays unanalyzed for retry
-            raise
+                raise
 
         if isinstance(parsed, dict):
             parsed = [parsed]
@@ -194,22 +209,28 @@ class DecisionAnalysisService:
             raise ValueError(f"Expected JSON array, got {type(parsed).__name__}")
 
         # Validate required fields
+        valid_items = []
         for item in parsed:
             if "cod_critica" not in item:
-                raise ValueError("Missing required field: cod_critica")
+                warnings.append(f"Obiect JSON ignorat — lipsește cod_critica: {str(item)[:100]}")
+                continue
             # Normalize castigator
             castigator = item.get("castigator_critica", "unknown")
             if castigator not in ("contestator", "autoritate", "partial", "unknown"):
                 item["castigator_critica"] = "unknown"
+            valid_items.append(item)
 
-        return parsed
+        if not valid_items:
+            raise ValueError("No valid argumentation objects found in response")
+
+        return valid_items, warnings
 
     @staticmethod
     def _recover_json_objects(text: str) -> list[dict]:
         """Extract complete JSON objects from a truncated JSON array.
 
         Walks through the text tracking brace depth to find complete {...}
-        pairs. Used only for diagnostic logging — results are NOT saved.
+        pairs. Recovered objects are saved; truncated ones are logged as warnings.
         """
         objects = []
         i = 0
@@ -294,7 +315,19 @@ class DecisionAnalysisService:
             )
 
         # Analyze with LLM
-        argumentari = await self.analyze_decision(decision)
+        argumentari, analysis_warnings = await self.analyze_decision(decision)
+
+        # Store warnings on the decision record if any
+        if analysis_warnings:
+            existing_warnings = decision.parse_warnings or []
+            # Prefix analysis warnings to distinguish from import warnings
+            new_warnings = [f"[ANALYSIS] {w}" for w in analysis_warnings]
+            decision.parse_warnings = existing_warnings + new_warnings
+            logger.warning(
+                "decision_analysis_warnings_saved",
+                external_id=decision.external_id,
+                warnings=analysis_warnings,
+            )
 
         # Create records
         created = 0
