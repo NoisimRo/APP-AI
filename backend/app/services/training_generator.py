@@ -62,6 +62,10 @@ MATERIAL_TYPES = {
         "name": "Cronologie procedurală",
         "description": "Ordonarea pașilor într-o procedură de achiziție",
     },
+    "program_formare": {
+        "name": "Program complet de formare",
+        "description": "Program structurat cu multiple materiale didactice variate",
+    },
 }
 
 DIFFICULTY_LEVELS = {
@@ -303,6 +307,42 @@ Ordinea corectă cu:
 
 ## Note Trainer
 Greșeli frecvente de ordonare, excepții de la termene, cum variază procedura în funcție de tipul achiziției.""",
+
+    "program_formare": """Generează un PROGRAM COMPLET DE FORMARE pe tema specificată.
+
+Ești un designer instrucțional expert în achiziții publice. Creează un program coerent de formare care include
+multiple materiale didactice de tipuri variate (spețe, studii de caz, quiz-uri, jocuri de rol, dezbateri, etc.)
+alese strategic pentru a livra competențele vizate.
+
+Structură obligatorie:
+## Enunț
+Prezentarea programului de formare:
+- Titlu program
+- Obiective de învățare (3-5 obiective concrete, măsurabile)
+- Competențe vizate
+- Durată estimată
+- Public țintă
+- Structura pe module/sesiuni
+
+## Cerințe
+Pentru FIECARE modul/sesiune din program, generează un material didactic complet:
+- Specifică tipul materialului ales (speță, quiz, studiu de caz, joc de rol, dezbatere, etc.) și justifică alegerea
+- Include materialul complet cu enunț, instrucțiuni, și rezolvare
+- Specifică durata estimată per activitate
+- Leagă fiecare activitate de obiectivele de învățare
+
+## Rezolvare
+Rezolvările detaliate pentru TOATE materialele din program, cu:
+- Temeiuri legale exacte (articole, alineate)
+- Jurisprudență CNSC relevantă
+- Răspunsuri model pentru fiecare activitate
+
+## Note Trainer
+- Agenda detaliată cu timing per activitate
+- Sfaturi de facilitare per modul
+- Materiale necesare (flipchart, proiector, handout-uri)
+- Adaptări pentru diferite niveluri de experiență
+- Evaluarea învățării: metode de verificare a competențelor""",
 }
 
 
@@ -458,12 +498,50 @@ class TrainingGenerator:
         nivel_dificultate: str,
         lungime: str,
         context: str,
+        public_tinta: str = "",
+        program_plan: str = "",
+        batch_index: int | None = None,
+        batch_total: int | None = None,
     ) -> str:
         """Build the system prompt for material generation."""
         material_info = MATERIAL_TYPES.get(tip_material, MATERIAL_TYPES["speta"])
         nivel_info = DIFFICULTY_LEVELS.get(nivel_dificultate, DIFFICULTY_LEVELS["mediu"])
         lungime_info = LENGTH_OPTIONS.get(lungime, LENGTH_OPTIONS["mediu"])
         material_prompt = MATERIAL_PROMPTS.get(tip_material, MATERIAL_PROMPTS["speta"])
+
+        # Build public tinta section
+        public_section = ""
+        if public_tinta:
+            public_section = f"""
+PUBLIC ȚINTĂ SPECIFIC: {public_tinta}
+Adaptează limbajul, complexitatea exemplelor și perspectiva materialului pentru acest public specific.
+- Dacă publicul include autorități contractante: focusează pe obligații, proceduri, riscuri de neconformitate
+- Dacă publicul include operatori economici: focusează pe drepturi, strategii de contestare, greșeli de evitat
+- Dacă publicul include organe de control/audit: focusează pe criterii de verificare, nereguli frecvente, bune practici
+- Dacă publicul include CNSC: focusează pe interpretare legislativă, jurisprudență, consistență decizională
+"""
+        else:
+            public_section = "\nPUBLIC ȚINTĂ: General — specialiști în achiziții publice (autorități contractante, operatori economici, consultanți).\n"
+
+        # Build program plan section
+        program_section = ""
+        if program_plan and tip_material == "program_formare":
+            program_section = f"""
+PLANUL DE FORMARE FURNIZAT DE TRAINER:
+{program_plan}
+
+Folosește acest plan ca bază pentru structurarea programului. Respectă modulele, tematicile și competențele vizate.
+Alege tipurile de materiale cele mai potrivite pentru fiecare tematică din plan.
+"""
+
+        # Build batch section
+        batch_section = ""
+        if batch_index and batch_total:
+            batch_section = f"""
+GENERARE ÎN LOT: Acesta este materialul {batch_index} din {batch_total}.
+Generează un material DIFERIT de cele anterioare — variază abordarea, scenariul, exemplele, perspectiva.
+Fiecare material trebuie să acopere un aspect diferit al temei sau să ofere o perspectivă nouă.
+"""
 
         prompt = f"""Ești un expert în achiziții publice din România și un trainer profesionist cu experiență vastă în formarea specialiștilor. Generezi materiale didactice de cea mai înaltă calitate, ancorate în legislația și jurisprudența reală din România.
 
@@ -474,7 +552,7 @@ REGULI FUNDAMENTALE:
 4. NU inventa numere de decizii CNSC sau articole de lege inexistente
 5. Materialul trebuie să fie practic, aplicabil, nu doar teoretic
 6. Folosește nume fictive pentru entități (ex: S.C. Exemplu S.R.L., Primăria Orașului Model)
-
+{public_section}
 TIPUL MATERIALULUI: {material_info['name']} — {material_info['description']}
 
 NIVEL DE DIFICULTATE: {nivel_info}
@@ -482,7 +560,7 @@ NIVEL DE DIFICULTATE: {nivel_info}
 LUNGIME ȚINTĂ: {lungime_info}
 
 {context}
-
+{program_section}{batch_section}
 INSTRUCȚIUNI SPECIFICE PENTRU ACEST TIP DE MATERIAL:
 {material_prompt}
 
@@ -511,6 +589,10 @@ INTERDICȚII STRICTE:
         lungime: str,
         context_suplimentar: str,
         session: AsyncSession,
+        public_tinta: str = "",
+        program_plan: str = "",
+        batch_index: int | None = None,
+        batch_total: int | None = None,
     ) -> dict:
         """Generate a training material (non-streaming).
 
@@ -522,7 +604,11 @@ INTERDICȚII STRICTE:
         )
 
         system_prompt = self._build_system_prompt(
-            tip_material, nivel_dificultate, lungime, context
+            tip_material, nivel_dificultate, lungime, context,
+            public_tinta=public_tinta,
+            program_plan=program_plan,
+            batch_index=batch_index,
+            batch_total=batch_total,
         )
 
         user_prompt = f"Tema: {tema}\n\nÎncepe DIRECT cu ## Enunț (fără introducere, fără preambul)."
@@ -575,6 +661,10 @@ INTERDICȚII STRICTE:
         lungime: str,
         context_suplimentar: str,
         session: AsyncSession,
+        public_tinta: str = "",
+        program_plan: str = "",
+        batch_index: int | None = None,
+        batch_total: int | None = None,
     ) -> tuple[str, str, dict]:
         """Prepare prompt and system prompt for streaming generation.
 
@@ -586,7 +676,11 @@ INTERDICȚII STRICTE:
         )
 
         system_prompt = self._build_system_prompt(
-            tip_material, nivel_dificultate, lungime, context
+            tip_material, nivel_dificultate, lungime, context,
+            public_tinta=public_tinta,
+            program_plan=program_plan,
+            batch_index=batch_index,
+            batch_total=batch_total,
         )
 
         user_prompt = f"Tema: {tema}\n\nÎncepe DIRECT cu ## Enunț (fără introducere, fără preambul)."
