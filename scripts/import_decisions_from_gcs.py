@@ -74,47 +74,46 @@ class DecisionImporter:
             logger.error("gcs_connection_failed", error=str(e))
             raise
 
-    def list_decision_files(
+    def list_new_files(
         self,
+        existing_filenames: set[str],
         limit: Optional[int] = None,
-        offset: int = 0,
-    ) -> list[str]:
-        """List all decision files in the GCS folder.
+    ) -> tuple[list[str], int]:
+        """List only NEW decision files by filtering against existing DB filenames during GCS iteration.
 
         Args:
-            limit: Maximum number of files to return (for testing/batching)
-            offset: Number of files to skip from the beginning (for batching)
+            existing_filenames: Set of filenames already in DB.
+            limit: Maximum number of new files to return.
 
         Returns:
-            List of blob names (file paths in GCS)
+            Tuple of (new_file_blob_names, already_existed_count).
         """
         prefix = f"{self.folder_name}/" if self.folder_name else ""
         blobs = self.bucket.list_blobs(prefix=prefix, timeout=300)
 
-        files = []
-        skipped = 0
+        new_files = []
         total_seen = 0
+        already_existed = 0
         for blob in blobs:
             total_seen += 1
             if total_seen % 500 == 0:
-                logger.info("gcs_listing_progress", seen=total_seen, collected=len(files), skipped=skipped)
-            # Only process .txt files
+                logger.info("gcs_listing_progress", seen=total_seen, new=len(new_files), skipped=already_existed)
             if blob.name.endswith('.txt'):
-                if skipped < offset:
-                    skipped += 1
-                    continue
-                files.append(blob.name)
-                if limit and len(files) >= limit:
-                    break
+                fname = Path(blob.name).name
+                if fname in existing_filenames:
+                    already_existed += 1
+                else:
+                    new_files.append(blob.name)
+                    if limit and len(new_files) >= limit:
+                        break
 
         logger.info(
             "gcs_files_listed",
-            count=len(files),
             total_seen=total_seen,
-            offset=offset,
-            prefix=prefix,
+            new=len(new_files),
+            already_existed=already_existed,
         )
-        return files
+        return new_files, already_existed
 
     def download_file(self, blob_name: str) -> str:
         """Download a file from GCS and return its content.
@@ -264,14 +263,12 @@ class DecisionImporter:
     async def import_all(
         self,
         limit: Optional[int] = None,
-        offset: int = 0,
         batch_size: int = 50,
     ) -> dict:
         """Import all decisions from GCS.
 
         Args:
-            limit: Maximum number of files to import (for testing/batching)
-            offset: Number of files to skip from the beginning (for batching)
+            limit: Maximum number of NEW files to import
             batch_size: Number of decisions to commit in each batch
 
         Returns:
@@ -295,24 +292,16 @@ class DecisionImporter:
         cpv_map = await self._load_cpv_nomenclator()
         logger.info("cpv_nomenclator_loaded", count=len(cpv_map))
 
-        # Get list of files (iterates GCS blobs — slow with large offsets)
-        logger.info("gcs_listing_starting", offset=offset, limit=limit)
-        files = self.list_decision_files(limit=limit, offset=offset)
-        stats["total_files"] = len(files)
-
-        # Filter out already-imported files before downloading
-        new_files = []
-        for blob_name in files:
-            fname = Path(blob_name).name
-            if fname in existing_filenames:
-                stats["already_existed"] += 1
-            else:
-                new_files.append(blob_name)
+        # List GCS files, filtering out already-imported ones during iteration
+        logger.info("gcs_listing_starting", limit=limit)
+        new_files, already_existed = self.list_new_files(existing_filenames, limit=limit)
+        stats["already_existed"] = already_existed
+        stats["total_files"] = len(new_files) + already_existed
 
         logger.info(
             "import_starting",
-            total_files=len(files),
-            already_existed=stats["already_existed"],
+            total_files=stats["total_files"],
+            already_existed=already_existed,
             new_files=len(new_files),
         )
 
@@ -400,6 +389,8 @@ class DecisionImporter:
                 stats["embedding_error"] = str(e)
 
         logger.info("import_completed", **stats)
+        # Machine-readable output for pipeline.py coordination
+        print(f"PIPELINE_NEW_IMPORTED={stats['imported']}")
         return stats
 
 
@@ -590,7 +581,6 @@ async def main():
     # Import decisions
     stats = await importer.import_all(
         limit=args.limit,
-        offset=args.offset,
         batch_size=args.batch_size,
     )
 
