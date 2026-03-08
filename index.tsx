@@ -32,7 +32,8 @@ import {
   ChevronDown,
   ChevronUp,
   GraduationCap,
-  Download
+  Download,
+  Pencil
 } from "lucide-react";
 
 // --- Types ---
@@ -137,6 +138,28 @@ const fileToBase64 = (file: File): Promise<string> => {
 
 // --- Markdown Formatter ---
 
+// Map heading keywords to Font Awesome icons
+const headingIcon = (title: string): string => {
+  const t = title.toLowerCase();
+  if (t.includes('enun')) return '<i class="fa-solid fa-file-lines" style="color:#d97706"></i>';
+  if (t.includes('cerin')) return '<i class="fa-solid fa-list-check" style="color:#2563eb"></i>';
+  if (t.includes('rezolv')) return '<i class="fa-solid fa-scale-balanced" style="color:#16a34a"></i>';
+  if (t.includes('note') && t.includes('trainer')) return '<i class="fa-solid fa-chalkboard-user" style="color:#9333ea"></i>';
+  if (t.includes('scenariu')) return '<i class="fa-solid fa-theater-masks" style="color:#d97706"></i>';
+  if (t.includes('context')) return '<i class="fa-solid fa-circle-info" style="color:#0ea5e9"></i>';
+  if (t.includes('argumen') || t.includes('pro') || t.includes('contra')) return '<i class="fa-solid fa-comments" style="color:#2563eb"></i>';
+  if (t.includes('concluzi') || t.includes('concluz')) return '<i class="fa-solid fa-flag-checkered" style="color:#16a34a"></i>';
+  if (t.includes('răspuns') || t.includes('soluți') || t.includes('varianta corect')) return '<i class="fa-solid fa-circle-check" style="color:#16a34a"></i>';
+  if (t.includes('întrebare') || t.includes('quiz')) return '<i class="fa-solid fa-circle-question" style="color:#f59e0b"></i>';
+  if (t.includes('rol')) return '<i class="fa-solid fa-users" style="color:#8b5cf6"></i>';
+  if (t.includes('erori') || t.includes('greșel')) return '<i class="fa-solid fa-triangle-exclamation" style="color:#ef4444"></i>';
+  if (t.includes('cronolog') || t.includes('pași') || t.includes('etap')) return '<i class="fa-solid fa-timeline" style="color:#0ea5e9"></i>';
+  if (t.includes('compar')) return '<i class="fa-solid fa-code-compare" style="color:#6366f1"></i>';
+  if (t.includes('legisl') || t.includes('legal') || t.includes('temei')) return '<i class="fa-solid fa-gavel" style="color:#b45309"></i>';
+  if (t.includes('jurispruden')) return '<i class="fa-solid fa-landmark" style="color:#7c3aed"></i>';
+  return '';
+};
+
 const formatMarkdown = (text: string): string => {
   return text
     // Escape HTML
@@ -149,14 +172,23 @@ const formatMarkdown = (text: string): string => {
     .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
     // Italic: *text*
     .replace(/\*(.+?)\*/g, '<em>$1</em>')
-    // Headers: ### text
-    .replace(/^### (.+)$/gm, '<h3 style="font-size:1rem;font-weight:700;margin:1rem 0 0.5rem 0;color:#1e293b">$1</h3>')
-    .replace(/^## (.+)$/gm, '<h2 style="font-size:1.1rem;font-weight:700;margin:1.2rem 0 0.5rem 0;color:#1e293b">$1</h2>')
-    .replace(/^# (.+)$/gm, '<h1 style="font-size:1.25rem;font-weight:700;margin:1.2rem 0 0.5rem 0;color:#1e293b">$1</h1>')
-    // Numbered lists: 1. item
-    .replace(/^(\d+)\.\s+(.+)$/gm, '<div style="display:flex;gap:0.5rem;margin:0.25rem 0 0.25rem 1rem"><span style="color:#64748b;min-width:1.2rem">$1.</span><span>$2</span></div>')
-    // Bullet lists: - item
-    .replace(/^[-•]\s+(.+)$/gm, '<div style="display:flex;gap:0.5rem;margin:0.25rem 0 0.25rem 1rem"><span style="color:#3b82f6">•</span><span>$1</span></div>')
+    // Headers with icons
+    .replace(/^### (.+)$/gm, (_m, title) => {
+      const icon = headingIcon(title);
+      return `<h3 style="font-size:1rem;font-weight:700;margin:1rem 0 0.4rem 0;color:#1e293b;display:flex;align-items:center;gap:0.4rem">${icon ? icon + ' ' : ''}${title}</h3>`;
+    })
+    .replace(/^## (.+)$/gm, (_m, title) => {
+      const icon = headingIcon(title);
+      return `<h2 style="font-size:1.1rem;font-weight:700;margin:1.2rem 0 0.4rem 0;color:#1e293b;display:flex;align-items:center;gap:0.5rem">${icon ? icon + ' ' : ''}${title}</h2>`;
+    })
+    .replace(/^# (.+)$/gm, (_m, title) => {
+      const icon = headingIcon(title);
+      return `<h1 style="font-size:1.25rem;font-weight:700;margin:1.2rem 0 0.4rem 0;color:#1e293b;display:flex;align-items:center;gap:0.5rem">${icon ? icon + ' ' : ''}${title}</h1>`;
+    })
+    // Numbered lists: 1. item — compact spacing
+    .replace(/^(\d+)\.\s+(.+)$/gm, '<div style="display:flex;gap:0.5rem;margin:0.1rem 0 0.1rem 1rem;line-height:1.5"><span style="color:#64748b;min-width:1.2rem;font-weight:600">$1.</span><span>$2</span></div>')
+    // Bullet lists: - item — compact spacing with FA icon
+    .replace(/^[-•]\s+(.+)$/gm, '<div style="display:flex;gap:0.5rem;margin:0.1rem 0 0.1rem 1rem;line-height:1.5"><span style="color:#d97706;font-size:0.5rem;margin-top:0.45rem"><i class="fa-solid fa-diamond"></i></span><span>$1</span></div>')
     // Horizontal rules
     .replace(/^---$/gm, '<hr style="border:none;border-top:1px solid #e2e8f0;margin:1rem 0"/>')
     // Paragraphs: double newlines
@@ -262,6 +294,8 @@ const App = () => {
   const [trainingActiveTab, setTrainingActiveTab] = useState<'material' | 'rezolvare' | 'note'>('material');
   const [trainingMeta, setTrainingMeta] = useState<any>(null);
   const [trainingShowContext, setTrainingShowContext] = useState(false);
+  const [trainingEditing, setTrainingEditing] = useState(false);
+  const [trainingEditedResult, setTrainingEditedResult] = useState<string | null>(null);
 
   // Decision Viewer State
   const [viewingDecision, setViewingDecision] = useState<any | null>(null);
@@ -1302,6 +1336,8 @@ const App = () => {
     setTrainingResult("");
     setTrainingMeta(null);
     setTrainingActiveTab('material');
+    setTrainingEditing(false);
+    setTrainingEditedResult(null);
 
     await fetchStream(
       '/api/v1/training/generate/stream',
@@ -1325,13 +1361,14 @@ const App = () => {
   };
 
   const handleTrainingExport = async (format: 'docx' | 'pdf' | 'md') => {
-    if (!trainingResult) return;
+    const contentToExport = trainingEditedResult ?? trainingResult;
+    if (!contentToExport) return;
     try {
       const response = await fetch('/api/v1/training/export', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          content: trainingResult,
+          content: contentToExport,
           format,
           titlu: `TrainingAP - ${trainingMaterialTypes[trainingTip]?.name || trainingTip}`,
           metadata: trainingMeta,
@@ -1389,7 +1426,8 @@ const App = () => {
   };
 
   const renderTraining = () => {
-    const sections = trainingResult ? parseTrainingSections(trainingResult) : {};
+    const effectiveResult = trainingEditedResult ?? trainingResult;
+    const sections = effectiveResult ? parseTrainingSections(effectiveResult) : {};
     const activeContent = sections[trainingActiveTab] || '';
 
     return (
@@ -1544,8 +1582,28 @@ const App = () => {
                   ))}
                 </div>
 
-                {/* Export buttons */}
+                {/* Edit toggle + Export buttons */}
                 <div className="flex gap-2">
+                  <button
+                    onClick={() => {
+                      if (!trainingEditing) {
+                        // Entering edit mode — initialize edited text from current result
+                        if (trainingEditedResult === null) {
+                          setTrainingEditedResult(trainingResult);
+                        }
+                      }
+                      setTrainingEditing(!trainingEditing);
+                    }}
+                    disabled={trainingLoading}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border transition disabled:opacity-50 ${
+                      trainingEditing
+                        ? 'bg-amber-100 border-amber-400 text-amber-700'
+                        : 'border-slate-300 text-slate-600 hover:bg-slate-100 hover:border-slate-400'
+                    }`}
+                  >
+                    {trainingEditing ? <Eye size={12} /> : <Pencil size={12} />}
+                    {trainingEditing ? 'Previzualizare' : 'Editează'}
+                  </button>
                   {(['docx', 'pdf', 'md'] as const).map((fmt) => (
                     <button
                       key={fmt}
@@ -1563,7 +1621,14 @@ const App = () => {
               {/* Content */}
               <div className="flex-1 overflow-y-auto p-8">
                 <div className="max-w-3xl mx-auto">
-                  {activeContent ? (
+                  {trainingEditing ? (
+                    <textarea
+                      value={trainingEditedResult ?? trainingResult}
+                      onChange={(e) => setTrainingEditedResult(e.target.value)}
+                      className="w-full h-full min-h-[500px] p-4 text-sm font-mono border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-400 focus:border-transparent resize-y bg-slate-50 leading-relaxed"
+                      placeholder="Editează materialul generat..."
+                    />
+                  ) : activeContent ? (
                     <div
                       className="prose prose-slate max-w-none leading-relaxed"
                       dangerouslySetInnerHTML={{ __html: formatMarkdown(activeContent) }}
