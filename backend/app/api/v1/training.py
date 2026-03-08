@@ -137,13 +137,14 @@ async def generate_material_stream(
         )
 
         # Map length to token budget
+        # Minimum 4096 to ensure all 4 sections are generated
         token_budgets = {
-            "scurt": 2048,
-            "mediu": 4096,
-            "lung": 8192,
+            "scurt": 4096,
+            "mediu": 6144,
+            "lung": 10240,
             "extins": 16384,
         }
-        max_tokens = token_budgets.get(request.lungime, 4096)
+        max_tokens = token_budgets.get(request.lungime, 6144)
 
         return await create_sse_response(
             llm=generator.llm,

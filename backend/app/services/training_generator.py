@@ -486,7 +486,7 @@ LUNGIME ȚINTĂ: {lungime_info}
 INSTRUCȚIUNI SPECIFICE PENTRU ACEST TIP DE MATERIAL:
 {material_prompt}
 
-IMPORTANT: Respectă EXACT structura cu secțiunile ## Enunț, ## Cerințe, ## Rezolvare, ## Note Trainer. Fiecare secțiune trebuie separată clar."""
+IMPORTANT: Respectă EXACT structura cu secțiunile ## Enunț, ## Cerințe, ## Rezolvare, ## Note Trainer. TOATE cele 4 secțiuni sunt OBLIGATORII — nu omite niciuna. Lungimea țintă se referă la conținutul din fiecare secțiune (mai concis sau mai detaliat), NU la eliminarea secțiunilor. Chiar și pentru materiale scurte, include Rezolvarea completă cu temeiuri legale și Note Trainer."""
 
         return prompt
 
@@ -517,13 +517,14 @@ IMPORTANT: Respectă EXACT structura cu secțiunile ## Enunț, ## Cerințe, ## R
             user_prompt += f"\n\nContext suplimentar de la trainer: {context_suplimentar}"
 
         # Map length to approximate token budget
+        # Minimum 4096 to ensure all 4 sections are generated
         token_budgets = {
-            "scurt": 2048,
-            "mediu": 4096,
-            "lung": 8192,
+            "scurt": 4096,
+            "mediu": 6144,
+            "lung": 10240,
             "extins": 16384,
         }
-        max_tokens = token_budgets.get(lungime, 4096)
+        max_tokens = token_budgets.get(lungime, 6144)
 
         response = await self.llm.complete(
             prompt=user_prompt,
