@@ -72,10 +72,10 @@ DIFFICULTY_LEVELS = {
 }
 
 LENGTH_OPTIONS = {
-    "scurt": "aproximativ 200 de cuvinte (câteva rânduri)",
-    "mediu": "aproximativ 400 de cuvinte (jumătate de pagină)",
-    "lung": "aproximativ 800 de cuvinte (o pagină)",
-    "extins": "aproximativ 1500 de cuvinte (2+ pagini)",
+    "scurt": "~200 cuvinte PER SECȚIUNE (enunț concis, cerințe clare, rezolvare succintă dar completă, note trainer esențiale)",
+    "mediu": "~400 cuvinte PER SECȚIUNE (detalii suficiente, argumentare solidă, exemple relevante)",
+    "lung": "~800 cuvinte PER SECȚIUNE (analiză detaliată, multiple exemple, argumentare extinsă)",
+    "extins": "~1500 cuvinte PER SECȚIUNE (analiză exhaustivă, jurisprudență multiplă, toate perspectivele acoperite)",
 }
 
 # --- Type-specific prompt templates ---
@@ -486,7 +486,14 @@ LUNGIME ȚINTĂ: {lungime_info}
 INSTRUCȚIUNI SPECIFICE PENTRU ACEST TIP DE MATERIAL:
 {material_prompt}
 
-IMPORTANT: Respectă EXACT structura cu secțiunile ## Enunț, ## Cerințe, ## Rezolvare, ## Note Trainer. TOATE cele 4 secțiuni sunt OBLIGATORII — nu omite niciuna. Lungimea țintă se referă la conținutul din fiecare secțiune (mai concis sau mai detaliat), NU la eliminarea secțiunilor. Chiar și pentru materiale scurte, include Rezolvarea completă cu temeiuri legale și Note Trainer."""
+IMPORTANT — STRUCTURĂ OBLIGATORIE:
+Materialul TREBUIE să conțină EXACT aceste 4 secțiuni, în această ordine:
+1. ## Enunț — prezentarea situației/scenariului
+2. ## Cerințe — ce trebuie să facă participanții
+3. ## Rezolvare — rezolvarea completă cu temeiuri legale exacte (articole, alineate) și jurisprudență CNSC
+4. ## Note Trainer — sfaturi pentru formator, puncte cheie, greșeli frecvente, timp alocat
+
+Lungimea țintă ({lungime_info}) se aplică INDEPENDENT la FIECARE secțiune. De exemplu, la nivel "scurt", fiecare din cele 4 secțiuni are ~200 cuvinte — NU se omite nicio secțiune, ci fiecare este mai concisă. Rezolvarea și Notele Trainer sunt la fel de importante ca Enunțul — nu le scurta disproporționat și nu le omite niciodată."""
 
         return prompt
 
@@ -516,15 +523,14 @@ IMPORTANT: Respectă EXACT structura cu secțiunile ## Enunț, ## Cerințe, ## R
         if context_suplimentar:
             user_prompt += f"\n\nContext suplimentar de la trainer: {context_suplimentar}"
 
-        # Map length to approximate token budget
-        # Minimum 4096 to ensure all 4 sections are generated
+        # Token budget per length (4 sections × words per section × ~1.5 tokens/word)
         token_budgets = {
-            "scurt": 4096,
-            "mediu": 6144,
-            "lung": 10240,
-            "extins": 16384,
+            "scurt": 4096,     # 4 × ~200 words
+            "mediu": 8192,     # 4 × ~400 words
+            "lung": 16384,     # 4 × ~800 words
+            "extins": 24576,   # 4 × ~1500 words
         }
-        max_tokens = token_budgets.get(lungime, 6144)
+        max_tokens = token_budgets.get(lungime, 8192)
 
         response = await self.llm.complete(
             prompt=user_prompt,

@@ -136,15 +136,14 @@ async def generate_material_stream(
             session=session,
         )
 
-        # Map length to token budget
-        # Minimum 4096 to ensure all 4 sections are generated
+        # Token budget per length (4 sections × words per section × ~1.5 tokens/word)
         token_budgets = {
-            "scurt": 4096,
-            "mediu": 6144,
-            "lung": 10240,
-            "extins": 16384,
+            "scurt": 4096,     # 4 × ~200 words
+            "mediu": 8192,     # 4 × ~400 words
+            "lung": 16384,     # 4 × ~800 words
+            "extins": 24576,   # 4 × ~1500 words
         }
-        max_tokens = token_budgets.get(request.lungime, 6144)
+        max_tokens = token_budgets.get(request.lungime, 8192)
 
         return await create_sse_response(
             llm=generator.llm,

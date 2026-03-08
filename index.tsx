@@ -1457,10 +1457,10 @@ const App = () => {
               <label className="block text-xs font-bold text-slate-700 uppercase mb-2">Lungime Material</label>
               <div className="grid grid-cols-2 gap-2">
                 {[
-                  { key: 'scurt', label: 'Scurt', desc: '~200 cuv.' },
-                  { key: 'mediu', label: 'Mediu', desc: '~400 cuv.' },
-                  { key: 'lung', label: 'Lung', desc: '~800 cuv.' },
-                  { key: 'extins', label: 'Extins', desc: '~1500 cuv.' },
+                  { key: 'scurt', label: 'Scurt', desc: '~200 cuv./secț.' },
+                  { key: 'mediu', label: 'Mediu', desc: '~400 cuv./secț.' },
+                  { key: 'lung', label: 'Lung', desc: '~800 cuv./secț.' },
+                  { key: 'extins', label: 'Extins', desc: '~1500 cuv./secț.' },
                 ].map(({ key, label, desc }) => (
                   <button
                     key={key}
