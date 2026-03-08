@@ -218,6 +218,28 @@ const CharCounter = ({ value, maxLength }: { value: string; maxLength: number })
   );
 };
 
+// Critique codes legend (CNSC standard)
+const CRITIQUE_LEGEND: Record<string, string> = {
+  D1: "Cerințe restrictive — experiență similară, calificare, specificații tehnice",
+  D2: "Criterii de atribuire / factori de evaluare netransparenți sau subiectivi",
+  D3: "Denumiri de produse/mărci fără sintagma „sau echivalent"",
+  D4: "Lipsa răspuns clar la solicitările de clarificări",
+  D5: "Forma de constituire a garanției de participare",
+  D6: "Clauze contractuale inechitabile sau excesive",
+  D7: "Nedivizarea achiziției pe loturi",
+  D8: "Alte critici documentație",
+  DAL: "Alte critici documentație",
+  R1: "Contestații proces-verbal ședință deschidere oferte",
+  R2: "Respingerea ofertei ca neconformă sau inacceptabilă",
+  R3: "Prețul neobișnuit de scăzut al altor ofertanți",
+  R4: "Documente calificare alți ofertanți / mod de evaluare",
+  R5: "Lipsa precizării motivelor de respingere",
+  R6: "Lipsa solicitare clarificări / apreciere incorectă răspunsuri",
+  R7: "Anularea fără temei legal a procedurii",
+  R8: "Alte critici rezultat",
+  RAL: "Alte critici rezultat",
+};
+
 // --- Components ---
 
 const SidebarItem = ({ 
@@ -1001,171 +1023,190 @@ const App = () => {
       }
     };
 
+    // Ruling badge helper
+    const rulingBadge = (solutie: string | null) => {
+      const label = solutie === 'ADMIS' ? 'Admis' :
+                    solutie === 'ADMIS_PARTIAL' ? 'Admis Parțial' :
+                    solutie === 'RESPINS' ? 'Respins' : solutie || 'N/A';
+      const cls = solutie === 'ADMIS' ? 'bg-emerald-500 text-white' :
+                  solutie === 'ADMIS_PARTIAL' ? 'bg-amber-500 text-white' :
+                  solutie === 'RESPINS' ? 'bg-red-500 text-white' :
+                  'bg-slate-400 text-white';
+      return <span className={`text-[11px] px-2.5 py-0.5 rounded-full font-semibold tracking-wide ${cls}`}>{label}</span>;
+    };
+
     return (
-      <div className="h-full flex flex-col bg-slate-50">
-        <div className="p-6 border-b border-slate-200 bg-white shrink-0">
-          <div className="flex justify-between items-start mb-4">
+      <div className="h-full flex flex-col bg-slate-50/80">
+        {/* Header */}
+        <div className="px-6 pt-5 pb-4 bg-white border-b border-slate-200 shrink-0">
+          <div className="flex justify-between items-center mb-4">
             <div>
               <h2 className="text-xl font-bold text-slate-800 flex items-center gap-2">
-                <Database className="text-blue-600" /> Data Lake
+                <Database className="text-blue-600" size={22}/> Data Lake
               </h2>
               <div className="flex items-center gap-2 mt-1">
-                <div className="flex items-center gap-1.5 bg-green-50 text-green-700 px-2 py-0.5 rounded border border-green-100 text-xs font-medium">
-                  <Wifi size={12} />
-                  Conectat la baza de date
+                <div className="flex items-center gap-1.5 bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded-full border border-emerald-200 text-[11px] font-medium">
+                  <Wifi size={11} />
+                  Conectat
                 </div>
-                <span className="text-xs px-2 py-0.5 rounded font-medium bg-blue-100 text-blue-700">
+                <span className="text-[11px] px-2 py-0.5 rounded-full font-medium bg-blue-50 text-blue-600 border border-blue-200">
                   PostgreSQL
                 </span>
               </div>
             </div>
           </div>
 
-          {/* Global Stats Bar */}
+          {/* Stats Cards */}
           <div className="grid grid-cols-4 gap-3">
-            <div className="bg-blue-50 rounded-lg p-3 border border-blue-100">
-              <div className="text-lg font-bold text-blue-700">{totalDecisions}</div>
-              <div className="text-[10px] text-blue-600 font-medium">Total Decizii</div>
+            <div className="bg-gradient-to-br from-blue-50 to-blue-100/50 rounded-xl p-3.5 border border-blue-200/60">
+              <div className="text-2xl font-extrabold text-blue-700 tracking-tight">{totalDecisions.toLocaleString()}</div>
+              <div className="text-[11px] text-blue-600/80 font-medium mt-0.5">Total Decizii</div>
             </div>
-            <div className="bg-purple-50 rounded-lg p-3 border border-purple-100">
-              <div className="text-lg font-bold text-purple-700">{documentatieCount}</div>
-              <div className="text-[10px] text-purple-600 font-medium">Documentație</div>
+            <div className="bg-gradient-to-br from-purple-50 to-purple-100/50 rounded-xl p-3.5 border border-purple-200/60">
+              <div className="text-2xl font-extrabold text-purple-700 tracking-tight">{documentatieCount.toLocaleString()}</div>
+              <div className="text-[11px] text-purple-600/80 font-medium mt-0.5">Documentație</div>
             </div>
-            <div className="bg-orange-50 rounded-lg p-3 border border-orange-100">
-              <div className="text-lg font-bold text-orange-700">{rezultatCount}</div>
-              <div className="text-[10px] text-orange-600 font-medium">Rezultat</div>
+            <div className="bg-gradient-to-br from-orange-50 to-orange-100/50 rounded-xl p-3.5 border border-orange-200/60">
+              <div className="text-2xl font-extrabold text-orange-700 tracking-tight">{rezultatCount.toLocaleString()}</div>
+              <div className="text-[11px] text-orange-600/80 font-medium mt-0.5">Rezultat</div>
             </div>
-            <div className="bg-green-50 rounded-lg p-3 border border-green-100">
-              <div className="text-lg font-bold text-green-700">{dbStats?.last_updated ? new Date(dbStats.last_updated).toLocaleDateString('ro-RO') : '-'}</div>
-              <div className="text-[10px] text-green-600 font-medium">Ultima actualizare</div>
+            <div className="bg-gradient-to-br from-emerald-50 to-emerald-100/50 rounded-xl p-3.5 border border-emerald-200/60">
+              <div className="text-2xl font-extrabold text-emerald-700 tracking-tight">{dbStats?.last_updated ? new Date(dbStats.last_updated).toLocaleDateString('ro-RO') : '-'}</div>
+              <div className="text-[11px] text-emerald-600/80 font-medium mt-0.5">Ultima actualizare</div>
             </div>
           </div>
         </div>
 
         {/* Search + Filters Bar */}
         <div className="px-6 py-3 border-b border-slate-200 bg-white shrink-0">
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-4">
+            {/* Search */}
             <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+              <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
               <input
                 type="text"
-                className="w-full pl-9 pr-4 py-1.5 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none"
-                placeholder="Caută după număr decizie, contestator, autoritate, CPV..."
+                className="w-full pl-10 pr-4 py-2 border border-slate-300 rounded-lg text-sm bg-white focus:ring-2 focus:ring-blue-500/40 focus:border-blue-400 focus:shadow-inner outline-none transition placeholder:text-slate-400"
+                placeholder="Caută după număr decizie, autoritate, CPV..."
                 value={fileSearch}
                 onChange={(e) => setFileSearch(e.target.value)}
               />
             </div>
-            <select value={filterRuling} onChange={(e) => setFilterRuling(e.target.value)} className="text-xs border border-slate-300 rounded-lg px-2 py-1.5 bg-white text-slate-700 focus:ring-2 focus:ring-blue-500 outline-none">
-              <option value="">Soluție: Toate</option>
-              <option value="ADMIS">Admis</option>
-              <option value="ADMIS_PARTIAL">Admis Parțial</option>
-              <option value="RESPINS">Respins</option>
-            </select>
-            <select value={filterType} onChange={(e) => setFilterType(e.target.value)} className="text-xs border border-slate-300 rounded-lg px-2 py-1.5 bg-white text-slate-700 focus:ring-2 focus:ring-blue-500 outline-none">
-              <option value="">Tip: Toate</option>
-              <option value="documentatie">Documentație</option>
-              <option value="rezultat">Rezultat</option>
-            </select>
-            <select value={filterYear} onChange={(e) => setFilterYear(e.target.value)} className="text-xs border border-slate-300 rounded-lg px-2 py-1.5 bg-white text-slate-700 focus:ring-2 focus:ring-blue-500 outline-none">
-              <option value="">An: Toate</option>
-              {Array.from({length: 6}, (_, i) => 2025 - i).map(y => (
-                <option key={y} value={String(y)}>{y}</option>
-              ))}
-            </select>
+            {/* Dropdowns */}
+            <div className="flex items-center gap-2">
+              <div className="relative">
+                <select value={filterRuling} onChange={(e) => setFilterRuling(e.target.value)} className="appearance-none text-xs border border-slate-300 rounded-lg pl-3 pr-7 py-2 bg-white text-slate-700 focus:ring-2 focus:ring-blue-500/40 focus:border-blue-400 outline-none transition min-w-[120px] cursor-pointer">
+                  <option value="">Soluție: Toate</option>
+                  <option value="ADMIS">Admis</option>
+                  <option value="ADMIS_PARTIAL">Admis Parțial</option>
+                  <option value="RESPINS">Respins</option>
+                </select>
+                <ChevronDown size={13} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+              </div>
+              <div className="relative">
+                <select value={filterType} onChange={(e) => setFilterType(e.target.value)} className="appearance-none text-xs border border-slate-300 rounded-lg pl-3 pr-7 py-2 bg-white text-slate-700 focus:ring-2 focus:ring-blue-500/40 focus:border-blue-400 outline-none transition min-w-[120px] cursor-pointer">
+                  <option value="">Tip: Toate</option>
+                  <option value="documentatie">Documentație</option>
+                  <option value="rezultat">Rezultat</option>
+                </select>
+                <ChevronDown size={13} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+              </div>
+              <div className="relative">
+                <select value={filterYear} onChange={(e) => setFilterYear(e.target.value)} className="appearance-none text-xs border border-slate-300 rounded-lg pl-3 pr-7 py-2 bg-white text-slate-700 focus:ring-2 focus:ring-blue-500/40 focus:border-blue-400 outline-none transition min-w-[120px] cursor-pointer">
+                  <option value="">An: Toate</option>
+                  {Array.from({length: 6}, (_, i) => 2026 - i).map(y => (
+                    <option key={y} value={String(y)}>{y}</option>
+                  ))}
+                </select>
+                <ChevronDown size={13} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+              </div>
+            </div>
             {(filterRuling || filterType || filterYear || fileSearch) && (
-              <button onClick={() => { setFilterRuling(""); setFilterType(""); setFilterYear(""); setFileSearch(""); }} className="text-xs text-blue-600 hover:text-blue-800 font-medium whitespace-nowrap">
-                Resetează
+              <button onClick={() => { setFilterRuling(""); setFilterType(""); setFilterYear(""); setFileSearch(""); }}
+                className="text-xs text-blue-600 hover:text-blue-800 font-medium whitespace-nowrap flex items-center gap-1 transition">
+                <X size={13} /> Resetează
               </button>
             )}
           </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-6">
+        {/* Decision Cards */}
+        <div className="flex-1 overflow-y-auto px-6 py-4">
           {isLoadingDecisions ? (
             <div className="flex flex-col items-center justify-center py-20">
               <Loader2 size={32} className="text-blue-500 animate-spin mb-3" />
               <span className="text-sm text-slate-500">Se încarcă deciziile...</span>
             </div>
           ) : (
-          <div className="grid grid-cols-1 gap-2">
-            {apiDecisions.map((dec: any) => (
-              <div key={dec.id} className="group p-4 rounded-lg border bg-white border-slate-200 hover:border-blue-300 hover:shadow-sm transition-all cursor-pointer"
-                   onClick={() => openDecision(`BO${dec.an_bo}_${dec.numar_bo}`)}>
-                <div className="flex items-start gap-4">
-                  <div className={`p-2 rounded shrink-0 mt-0.5 ${
-                    dec.solutie_contestatie === 'ADMIS' ? 'bg-green-50 text-green-600' :
-                    dec.solutie_contestatie === 'RESPINS' ? 'bg-red-50 text-red-600' :
-                    dec.solutie_contestatie === 'ADMIS_PARTIAL' ? 'bg-yellow-50 text-yellow-600' :
-                    'bg-blue-50 text-blue-600'
-                  }`}>
-                    <FileText size={18} />
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    {/* Row 1: BO + date on left, ruling + type badges on right */}
-                    <div className="flex items-center justify-between mb-1">
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm font-bold text-slate-800 font-mono">
-                          BO{dec.an_bo}_{dec.numar_bo}
+          <div className="space-y-3">
+            {apiDecisions.map((dec: any) => {
+              const snippet = dec.argumentatie_cnsc_snippet || dec.rezumat || '';
+              const firstCritiqueCode = dec.coduri_critici?.[0];
+              const critiqueDesc = firstCritiqueCode ? CRITIQUE_LEGEND[firstCritiqueCode] || '' : '';
+
+              return (
+                <div key={dec.id}
+                  className="group bg-white rounded-xl border border-slate-200/80 hover:border-blue-300 hover:shadow-md transition-all cursor-pointer flex items-stretch"
+                  onClick={() => openDecision(`BO${dec.an_bo}_${dec.numar_bo}`)}
+                >
+                  {/* Main content area */}
+                  <div className="flex-1 p-4 min-w-0">
+                    {/* Row 1: ID + Status Badge + Date */}
+                    <div className="flex items-center gap-2.5 mb-2">
+                      <span className="text-sm font-bold text-slate-900 font-mono tracking-tight">
+                        BO{dec.an_bo}_{dec.numar_bo}
+                      </span>
+                      {rulingBadge(dec.solutie_contestatie)}
+                      {dec.data_decizie && (
+                        <span className="text-[11px] text-slate-400 font-medium">
+                          {new Date(dec.data_decizie).toLocaleDateString('ro-RO')}
                         </span>
-                        {dec.data_decizie && (
-                          <span className="text-[11px] text-slate-400">
-                            · {new Date(dec.data_decizie).toLocaleDateString('ro-RO')}
-                          </span>
-                        )}
-                      </div>
-                      <div className="flex items-center gap-1.5">
-                        <span className={`text-[10px] px-2 py-0.5 rounded font-medium border ${
-                          dec.solutie_contestatie === 'ADMIS' ? 'bg-green-100 text-green-700 border-green-200' :
-                          dec.solutie_contestatie === 'ADMIS_PARTIAL' ? 'bg-yellow-100 text-yellow-700 border-yellow-200' :
-                          dec.solutie_contestatie === 'RESPINS' ? 'bg-red-100 text-red-700 border-red-200' :
-                          'bg-slate-100 text-slate-600 border-slate-200'
-                        }`}>
-                          {dec.solutie_contestatie === 'ADMIS' ? 'Admis' :
-                           dec.solutie_contestatie === 'ADMIS_PARTIAL' ? 'Admis Parțial' :
-                           dec.solutie_contestatie === 'RESPINS' ? 'Respins' : dec.solutie_contestatie || 'N/A'}
-                        </span>
-                        <span className={`text-[10px] px-2 py-0.5 rounded font-medium border ${
-                          dec.tip_contestatie === 'documentatie'
-                            ? 'bg-purple-50 text-purple-700 border-purple-200'
-                            : 'bg-orange-50 text-orange-700 border-orange-200'
-                        }`}>
-                          {dec.tip_contestatie === 'documentatie' ? 'Documentație' : 'Rezultat'}
-                        </span>
-                      </div>
+                      )}
                     </div>
 
                     {/* Row 2: CPV */}
-                    <p className="text-xs text-slate-600 mb-1">
-                      <span className="font-medium text-slate-500">CPV:</span>{' '}
-                      {dec.cod_cpv || 'N/A'}{dec.cpv_descriere ? ` — ${dec.cpv_descriere}` : ''}
+                    <p className="text-xs text-slate-500 mb-1.5 truncate">
+                      <span className="font-semibold text-slate-600">{dec.cod_cpv || 'N/A'}</span>
+                      {dec.cpv_descriere && <span className="text-slate-400"> — {dec.cpv_descriere}</span>}
                     </p>
 
-                    {/* Row 3: Summary snippet */}
-                    {dec.rezumat && (
-                      <p className="text-xs text-slate-400 mb-1.5 line-clamp-2 leading-relaxed">
-                        {dec.rezumat}
+                    {/* Row 3: Argumentație CNSC snippet */}
+                    {snippet && (
+                      <p className="text-xs text-slate-400 leading-relaxed line-clamp-2 mb-3">
+                        {snippet}
                       </p>
                     )}
 
-                    {/* Row 4: Criticism codes + parties */}
-                    <div className="flex items-center gap-1.5 flex-wrap">
+                    {/* Row 4: Tag Footer — Type + Critique codes + descriptions */}
+                    <div className="flex items-center gap-2 flex-wrap">
+                      {/* Type pill */}
+                      <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${
+                        dec.tip_contestatie === 'documentatie'
+                          ? 'bg-purple-50 text-purple-600 border border-purple-200'
+                          : 'bg-orange-50 text-orange-600 border border-orange-200'
+                      }`}>
+                        {dec.tip_contestatie === 'documentatie' ? 'Documentație' : 'Rezultat'}
+                      </span>
+                      {/* Critique code pills + description */}
                       {dec.coduri_critici?.map((cod: string) => (
-                        <span key={cod} className="text-[10px] bg-blue-50 text-blue-700 px-1.5 py-0.5 rounded border border-blue-200 font-mono">
+                        <span key={cod} className="text-[10px] bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full font-mono font-semibold border border-slate-200">
                           {cod}
                         </span>
                       ))}
-                      {(dec.contestator || dec.autoritate_contractanta) && (
-                        <span className="text-[10px] text-slate-400 ml-1">
-                          {dec.contestator && dec.autoritate_contractanta
-                            ? `${dec.contestator} vs. ${dec.autoritate_contractanta}`
-                            : dec.contestator || dec.autoritate_contractanta}
+                      {critiqueDesc && (
+                        <span className="text-[10px] text-slate-400 truncate max-w-[400px]">
+                          {critiqueDesc}
                         </span>
                       )}
                     </div>
                   </div>
+
+                  {/* Right action: Eye icon */}
+                  <div className="flex items-center justify-center px-5 border-l border-slate-100 group-hover:border-blue-100 transition-colors shrink-0">
+                    <Eye size={22} className="text-slate-300 group-hover:text-blue-500 transition-colors" />
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
 
             {apiDecisions.length === 0 && (
               <div className="text-center py-20 text-slate-400 flex flex-col items-center">
@@ -1186,13 +1227,14 @@ const App = () => {
           )}
         </div>
 
-        <div className="bg-white p-3 border-t border-slate-200 text-xs text-slate-500 flex justify-between items-center px-6">
-          <span>Pagina {apiDecisionsPage} din {totalPages || 1} ({apiDecisionsTotal} decizii total)</span>
-          <div className="flex items-center gap-2">
+        {/* Pagination */}
+        <div className="bg-white px-6 py-3 border-t border-slate-200 text-xs text-slate-500 flex justify-between items-center shrink-0">
+          <span className="font-medium">Pagina {apiDecisionsPage} din {totalPages || 1} <span className="text-slate-400">({apiDecisionsTotal.toLocaleString()} decizii)</span></span>
+          <div className="flex items-center gap-1.5">
             <button
               onClick={() => goToPage(apiDecisionsPage - 1)}
               disabled={apiDecisionsPage <= 1}
-              className="px-3 py-1 rounded border border-slate-200 hover:bg-slate-50 disabled:opacity-30 disabled:cursor-not-allowed text-xs font-medium"
+              className="px-3 py-1.5 rounded-lg border border-slate-200 hover:bg-slate-50 disabled:opacity-30 disabled:cursor-not-allowed text-xs font-medium transition"
             >
               Anterior
             </button>
@@ -1211,10 +1253,10 @@ const App = () => {
                 <button
                   key={page}
                   onClick={() => goToPage(page)}
-                  className={`w-7 h-7 rounded text-xs font-medium ${
+                  className={`w-8 h-8 rounded-lg text-xs font-medium transition ${
                     page === apiDecisionsPage
-                      ? 'bg-blue-500 text-white'
-                      : 'border border-slate-200 hover:bg-slate-50'
+                      ? 'bg-blue-600 text-white shadow-sm'
+                      : 'border border-slate-200 hover:bg-slate-50 text-slate-600'
                   }`}
                 >
                   {page}
@@ -1224,14 +1266,15 @@ const App = () => {
             <button
               onClick={() => goToPage(apiDecisionsPage + 1)}
               disabled={apiDecisionsPage >= totalPages}
-              className="px-3 py-1 rounded border border-slate-200 hover:bg-slate-50 disabled:opacity-30 disabled:cursor-not-allowed text-xs font-medium"
+              className="px-3 py-1.5 rounded-lg border border-slate-200 hover:bg-slate-50 disabled:opacity-30 disabled:cursor-not-allowed text-xs font-medium transition"
             >
               Următor
             </button>
           </div>
-          <span className="text-green-600 font-medium">
-            Database: Connected
-          </span>
+          <div className="flex items-center gap-1.5 text-emerald-600 font-medium">
+            <div className="w-1.5 h-1.5 rounded-full bg-emerald-500"></div>
+            Connected
+          </div>
         </div>
       </div>
     );

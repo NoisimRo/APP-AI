@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.logging import get_logger
 from app.db.session import get_session, is_db_available
-from app.models.decision import DecizieCNSC, NomenclatorCPV
+from app.models.decision import DecizieCNSC, ArgumentareCritica, NomenclatorCPV
 
 router = APIRouter()
 logger = get_logger(__name__)
@@ -56,6 +56,7 @@ class DecisionSummary(BaseModel):
     contestator: str | None
     autoritate_contractanta: str | None
     rezumat: str | None = None
+    argumentatie_cnsc_snippet: str | None = None
 
 
 class DecisionListResponse(BaseModel):
@@ -142,6 +143,26 @@ async def list_decisions(
     result = await session.execute(query)
     decisions_db = result.scalars().all()
 
+    # Fetch first argumentatie_cnsc snippet for each decision (batch)
+    decision_ids = [d.id for d in decisions_db]
+    arg_snippets: dict[str, str] = {}
+    if decision_ids:
+        arg_query = (
+            select(
+                ArgumentareCritica.decizie_id,
+                func.min(ArgumentareCritica.argumentatie_cnsc).label("snippet"),
+            )
+            .where(
+                ArgumentareCritica.decizie_id.in_(decision_ids),
+                ArgumentareCritica.argumentatie_cnsc.isnot(None),
+            )
+            .group_by(ArgumentareCritica.decizie_id)
+        )
+        arg_result = await session.execute(arg_query)
+        for row in arg_result:
+            text = row.snippet or ""
+            arg_snippets[row.decizie_id] = (text[:250] + "...") if len(text) > 250 else text
+
     # Map to response model
     decisions = [
         DecisionSummary(
@@ -159,6 +180,7 @@ async def list_decisions(
             contestator=d.contestator,
             autoritate_contractanta=d.autoritate_contractanta,
             rezumat=(d.text_integral[:300] + "...") if d.text_integral and len(d.text_integral) > 300 else d.text_integral,
+            argumentatie_cnsc_snippet=arg_snippets.get(d.id),
         )
         for d in decisions_db
     ]
