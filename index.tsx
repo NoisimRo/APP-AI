@@ -204,6 +204,20 @@ const formatMarkdown = (text: string): string => {
     .replace(/$/, '</p>');
 };
 
+// Character counter for text inputs
+const CharCounter = ({ value, maxLength }: { value: string; maxLength: number }) => {
+  const len = value.length;
+  const words = value.trim() ? value.trim().split(/\s+/).length : 0;
+  const pct = len / maxLength;
+  const color = pct > 1 ? 'text-red-600 font-bold' : pct > 0.9 ? 'text-amber-600' : 'text-slate-400';
+  return (
+    <div className={`text-xs mt-1 flex justify-end gap-2 ${color}`}>
+      <span>{words} cuv.</span>
+      <span>{len.toLocaleString()} / {maxLength.toLocaleString()} car.{pct > 1 ? ' — limită depășită!' : ''}</span>
+    </div>
+  );
+};
+
 // --- Components ---
 
 const SidebarItem = ({ 
@@ -1256,30 +1270,33 @@ const App = () => {
           <div>
             <label className="block text-xs font-bold text-slate-700 uppercase mb-2">Situația de Fapt</label>
             <textarea
-              className="w-full p-3 border border-slate-300 rounded-lg text-sm h-32 focus:ring-2 focus:ring-blue-500 outline-none transition shadow-sm"
+              className={`w-full p-3 border rounded-lg text-sm h-32 focus:ring-2 focus:ring-blue-500 outline-none transition shadow-sm ${drafterContext.facts.length > 200000 ? 'border-red-400 bg-red-50' : 'border-slate-300'}`}
               placeholder="Descrie cronologia evenimentelor sau încarcă un document..."
               value={drafterContext.facts}
               onChange={(e) => setDrafterContext({...drafterContext, facts: e.target.value})}
             />
+            <CharCounter value={drafterContext.facts} maxLength={200000} />
           </div>
           <div>
             <label className="block text-xs font-bold text-slate-700 uppercase mb-2">Argumentele Autorității</label>
-            <textarea 
-              className="w-full p-3 border border-slate-300 rounded-lg text-sm h-32 focus:ring-2 focus:ring-blue-500 outline-none transition shadow-sm"
+            <textarea
+              className={`w-full p-3 border rounded-lg text-sm h-32 focus:ring-2 focus:ring-blue-500 outline-none transition shadow-sm ${drafterContext.authorityArgs.length > 200000 ? 'border-red-400 bg-red-50' : 'border-slate-300'}`}
               placeholder="Ce motive a invocat autoritatea pentru respingere?"
               value={drafterContext.authorityArgs}
               onChange={(e) => setDrafterContext({...drafterContext, authorityArgs: e.target.value})}
             />
+            <CharCounter value={drafterContext.authorityArgs} maxLength={200000} />
           </div>
           <div>
             <label className="block text-xs font-bold text-slate-700 uppercase mb-2">Temei Legal</label>
-            <input 
+            <input
               type="text"
-              className="w-full p-3 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none transition shadow-sm"
+              className={`w-full p-3 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none transition shadow-sm ${drafterContext.legalGrounds.length > 50000 ? 'border-red-400 bg-red-50' : 'border-slate-300'}`}
               placeholder="Ex: Art. 215 Legea 98/2016"
               value={drafterContext.legalGrounds}
               onChange={(e) => setDrafterContext({...drafterContext, legalGrounds: e.target.value})}
             />
+            <CharCounter value={drafterContext.legalGrounds} maxLength={50000} />
           </div>
           
           <button 
@@ -1448,11 +1465,12 @@ const App = () => {
             <div>
               <label className="block text-xs font-bold text-slate-700 uppercase mb-2">Tema / Subiectul</label>
               <textarea
-                className="w-full p-3 border border-slate-300 rounded-lg text-sm h-24 focus:ring-2 focus:ring-amber-500 outline-none transition shadow-sm"
+                className={`w-full p-3 border rounded-lg text-sm h-24 focus:ring-2 focus:ring-amber-500 outline-none transition shadow-sm ${trainingTema.length > 20000 ? 'border-red-400 bg-red-50' : 'border-slate-300'}`}
                 placeholder="Ex: Evaluarea ofertelor în procedura de licitație deschisă, Termenele de contestare, Criteriul prețul cel mai scăzut vs. cel mai bun raport calitate-preț..."
                 value={trainingTema}
                 onChange={(e) => setTrainingTema(e.target.value)}
               />
+              <CharCounter value={trainingTema} maxLength={20000} />
             </div>
 
             {/* Tip material */}
@@ -1529,12 +1547,15 @@ const App = () => {
                 Context suplimentar (opțional)
               </button>
               {trainingShowContext && (
-                <textarea
-                  className="w-full p-3 border border-slate-300 rounded-lg text-sm h-20 focus:ring-2 focus:ring-amber-500 outline-none transition shadow-sm mt-2"
-                  placeholder="Instrucțiuni adiționale pentru generare..."
-                  value={trainingContext}
-                  onChange={(e) => setTrainingContext(e.target.value)}
-                />
+                <div>
+                  <textarea
+                    className={`w-full p-3 border rounded-lg text-sm h-20 focus:ring-2 focus:ring-amber-500 outline-none transition shadow-sm mt-2 ${trainingContext.length > 50000 ? 'border-red-400 bg-red-50' : 'border-slate-300'}`}
+                    placeholder="Instrucțiuni adiționale pentru generare..."
+                    value={trainingContext}
+                    onChange={(e) => setTrainingContext(e.target.value)}
+                  />
+                  <CharCounter value={trainingContext} maxLength={50000} />
+                </div>
               )}
             </div>
 
@@ -1734,22 +1755,25 @@ const App = () => {
         <div ref={chatEndRef} />
       </div>
       <div className="p-4 bg-white border-t border-slate-200">
-        <div className="flex gap-2 max-w-4xl mx-auto relative">
-          <input 
-            type="text" 
-            className="flex-1 border border-slate-300 rounded-xl pl-5 pr-12 py-4 focus:ring-2 focus:ring-blue-500 outline-none shadow-sm"
-            placeholder="Scrie mesajul tău..."
-            value={chatInput}
-            onChange={(e) => setChatInput(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && handleChat()}
-          />
-          <button 
-            onClick={handleChat}
-            disabled={isLoading || !chatInput.trim()}
-            className="absolute right-2 top-2 bottom-2 bg-blue-600 text-white px-4 rounded-lg hover:bg-blue-700 disabled:opacity-50 transition flex items-center justify-center"
-          >
-            <Send size={18} />
-          </button>
+        <div className="max-w-4xl mx-auto">
+          <div className="flex gap-2 relative">
+            <input
+              type="text"
+              className={`flex-1 border rounded-xl pl-5 pr-12 py-4 focus:ring-2 focus:ring-blue-500 outline-none shadow-sm ${chatInput.length > 100000 ? 'border-red-400 bg-red-50' : 'border-slate-300'}`}
+              placeholder="Scrie mesajul tău..."
+              value={chatInput}
+              onChange={(e) => setChatInput(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && handleChat()}
+            />
+            <button
+              onClick={handleChat}
+              disabled={isLoading || !chatInput.trim()}
+              className="absolute right-2 top-2 bottom-2 bg-blue-600 text-white px-4 rounded-lg hover:bg-blue-700 disabled:opacity-50 transition flex items-center justify-center"
+            >
+              <Send size={18} />
+            </button>
+          </div>
+          {chatInput.length > 1000 && <CharCounter value={chatInput} maxLength={100000} />}
         </div>
         <p className="text-center text-xs text-slate-400 mt-2">Gemini Pro poate face greșeli. Verifică informațiile importante.</p>
       </div>
@@ -1805,11 +1829,12 @@ const App = () => {
                       Documentație Achiziție
                     </label>
                     <textarea
-                      className="w-full p-3 border border-slate-300 rounded-lg h-48 text-sm focus:ring-2 focus:ring-red-500 outline-none transition shadow-sm font-mono"
+                      className={`w-full p-3 border rounded-lg h-48 text-sm focus:ring-2 focus:ring-red-500 outline-none transition shadow-sm font-mono ${redFlagsText.length > 200000 ? 'border-red-400 bg-red-50' : 'border-slate-300'}`}
                       placeholder="Introduceți sau lipiți conținutul documentației..."
                       value={redFlagsText}
                       onChange={(e) => setRedFlagsText(e.target.value)}
                     />
+                    <CharCounter value={redFlagsText} maxLength={200000} />
                   </div>
                   <button
                     onClick={handleRedFlags}
@@ -2037,11 +2062,12 @@ const App = () => {
                 <div>
                   <label className="block text-xs font-bold text-slate-700 uppercase mb-2">Clauza Problematică</label>
                   <textarea
-                    className="w-full p-3 border border-slate-300 rounded-lg text-sm h-32 focus:ring-2 focus:ring-purple-500 outline-none transition shadow-sm"
+                    className={`w-full p-3 border rounded-lg text-sm h-32 focus:ring-2 focus:ring-purple-500 outline-none transition shadow-sm ${clarificationClause.length > 200000 ? 'border-red-400 bg-red-50' : 'border-slate-300'}`}
                     placeholder="Paste text din documentație sau încarcă un document..."
                     value={clarificationClause}
                     onChange={(e) => setClarificationClause(e.target.value)}
                   />
+                  <CharCounter value={clarificationClause} maxLength={200000} />
                 </div>
                 <button
                   onClick={handleClarification}
@@ -2109,11 +2135,12 @@ const App = () => {
                        </div>
                        <label className="text-sm font-bold text-slate-700 block mb-2">Subiect Memo</label>
                        <textarea
-                          className="w-full border border-slate-300 rounded-lg p-3 text-sm h-24 mb-3 focus:ring-2 focus:ring-teal-500 outline-none"
+                          className={`w-full border rounded-lg p-3 text-sm h-24 focus:ring-2 focus:ring-teal-500 outline-none ${memoTopic.length > 100000 ? 'border-red-400 bg-red-50' : 'border-slate-300'}`}
                           placeholder="Ex: Respingere ofertă sau încarcă document..."
                           value={memoTopic}
                           onChange={(e) => setMemoTopic(e.target.value)}
                        />
+                       <CharCounter value={memoTopic} maxLength={100000} />
                        <button
                           onClick={handleRAGMemo}
                           disabled={isLoading || !memoTopic.trim()}
