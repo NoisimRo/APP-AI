@@ -32,11 +32,16 @@ class TrainingGenerateRequest(BaseModel):
     tema: str = Field(..., min_length=3, max_length=20000)
     tip_material: Literal[
         "speta", "studiu_caz", "situational", "palarii", "dezbatere",
-        "quiz", "joc_rol", "erori", "comparativ", "cronologie"
+        "quiz", "joc_rol", "erori", "comparativ", "cronologie",
+        "program_formare"
     ] = "speta"
     nivel_dificultate: Literal["usor", "mediu", "dificil", "foarte_dificil"] = "mediu"
     lungime: Literal["scurt", "mediu", "lung", "extins"] = "mediu"
     context_suplimentar: str = Field(default="", max_length=50000)
+    public_tinta: str = Field(default="", max_length=5000, description="Target audience")
+    program_plan: str = Field(default="", max_length=50000, description="Training program plan for program_formare mode")
+    batch_index: int | None = Field(default=None, description="Current batch index (1-based)")
+    batch_total: int | None = Field(default=None, description="Total batch count")
 
 
 class TrainingExportRequest(BaseModel):
@@ -94,6 +99,10 @@ async def generate_material(
             nivel_dificultate=request.nivel_dificultate,
             lungime=request.lungime,
             context_suplimentar=request.context_suplimentar,
+            public_tinta=request.public_tinta,
+            program_plan=request.program_plan,
+            batch_index=request.batch_index,
+            batch_total=request.batch_total,
             session=session,
         )
 
@@ -133,6 +142,10 @@ async def generate_material_stream(
             nivel_dificultate=request.nivel_dificultate,
             lungime=request.lungime,
             context_suplimentar=request.context_suplimentar,
+            public_tinta=request.public_tinta,
+            program_plan=request.program_plan,
+            batch_index=request.batch_index,
+            batch_total=request.batch_total,
             session=session,
         )
 
@@ -144,6 +157,9 @@ async def generate_material_stream(
             "extins": 24576,   # 4 × ~1500 words
         }
         max_tokens = token_budgets.get(request.lungime, 8192)
+        # Program formare needs much more tokens
+        if request.tip_material == "program_formare":
+            max_tokens = max(max_tokens, 32768)
 
         return await create_sse_response(
             llm=generator.llm,

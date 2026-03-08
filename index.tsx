@@ -336,6 +336,14 @@ const App = () => {
   const [trainingShowContext, setTrainingShowContext] = useState(false);
   const [trainingEditing, setTrainingEditing] = useState(false);
   const [trainingEditedResult, setTrainingEditedResult] = useState<string | null>(null);
+  const [trainingPublicTinta, setTrainingPublicTinta] = useState("");
+  const [trainingMode, setTrainingMode] = useState<'individual' | 'batch' | 'program'>('individual');
+  const [trainingBatchCount, setTrainingBatchCount] = useState(3);
+  const [trainingBatchCustom, setTrainingBatchCustom] = useState(false);
+  const [trainingProgramPlan, setTrainingProgramPlan] = useState("");
+  const [uploadedDocTrainingContext, setUploadedDocTrainingContext] = useState<{name: string, text: string} | null>(null);
+  const [uploadedDocTrainingPlan, setUploadedDocTrainingPlan] = useState<{name: string, text: string} | null>(null);
+  const [trainingBatchProgress, setTrainingBatchProgress] = useState<{current: number, total: number, results: string[]} | null>(null);
 
   // Decision Viewer State
   const [viewingDecision, setViewingDecision] = useState<any | null>(null);
@@ -1394,8 +1402,80 @@ const App = () => {
     cronologie: { name: "Cronologie procedurală", desc: "Ordonarea pașilor unei proceduri" },
   };
 
+  const buildTrainingRequestBody = () => ({
+    tema: trainingTema,
+    tip_material: trainingTip,
+    nivel_dificultate: trainingNivel,
+    lungime: trainingLungime,
+    context_suplimentar: trainingContext,
+    public_tinta: trainingPublicTinta || undefined,
+    program_plan: trainingMode === 'program' ? trainingProgramPlan : undefined,
+  });
+
   const handleTrainingGenerate = async () => {
     if (!trainingTema.trim() || trainingLoading) return;
+
+    // Program mode — LLM generates the full program
+    if (trainingMode === 'program') {
+      setTrainingLoading(true);
+      setTrainingResult("");
+      setTrainingMeta(null);
+      setTrainingActiveTab('material');
+      setTrainingEditing(false);
+      setTrainingEditedResult(null);
+
+      await fetchStream(
+        '/api/v1/training/generate/stream',
+        {
+          ...buildTrainingRequestBody(),
+          tip_material: 'program_formare',
+        },
+        (text) => setTrainingResult(prev => prev + text),
+        (meta) => { setTrainingMeta(meta); setTrainingLoading(false); },
+        (error) => { setTrainingResult(prev => prev + `\n\n**Eroare:** ${error}`); setTrainingLoading(false); },
+      );
+      return;
+    }
+
+    // Batch mode — generate multiple materials sequentially
+    if (trainingMode === 'batch' && trainingBatchCount > 1) {
+      setTrainingLoading(true);
+      setTrainingResult("");
+      setTrainingMeta(null);
+      setTrainingActiveTab('material');
+      setTrainingEditing(false);
+      setTrainingEditedResult(null);
+      const results: string[] = [];
+      setTrainingBatchProgress({ current: 0, total: trainingBatchCount, results: [] });
+
+      for (let i = 0; i < trainingBatchCount; i++) {
+        setTrainingBatchProgress(prev => prev ? { ...prev, current: i + 1 } : null);
+        let materialText = '';
+        await fetchStream(
+          '/api/v1/training/generate/stream',
+          {
+            ...buildTrainingRequestBody(),
+            batch_index: i + 1,
+            batch_total: trainingBatchCount,
+          },
+          (text) => { materialText += text; },
+          () => {},
+          (error) => { materialText += `\n\n**Eroare:** ${error}`; },
+        );
+        results.push(materialText);
+        setTrainingBatchProgress(prev => prev ? { ...prev, results: [...results] } : null);
+      }
+
+      const combined = results.map((r, i) =>
+        `---\n\n# Material ${i + 1} din ${trainingBatchCount}\n\n${r}`
+      ).join('\n\n');
+      setTrainingResult(combined);
+      setTrainingBatchProgress(null);
+      setTrainingLoading(false);
+      return;
+    }
+
+    // Individual mode (default)
     setTrainingLoading(true);
     setTrainingResult("");
     setTrainingMeta(null);
@@ -1405,22 +1485,10 @@ const App = () => {
 
     await fetchStream(
       '/api/v1/training/generate/stream',
-      {
-        tema: trainingTema,
-        tip_material: trainingTip,
-        nivel_dificultate: trainingNivel,
-        lungime: trainingLungime,
-        context_suplimentar: trainingContext,
-      },
+      buildTrainingRequestBody(),
       (text) => setTrainingResult(prev => prev + text),
-      (meta) => {
-        setTrainingMeta(meta);
-        setTrainingLoading(false);
-      },
-      (error) => {
-        setTrainingResult(prev => prev + `\n\n**Eroare:** ${error}`);
-        setTrainingLoading(false);
-      },
+      (meta) => { setTrainingMeta(meta); setTrainingLoading(false); },
+      (error) => { setTrainingResult(prev => prev + `\n\n**Eroare:** ${error}`); setTrainingLoading(false); },
     );
   };
 
@@ -1504,31 +1572,144 @@ const App = () => {
           </h2>
 
           <div className="space-y-5">
+            {/* Mode selector */}
+            <div>
+              <label className="block text-xs font-bold text-slate-700 uppercase mb-2">Mod Generare</label>
+              <div className="grid grid-cols-3 gap-2">
+                {[
+                  { key: 'individual' as const, label: 'Individual', desc: '1 material' },
+                  { key: 'batch' as const, label: 'Lot (Batch)', desc: 'Mai multe' },
+                  { key: 'program' as const, label: 'Program Formare', desc: 'Complet' },
+                ].map(({ key, label, desc }) => (
+                  <button
+                    key={key}
+                    onClick={() => setTrainingMode(key)}
+                    className={`py-2 px-2 rounded-lg text-xs font-medium transition border text-center ${
+                      trainingMode === key
+                        ? 'bg-amber-600 text-white border-amber-600 shadow-md'
+                        : 'bg-white text-slate-600 border-slate-300 hover:border-amber-400'
+                    }`}
+                  >
+                    <div>{label}</div>
+                    <div className="opacity-70 text-[10px]">{desc}</div>
+                  </button>
+                ))}
+              </div>
+            </div>
+
             {/* Tema */}
             <div>
-              <label className="block text-xs font-bold text-slate-700 uppercase mb-2">Tema / Subiectul</label>
+              <label className="block text-xs font-bold text-slate-700 uppercase mb-2">
+                {trainingMode === 'program' ? 'Tema Programului de Formare' : 'Tema / Subiectul'}
+              </label>
               <textarea
                 className={`w-full p-3 border rounded-lg text-sm h-24 focus:ring-2 focus:ring-amber-500 outline-none transition shadow-sm ${trainingTema.length > 20000 ? 'border-red-400 bg-red-50' : 'border-slate-300'}`}
-                placeholder="Ex: Evaluarea ofertelor în procedura de licitație deschisă, Termenele de contestare, Criteriul prețul cel mai scăzut vs. cel mai bun raport calitate-preț..."
+                placeholder={trainingMode === 'program'
+                  ? "Ex: Program de formare pentru evaluarea ofertelor — 4 module, 2 zile..."
+                  : "Ex: Evaluarea ofertelor în procedura de licitație deschisă, Termenele de contestare, Criteriul prețul cel mai scăzut vs. cel mai bun raport calitate-preț..."}
                 value={trainingTema}
                 onChange={(e) => setTrainingTema(e.target.value)}
               />
               <CharCounter value={trainingTema} maxLength={20000} />
             </div>
 
-            {/* Tip material */}
+            {/* Public țintă (opțional) */}
             <div>
-              <label className="block text-xs font-bold text-slate-700 uppercase mb-2">Tip Material</label>
-              <select
-                className="w-full p-3 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-amber-500 outline-none transition shadow-sm bg-white"
-                value={trainingTip}
-                onChange={(e) => setTrainingTip(e.target.value)}
-              >
-                {Object.entries(trainingMaterialTypes).map(([key, val]) => (
-                  <option key={key} value={key}>{val.name} — {val.desc}</option>
-                ))}
-              </select>
+              <label className="block text-xs font-bold text-slate-700 uppercase mb-2">Public Țintă (opțional)</label>
+              <textarea
+                className={`w-full p-3 border rounded-lg text-sm h-16 focus:ring-2 focus:ring-amber-500 outline-none transition shadow-sm ${trainingPublicTinta.length > 5000 ? 'border-red-400 bg-red-50' : 'border-slate-300'}`}
+                placeholder="Ex: Reprezentanți autorități contractante, Reprezentanți operatori economici, Reprezentanți autoritatea de audit / Curtea de Conturi / organe de control, Reprezentanți CNSC, Consultanți achiziții publice..."
+                value={trainingPublicTinta}
+                onChange={(e) => setTrainingPublicTinta(e.target.value)}
+              />
+              {trainingPublicTinta.length > 100 && <CharCounter value={trainingPublicTinta} maxLength={5000} />}
             </div>
+
+            {/* Tip material — hidden in program mode (LLM decides) */}
+            {trainingMode !== 'program' && (
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase mb-2">Tip Material</label>
+                <select
+                  className="w-full p-3 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-amber-500 outline-none transition shadow-sm bg-white"
+                  value={trainingTip}
+                  onChange={(e) => setTrainingTip(e.target.value)}
+                >
+                  {Object.entries(trainingMaterialTypes).map(([key, val]) => (
+                    <option key={key} value={key}>{val.name} — {val.desc}</option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            {/* Batch count — only in batch mode */}
+            {trainingMode === 'batch' && (
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase mb-2">Număr Materiale</label>
+                <div className="flex items-center gap-2">
+                  {!trainingBatchCustom ? (
+                    <select
+                      className="flex-1 p-3 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-amber-500 outline-none transition shadow-sm bg-white"
+                      value={trainingBatchCount}
+                      onChange={(e) => {
+                        const v = e.target.value;
+                        if (v === 'custom') { setTrainingBatchCustom(true); }
+                        else setTrainingBatchCount(Number(v));
+                      }}
+                    >
+                      {Array.from({ length: 10 }, (_, i) => i + 1).map(n => (
+                        <option key={n} value={n}>{n} {n === 1 ? 'material' : 'materiale'}</option>
+                      ))}
+                      <option value="custom">Altă valoare...</option>
+                    </select>
+                  ) : (
+                    <div className="flex-1 flex items-center gap-2">
+                      <input
+                        type="number"
+                        min={1}
+                        max={50}
+                        className="flex-1 p-3 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-amber-500 outline-none transition shadow-sm"
+                        value={trainingBatchCount}
+                        onChange={(e) => setTrainingBatchCount(Math.max(1, Math.min(50, Number(e.target.value) || 1)))}
+                      />
+                      <button
+                        onClick={() => setTrainingBatchCustom(false)}
+                        className="text-xs text-amber-600 hover:text-amber-800 font-medium whitespace-nowrap"
+                      >
+                        ← Lista
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Program plan — only in program mode */}
+            {trainingMode === 'program' && (
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase mb-2">Plan / Program de Formare (opțional)</label>
+                <div className="bg-slate-50 p-3 rounded-lg border border-dashed border-slate-300 mb-2">
+                  <input
+                    type="file"
+                    accept=".txt,.md,.pdf"
+                    onChange={(e) => handleDocumentUpload(e, (text) => setTrainingProgramPlan(text), setUploadedDocTrainingPlan)}
+                    className="block w-full text-sm text-slate-600 file:mr-4 file:py-1 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-amber-50 file:text-amber-700 hover:file:bg-amber-100"
+                  />
+                  {uploadedDocTrainingPlan && (
+                    <p className="text-xs text-green-600 mt-1">
+                      ✓ {uploadedDocTrainingPlan.name} ({uploadedDocTrainingPlan.text.length.toLocaleString()} car.)
+                    </p>
+                  )}
+                </div>
+                <textarea
+                  className={`w-full p-3 border rounded-lg text-sm h-24 focus:ring-2 focus:ring-amber-500 outline-none transition shadow-sm ${trainingProgramPlan.length > 50000 ? 'border-red-400 bg-red-50' : 'border-slate-300'}`}
+                  placeholder="Lipește sau descrie programul de formare: module, tematici, competențe vizate, durată..."
+                  value={trainingProgramPlan}
+                  onChange={(e) => setTrainingProgramPlan(e.target.value)}
+                />
+                {trainingProgramPlan.length > 100 && <CharCounter value={trainingProgramPlan} maxLength={50000} />}
+                <p className="text-[10px] text-slate-400 mt-1">LLM-ul va alege automat cele mai potrivite tipuri de materiale pentru fiecare tematică din program.</p>
+              </div>
+            )}
 
             {/* Nivel dificultate */}
             <div>
@@ -1591,9 +1772,22 @@ const App = () => {
               </button>
               {trainingShowContext && (
                 <div>
+                  <div className="bg-slate-50 p-3 rounded-lg border border-dashed border-slate-300 mt-2 mb-2">
+                    <input
+                      type="file"
+                      accept=".txt,.md,.pdf"
+                      onChange={(e) => handleDocumentUpload(e, (text) => setTrainingContext(text), setUploadedDocTrainingContext)}
+                      className="block w-full text-sm text-slate-600 file:mr-4 file:py-1 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-amber-50 file:text-amber-700 hover:file:bg-amber-100"
+                    />
+                    {uploadedDocTrainingContext && (
+                      <p className="text-xs text-green-600 mt-1">
+                        ✓ {uploadedDocTrainingContext.name} ({uploadedDocTrainingContext.text.length.toLocaleString()} car.)
+                      </p>
+                    )}
+                  </div>
                   <textarea
-                    className={`w-full p-3 border rounded-lg text-sm h-20 focus:ring-2 focus:ring-amber-500 outline-none transition shadow-sm mt-2 ${trainingContext.length > 50000 ? 'border-red-400 bg-red-50' : 'border-slate-300'}`}
-                    placeholder="Instrucțiuni adiționale pentru generare..."
+                    className={`w-full p-3 border rounded-lg text-sm h-20 focus:ring-2 focus:ring-amber-500 outline-none transition shadow-sm ${trainingContext.length > 50000 ? 'border-red-400 bg-red-50' : 'border-slate-300'}`}
+                    placeholder="Instrucțiuni adiționale, restricții, focus pe anumite aspecte..."
                     value={trainingContext}
                     onChange={(e) => setTrainingContext(e.target.value)}
                   />
@@ -1611,12 +1805,16 @@ const App = () => {
               {trainingLoading ? (
                 <>
                   <Loader2 className="animate-spin" size={18} />
-                  Generare în curs...
+                  {trainingBatchProgress
+                    ? `Material ${trainingBatchProgress.current} / ${trainingBatchProgress.total}...`
+                    : 'Generare în curs...'}
                 </>
               ) : (
                 <>
                   <GraduationCap size={18} />
-                  Generează Material
+                  {trainingMode === 'batch' ? `Generează ${trainingBatchCount} Materiale` :
+                   trainingMode === 'program' ? 'Generează Program Complet' :
+                   'Generează Material'}
                 </>
               )}
             </button>
