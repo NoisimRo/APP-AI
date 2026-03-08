@@ -157,9 +157,9 @@ async def generate_material_stream(
             "extins": 24576,   # 4 × ~1500 words
         }
         max_tokens = token_budgets.get(request.lungime, 8192)
-        # Program formare needs much more tokens
+        # Program formare needs much more tokens — it's a full multi-module program
         if request.tip_material == "program_formare":
-            max_tokens = max(max_tokens, 32768)
+            max_tokens = 65536
 
         return await create_sse_response(
             llm=generator.llm,
