@@ -30,12 +30,14 @@ import {
   X,
   Eye,
   ChevronDown,
-  ChevronUp
+  ChevronUp,
+  GraduationCap,
+  Download
 } from "lucide-react";
 
 // --- Types ---
 
-type AppMode = 'dashboard' | 'datalake' | 'drafter' | 'redflags' | 'chat' | 'clarification' | 'rag';
+type AppMode = 'dashboard' | 'datalake' | 'drafter' | 'redflags' | 'chat' | 'clarification' | 'rag' | 'training';
 
 interface UploadedFile {
   id: string;
@@ -243,6 +245,18 @@ const App = () => {
   const [uploadedDocRag, setUploadedDocRag] = useState<{name: string, text: string} | null>(null);
   const [uploadedDocRedFlags, setUploadedDocRedFlags] = useState<{name: string, text: string} | null>(null);
   const [redFlagsProgress, setRedFlagsProgress] = useState("");
+
+  // Training States
+  const [trainingTema, setTrainingTema] = useState("");
+  const [trainingTip, setTrainingTip] = useState("speta");
+  const [trainingNivel, setTrainingNivel] = useState("mediu");
+  const [trainingLungime, setTrainingLungime] = useState("mediu");
+  const [trainingContext, setTrainingContext] = useState("");
+  const [trainingResult, setTrainingResult] = useState<string>("");
+  const [trainingLoading, setTrainingLoading] = useState(false);
+  const [trainingActiveTab, setTrainingActiveTab] = useState<'material' | 'rezolvare' | 'note'>('material');
+  const [trainingMeta, setTrainingMeta] = useState<any>(null);
+  const [trainingShowContext, setTrainingShowContext] = useState(false);
 
   // Decision Viewer State
   const [viewingDecision, setViewingDecision] = useState<any | null>(null);
@@ -759,6 +773,11 @@ const App = () => {
            <SidebarItem icon={Search} label="Clarificări" active={mode === 'clarification'} onClick={() => setMode('clarification')} />
            <SidebarItem icon={BookOpen} label="Jurisprudență RAG" active={mode === 'rag'} onClick={() => setMode('rag')} />
         </div>
+
+        <div>
+           <div className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3 px-2">Formare</div>
+           <SidebarItem icon={GraduationCap} label="TrainingAP" active={mode === 'training'} onClick={() => setMode('training')} />
+        </div>
       </nav>
 
       <div className="p-4 border-t border-slate-800 bg-slate-900/50">
@@ -1259,6 +1278,345 @@ const App = () => {
     </div>
   );
 
+  const trainingMaterialTypes: Record<string, { name: string; desc: string }> = {
+    speta: { name: "Speță practică", desc: "Scenariu realist cu analiză juridică" },
+    studiu_caz: { name: "Studiu de caz", desc: "Analiză aprofundată, multiple perspective" },
+    situational: { name: "Întrebări situaționale", desc: "Scenarii decizionale 'Ce ați face dacă...'" },
+    palarii: { name: "Pălăriile Gânditoare", desc: "6 perspective (de Bono)" },
+    dezbatere: { name: "Dezbatere Pro & Contra", desc: "Argumente pro/contra cu temei legal" },
+    quiz: { name: "Quiz cu variante", desc: "Întrebări cu răspunsuri multiple A/B/C/D" },
+    joc_rol: { name: "Joc de rol", desc: "Scenarii cu roluri și instrucțiuni" },
+    erori: { name: "Identificare erori", desc: "Document cu greșeli de identificat" },
+    comparativ: { name: "Analiză comparativă", desc: "Compararea a două abordări" },
+    cronologie: { name: "Cronologie procedurală", desc: "Ordonarea pașilor unei proceduri" },
+  };
+
+  const handleTrainingGenerate = async () => {
+    if (!trainingTema.trim() || trainingLoading) return;
+    setTrainingLoading(true);
+    setTrainingResult("");
+    setTrainingMeta(null);
+    setTrainingActiveTab('material');
+
+    await fetchStream(
+      '/api/v1/training/generate/stream',
+      {
+        tema: trainingTema,
+        tip_material: trainingTip,
+        nivel_dificultate: trainingNivel,
+        lungime: trainingLungime,
+        context_suplimentar: trainingContext,
+      },
+      (text) => setTrainingResult(prev => prev + text),
+      (meta) => {
+        setTrainingMeta(meta);
+        setTrainingLoading(false);
+      },
+      (error) => {
+        setTrainingResult(prev => prev + `\n\n**Eroare:** ${error}`);
+        setTrainingLoading(false);
+      },
+    );
+  };
+
+  const handleTrainingExport = async (format: 'docx' | 'pdf' | 'md') => {
+    if (!trainingResult) return;
+    try {
+      const response = await fetch('/api/v1/training/export', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          content: trainingResult,
+          format,
+          titlu: `TrainingAP - ${trainingMaterialTypes[trainingTip]?.name || trainingTip}`,
+          metadata: trainingMeta,
+        }),
+      });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      const ext = format === 'docx' ? 'docx' : format === 'pdf' ? 'pdf' : 'md';
+      a.download = `TrainingAP_${trainingTip}_${trainingNivel}.${ext}`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error('Export failed:', err);
+    }
+  };
+
+  const parseTrainingSections = (text: string) => {
+    const sections: Record<string, string> = {};
+    let currentKey: string | null = null;
+    let currentLines: string[] = [];
+
+    for (const line of text.split('\n')) {
+      const lower = line.trim().toLowerCase();
+      if (lower.startsWith('## enun') || lower.startsWith('## cerin')) {
+        if (currentKey) sections[currentKey] = currentLines.join('\n').trim();
+        currentKey = lower.startsWith('## enun') ? 'material' : 'material';
+        if (lower.startsWith('## cerin')) currentKey = 'material';
+        // Keep Enunț and Cerințe together in "material" tab
+        currentLines.push(line);
+        continue;
+      } else if (lower.startsWith('## rezolv')) {
+        if (currentKey) sections[currentKey] = currentLines.join('\n').trim();
+        currentKey = 'rezolvare';
+        currentLines = [];
+        continue;
+      } else if (lower.startsWith('## note')) {
+        if (currentKey) sections[currentKey] = currentLines.join('\n').trim();
+        currentKey = 'note';
+        currentLines = [];
+        continue;
+      }
+      currentLines.push(line);
+    }
+    if (currentKey) sections[currentKey] = currentLines.join('\n').trim();
+
+    // If no sections parsed, put everything in material
+    if (!sections.material && !sections.rezolvare && !sections.note) {
+      sections.material = text;
+    }
+
+    return sections;
+  };
+
+  const renderTraining = () => {
+    const sections = trainingResult ? parseTrainingSections(trainingResult) : {};
+    const activeContent = sections[trainingActiveTab] || '';
+
+    return (
+      <div className="h-full flex flex-col md:flex-row bg-white">
+        {/* Left panel — form */}
+        <div className="w-full md:w-1/3 border-r border-slate-200 p-6 overflow-y-auto bg-slate-50/50">
+          <h2 className="text-lg font-bold text-slate-800 mb-6 flex gap-2 items-center">
+            <GraduationCap className="text-amber-600" size={20}/>
+            TrainingAP — Materiale Didactice
+          </h2>
+
+          <div className="space-y-5">
+            {/* Tema */}
+            <div>
+              <label className="block text-xs font-bold text-slate-700 uppercase mb-2">Tema / Subiectul</label>
+              <textarea
+                className="w-full p-3 border border-slate-300 rounded-lg text-sm h-24 focus:ring-2 focus:ring-amber-500 outline-none transition shadow-sm"
+                placeholder="Ex: Evaluarea ofertelor în procedura de licitație deschisă, Termenele de contestare, Criteriul prețul cel mai scăzut vs. cel mai bun raport calitate-preț..."
+                value={trainingTema}
+                onChange={(e) => setTrainingTema(e.target.value)}
+              />
+            </div>
+
+            {/* Tip material */}
+            <div>
+              <label className="block text-xs font-bold text-slate-700 uppercase mb-2">Tip Material</label>
+              <select
+                className="w-full p-3 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-amber-500 outline-none transition shadow-sm bg-white"
+                value={trainingTip}
+                onChange={(e) => setTrainingTip(e.target.value)}
+              >
+                {Object.entries(trainingMaterialTypes).map(([key, val]) => (
+                  <option key={key} value={key}>{val.name} — {val.desc}</option>
+                ))}
+              </select>
+            </div>
+
+            {/* Nivel dificultate */}
+            <div>
+              <label className="block text-xs font-bold text-slate-700 uppercase mb-2">Nivel Dificultate</label>
+              <div className="grid grid-cols-2 gap-2">
+                {[
+                  { key: 'usor', label: 'Ușor' },
+                  { key: 'mediu', label: 'Mediu' },
+                  { key: 'dificil', label: 'Dificil' },
+                  { key: 'foarte_dificil', label: 'Foarte Dificil' },
+                ].map(({ key, label }) => (
+                  <button
+                    key={key}
+                    onClick={() => setTrainingNivel(key)}
+                    className={`py-2 px-3 rounded-lg text-sm font-medium transition border ${
+                      trainingNivel === key
+                        ? 'bg-amber-600 text-white border-amber-600 shadow-md'
+                        : 'bg-white text-slate-600 border-slate-300 hover:border-amber-400 hover:text-amber-700'
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Lungime */}
+            <div>
+              <label className="block text-xs font-bold text-slate-700 uppercase mb-2">Lungime Material</label>
+              <div className="grid grid-cols-2 gap-2">
+                {[
+                  { key: 'scurt', label: 'Scurt', desc: '~200 cuv.' },
+                  { key: 'mediu', label: 'Mediu', desc: '~400 cuv.' },
+                  { key: 'lung', label: 'Lung', desc: '~800 cuv.' },
+                  { key: 'extins', label: 'Extins', desc: '~1500 cuv.' },
+                ].map(({ key, label, desc }) => (
+                  <button
+                    key={key}
+                    onClick={() => setTrainingLungime(key)}
+                    className={`py-2 px-3 rounded-lg text-xs font-medium transition border ${
+                      trainingLungime === key
+                        ? 'bg-amber-600 text-white border-amber-600 shadow-md'
+                        : 'bg-white text-slate-600 border-slate-300 hover:border-amber-400 hover:text-amber-700'
+                    }`}
+                  >
+                    {label} <span className="opacity-70">({desc})</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Context suplimentar (collapsible) */}
+            <div>
+              <button
+                onClick={() => setTrainingShowContext(!trainingShowContext)}
+                className="flex items-center gap-2 text-xs font-bold text-slate-500 uppercase hover:text-slate-700 transition"
+              >
+                {trainingShowContext ? <ChevronUp size={14}/> : <ChevronDown size={14}/>}
+                Context suplimentar (opțional)
+              </button>
+              {trainingShowContext && (
+                <textarea
+                  className="w-full p-3 border border-slate-300 rounded-lg text-sm h-20 focus:ring-2 focus:ring-amber-500 outline-none transition shadow-sm mt-2"
+                  placeholder="Instrucțiuni adiționale pentru generare..."
+                  value={trainingContext}
+                  onChange={(e) => setTrainingContext(e.target.value)}
+                />
+              )}
+            </div>
+
+            {/* Generate button */}
+            <button
+              onClick={handleTrainingGenerate}
+              disabled={trainingLoading || !trainingTema.trim()}
+              className="w-full bg-amber-600 text-white py-4 rounded-xl font-medium hover:bg-amber-700 transition flex justify-center items-center gap-2 shadow-lg hover:shadow-xl mt-2 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {trainingLoading ? (
+                <>
+                  <Loader2 className="animate-spin" size={18} />
+                  Generare în curs...
+                </>
+              ) : (
+                <>
+                  <GraduationCap size={18} />
+                  Generează Material
+                </>
+              )}
+            </button>
+          </div>
+        </div>
+
+        {/* Right panel — output */}
+        <div className="w-full md:w-2/3 flex flex-col overflow-hidden bg-white">
+          {trainingResult ? (
+            <>
+              {/* Toolbar */}
+              <div className="border-b border-slate-200 px-6 py-3 flex items-center justify-between bg-slate-50/50">
+                {/* Tabs */}
+                <div className="flex gap-1">
+                  {[
+                    { key: 'material' as const, label: 'Enunț & Cerințe' },
+                    { key: 'rezolvare' as const, label: 'Rezolvare' },
+                    { key: 'note' as const, label: 'Note Trainer' },
+                  ].map(({ key, label }) => (
+                    <button
+                      key={key}
+                      onClick={() => setTrainingActiveTab(key)}
+                      className={`px-4 py-2 rounded-lg text-sm font-medium transition ${
+                        trainingActiveTab === key
+                          ? 'bg-amber-600 text-white shadow-sm'
+                          : 'text-slate-600 hover:bg-slate-200'
+                      }`}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Export buttons */}
+                <div className="flex gap-2">
+                  {(['docx', 'pdf', 'md'] as const).map((fmt) => (
+                    <button
+                      key={fmt}
+                      onClick={() => handleTrainingExport(fmt)}
+                      disabled={trainingLoading}
+                      className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border border-slate-300 text-slate-600 hover:bg-slate-100 hover:border-slate-400 transition disabled:opacity-50"
+                    >
+                      <Download size={12} />
+                      {fmt.toUpperCase()}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Content */}
+              <div className="flex-1 overflow-y-auto p-8">
+                <div className="max-w-3xl mx-auto">
+                  {activeContent ? (
+                    <div
+                      className="prose prose-slate max-w-none leading-relaxed"
+                      dangerouslySetInnerHTML={{ __html: formatMarkdown(activeContent) }}
+                    />
+                  ) : trainingLoading ? (
+                    <div className="flex items-center gap-3 text-slate-500">
+                      <Loader2 className="animate-spin" size={18} />
+                      <span className="text-sm">Se generează materialul...</span>
+                    </div>
+                  ) : (
+                    <p className="text-slate-400 text-sm italic">Această secțiune nu a fost generată.</p>
+                  )}
+                </div>
+              </div>
+
+              {/* Footer — citations */}
+              {trainingMeta && (trainingMeta.jurisprudenta_citata?.length > 0 || trainingMeta.legislatie_citata?.length > 0) && (
+                <div className="border-t border-slate-200 px-6 py-3 bg-slate-50/50">
+                  <div className="flex flex-wrap gap-4">
+                    {trainingMeta.jurisprudenta_citata?.length > 0 && (
+                      <div>
+                        <span className="text-xs font-bold text-slate-500 uppercase mr-2">Jurisprudență:</span>
+                        <span className="inline-flex flex-wrap gap-1">
+                          {trainingMeta.jurisprudenta_citata.map((ref: string) => (
+                            <span key={ref} className="text-xs bg-blue-50 text-blue-700 px-2 py-1 rounded border border-blue-200 font-mono cursor-pointer hover:bg-blue-100 transition" onClick={() => openDecision(ref)}>{ref}</span>
+                          ))}
+                        </span>
+                      </div>
+                    )}
+                    {trainingMeta.legislatie_citata?.length > 0 && (
+                      <div>
+                        <span className="text-xs font-bold text-slate-500 uppercase mr-2">Legislație:</span>
+                        <span className="inline-flex flex-wrap gap-1">
+                          {trainingMeta.legislatie_citata.map((ref: string, i: number) => (
+                            <span key={i} className="text-xs bg-green-50 text-green-700 px-2 py-1 rounded border border-green-200">{ref}</span>
+                          ))}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </>
+          ) : (
+            <div className="h-full flex flex-col items-center justify-center text-slate-300">
+              <GraduationCap size={64} className="mb-6 opacity-20" />
+              <p className="text-lg font-medium text-slate-400">Configurează parametrii materialului</p>
+              <p className="text-sm mt-2 text-slate-300 max-w-md text-center">
+                Alege tema, tipul de material, nivelul de dificultate și lungimea dorită.
+                AI-ul va genera materialul fundamentat pe legislația și jurisprudența reală din baza de date.
+              </p>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  };
+
   const renderChat = () => (
     <div className="flex flex-col h-full bg-white">
       <div className="border-b border-slate-100 p-4 flex justify-between items-center bg-white">
@@ -1705,6 +2063,7 @@ const App = () => {
               </div>
            </div>
         )}
+        {mode === 'training' && renderTraining()}
       </main>
 
       {/* Decision Viewer Modal */}
