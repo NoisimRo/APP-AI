@@ -77,7 +77,12 @@ const fetchStream = async (
     body: JSON.stringify(body),
   });
   if (!response.ok) {
-    onError(`HTTP ${response.status}`);
+    let detail = `HTTP ${response.status}`;
+    try {
+      const errBody = await response.json();
+      detail = errBody.detail || JSON.stringify(errBody);
+    } catch { /* ignore parse errors */ }
+    onError(detail);
     return;
   }
   const reader = response.body!.getReader();
