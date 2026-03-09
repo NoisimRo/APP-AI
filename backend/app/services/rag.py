@@ -67,6 +67,7 @@ class RAGService:
         """
         self.llm = llm_provider or get_llm_provider()
         self.embedding_service = EmbeddingService(llm_provider=get_embedding_provider())
+        self._embedding_available = True  # Circuit breaker: skip embedding after first failure
 
     async def search_by_vector(
         self,
@@ -86,9 +87,15 @@ class RAGService:
         Returns:
             List of (ArgumentareCritica, distance) tuples ordered by similarity.
         """
+        if not self._embedding_available:
+            return []
+
         try:
-            # Embed the query with retrieval_query task type (asymmetric search)
-            query_vector = await self.embedding_service.embed_query(query)
+            # Embed with 15s timeout to prevent hanging on API issues
+            query_vector = await asyncio.wait_for(
+                self.embedding_service.embed_query(query),
+                timeout=15.0,
+            )
 
             # Cosine distance search on ArgumentareCritica embeddings
             stmt = (
@@ -128,8 +135,13 @@ class RAGService:
 
             return [(row.ArgumentareCritica, row.distance) for row in rows]
 
+        except asyncio.TimeoutError:
+            logger.warning("vector_search_timeout", query=query[:80])
+            self._embedding_available = False  # Circuit breaker: don't retry
+            return []
         except Exception as e:
             logger.warning("vector_search_failed", error=str(e), query=query[:80])
+            self._embedding_available = False  # Circuit breaker: don't retry
             return []
 
     async def _trigram_search(
@@ -663,8 +675,14 @@ class RAGService:
             return fragments[:limit]
 
         # 2. Vector search fallback on legislatie_fragmente
+        if not self._embedding_available:
+            return fragments
+
         try:
-            query_vector = await self.embedding_service.embed_query(query)
+            query_vector = await asyncio.wait_for(
+                self.embedding_service.embed_query(query),
+                timeout=15.0,
+            )
 
             stmt = (
                 select(
@@ -695,8 +713,12 @@ class RAGService:
                     count=len(fragments),
                     top_distance=rows[0].distance if rows else None,
                 )
+        except asyncio.TimeoutError:
+            logger.warning("legislation_vector_search_timeout")
+            self._embedding_available = False
         except Exception as e:
             logger.warning("legislation_vector_search_failed", error=str(e))
+            self._embedding_available = False
 
         return fragments
 

@@ -91,10 +91,13 @@ const fetchStream = async (
   onDone: (meta: any) => void,
   onError: (error: string) => void,
 ) => {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 120_000); // 2 min timeout
   const response = await fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
+    signal: controller.signal,
   });
   if (!response.ok) {
     let detail = `HTTP ${response.status}`;
@@ -106,9 +109,11 @@ const fetchStream = async (
       else if (d) detail = JSON.stringify(d);
       else detail = JSON.stringify(errBody);
     } catch { /* ignore parse errors */ }
+    clearTimeout(timeout);
     onError(detail);
     return;
   }
+  clearTimeout(timeout); // Response received, cancel initial timeout
   const reader = response.body!.getReader();
   const decoder = new TextDecoder();
   let buffer = '';
@@ -129,6 +134,7 @@ const fetchStream = async (
       }
     }
   }
+  clearTimeout(timeout);
 };
 
 const parseFilenameMetadata = (filename: string) => {
