@@ -33,9 +33,7 @@ import {
   ChevronUp,
   GraduationCap,
   Download,
-  Pencil,
-  Save,
-  Bookmark
+  Pencil
 } from "lucide-react";
 
 // --- Types ---
@@ -306,7 +304,6 @@ const StatCard = ({ label, value, icon: Icon, color }: { label: string, value: s
 
 const App = () => {
   const [mode, setMode] = useState<AppMode>('dashboard');
-  const [sidebarOpen, setSidebarOpen] = useState(false);
   const [apiKey] = useState(process.env.API_KEY || "");
   const [files, setFiles] = useState<UploadedFile[]>([]);
   const [fileSearch, setFileSearch] = useState("");
@@ -334,18 +331,7 @@ const App = () => {
   // Chat/Interaction States
   const [chatMessages, setChatMessages] = useState<Message[]>([]);
   const [chatInput, setChatInput] = useState("");
-  const [isChatLoading, setIsChatLoading] = useState(false);
-  const [isDrafterLoading, setIsDrafterLoading] = useState(false);
-  const [isRedFlagsLoading, setIsRedFlagsLoading] = useState(false);
-  const [isClarificationLoading, setIsClarificationLoading] = useState(false);
-  const [isMemoLoading, setIsMemoLoading] = useState(false);
-  const [isUploadLoading, setIsUploadLoading] = useState(false);
-  const [chatReranking, setChatReranking] = useState(false);
-  const [chatScopeId, setChatScopeId] = useState<string>("");
-  const [savedScopes, setSavedScopes] = useState<any[]>([]);
-  const [showScopeSaveModal, setShowScopeSaveModal] = useState(false);
-  const [scopeSaveName, setScopeSaveName] = useState("");
-  const [scopeSaveDesc, setScopeSaveDesc] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
   const [generatedContent, setGeneratedContent] = useState<string>("");
   const [generatedDecisionRefs, setGeneratedDecisionRefs] = useState<string[]>([]);
 
@@ -458,66 +444,6 @@ const App = () => {
     };
     fetchStats();
   }, []);
-
-  // Fetch saved scopes on mount
-  const fetchScopes = async () => {
-    try {
-      const response = await fetch('/api/v1/scopes/');
-      if (response.ok) {
-        const data = await response.json();
-        setSavedScopes(data);
-      }
-    } catch (error) {
-      console.error('Failed to fetch scopes:', error);
-    }
-  };
-
-  useEffect(() => {
-    fetchScopes();
-  }, []);
-
-  // Save current Data Lake filters as a scope
-  const handleSaveScope = async () => {
-    if (!scopeSaveName.trim()) return;
-    const filters: any = {};
-    if (filterRuling) filters.ruling = filterRuling;
-    if (filterType) filters.tip_contestatie = filterType;
-    if (filterYear) filters.year = filterYear;
-    if (filterCritici.length > 0) filters.coduri_critici = filterCritici;
-    if (filterCpv.length > 0) filters.cpv_codes = filterCpv;
-    if (fileSearch) filters.search = fileSearch;
-
-    try {
-      const response = await fetch('/api/v1/scopes/', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: scopeSaveName, description: scopeSaveDesc || null, filters }),
-      });
-      if (response.ok) {
-        setShowScopeSaveModal(false);
-        setScopeSaveName("");
-        setScopeSaveDesc("");
-        fetchScopes();
-      } else {
-        const errData = await response.json().catch(() => null);
-        alert(`Eroare la salvarea scope-ului: ${errData?.detail || response.status}`);
-      }
-    } catch (error) {
-      console.error('Failed to save scope:', error);
-      alert('Eroare de rețea la salvarea scope-ului. Verifică conexiunea.');
-    }
-  };
-
-  // Delete a scope
-  const handleDeleteScope = async (scopeId: string) => {
-    try {
-      await fetch(`/api/v1/scopes/${scopeId}`, { method: 'DELETE' });
-      fetchScopes();
-      if (chatScopeId === scopeId) setChatScopeId("");
-    } catch (error) {
-      console.error('Failed to delete scope:', error);
-    }
-  };
 
   // Fetch LLM settings on mount
   const fetchLLMSettings = async () => {
@@ -772,28 +698,22 @@ const App = () => {
     const userMsg = chatInput;
     setChatMessages(prev => [...prev, { role: 'user', text: userMsg }]);
     setChatInput("");
-    setIsChatLoading(true);
+    setIsLoading(true);
 
     // Add placeholder for streaming response
     setChatMessages(prev => [...prev, { role: 'model', text: '' }]);
 
     try {
       let accumulated = '';
-      const requestBody: any = {
-        message: userMsg,
-        history: chatMessages.map(m => ({
-          role: m.role === 'model' ? 'assistant' : m.role,
-          content: m.text
-        })),
-        rerank: chatReranking,
-      };
-      if (chatScopeId) {
-        requestBody.filters = { scope_id: chatScopeId };
-      }
-
       await fetchStream(
         '/api/v1/chat/stream',
-        requestBody,
+        {
+          message: userMsg,
+          history: chatMessages.map(m => ({
+            role: m.role === 'model' ? 'assistant' : m.role,
+            content: m.text
+          }))
+        },
         (chunk) => {
           accumulated += chunk;
           setChatMessages(prev => {
@@ -822,24 +742,23 @@ const App = () => {
           });
         },
       );
-    } catch (err: any) {
+    } catch (err) {
       console.error(err);
-      const errMsg = err?.message || String(err);
       setChatMessages(prev => {
         const updated = [...prev];
         updated[updated.length - 1] = {
           role: 'model',
-          text: `Eroare la procesarea cererii: ${errMsg}`
+          text: "Eroare la procesarea cererii. Asigură-te că backend-ul este pornit și conectat la baza de date."
         };
         return updated;
       });
     } finally {
-      setIsChatLoading(false);
+      setIsLoading(false);
     }
   };
 
   const handleDrafting = async () => {
-    setIsDrafterLoading(true);
+    setIsLoading(true);
     setGeneratedContent("");
     setGeneratedDecisionRefs([]);
 
@@ -867,7 +786,7 @@ const App = () => {
       console.error(err);
       setGeneratedContent("Eroare la generare. Verifică că backend-ul este pornit.");
     } finally {
-      setIsDrafterLoading(false);
+      setIsLoading(false);
     }
   };
 
@@ -887,7 +806,7 @@ const App = () => {
       return;
     }
 
-    setIsUploadLoading(true);
+    setIsLoading(true);
     try {
       // Convert to base64
       const base64 = await fileToBase64(file);
@@ -921,7 +840,7 @@ const App = () => {
       console.error(err);
       alert('Eroare la procesarea documentului. Verifică că backend-ul este pornit.');
     } finally {
-      setIsUploadLoading(false);
+      setIsLoading(false);
     }
   };
 
@@ -935,7 +854,7 @@ const App = () => {
       return;
     }
 
-    setIsRedFlagsLoading(true);
+    setIsLoading(true);
     setRedFlagsResults([]);
     setRedFlagsProgress("Se trimite documentul pentru analiză...");
 
@@ -998,13 +917,13 @@ const App = () => {
       clearTimeout(progressTimer2);
       clearTimeout(progressTimer3);
       clearTimeout(fetchTimeout);
-      setIsRedFlagsLoading(false);
+      setIsLoading(false);
       setRedFlagsProgress("");
     }
   };
 
   const handleClarification = async () => {
-    setIsClarificationLoading(true);
+    setIsLoading(true);
     setGeneratedContent("");
     setGeneratedDecisionRefs([]);
     try {
@@ -1025,7 +944,7 @@ const App = () => {
       console.error(err);
       setGeneratedContent("Eroare la generare. Verifică că backend-ul este pornit.");
     } finally {
-      setIsClarificationLoading(false);
+      setIsLoading(false);
     }
   };
 
@@ -1035,7 +954,7 @@ const App = () => {
       return;
     }
 
-    setIsMemoLoading(true);
+    setIsLoading(true);
     setGeneratedContent("");
 
     try {
@@ -1059,66 +978,49 @@ const App = () => {
       console.error(err);
       setGeneratedContent("Eroare la generarea memo-ului. Verifică că backend-ul este pornit și conectat la baza de date.");
     } finally {
-      setIsMemoLoading(false);
+      setIsLoading(false);
     }
   };
 
 
   // --- Render Functions ---
 
-  const navigateTo = (target: AppMode) => {
-    setMode(target);
-    setSidebarOpen(false);
-  };
-
   const renderSidebar = () => (
-    <>
-      {/* Mobile overlay */}
-      {sidebarOpen && (
-        <div className="fixed inset-0 bg-black/50 z-40 md:hidden" onClick={() => setSidebarOpen(false)} />
-      )}
-      <div className={`
-        fixed inset-y-0 left-0 z-50 w-72 bg-slate-900 flex flex-col border-r border-slate-800 text-slate-300
-        transform transition-transform duration-200 ease-in-out
-        ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}
-        md:relative md:translate-x-0 md:shrink-0
-      `}>
-      <div className="p-6 border-b border-slate-800 flex items-center justify-between">
+    <div className="w-72 bg-slate-900 h-screen flex flex-col border-r border-slate-800 shrink-0 text-slate-300">
+      <div className="p-6 border-b border-slate-800">
         <h1 className="text-2xl font-bold text-white flex items-center gap-2 tracking-tight">
           <div className="bg-blue-600 p-1.5 rounded-lg">
              <Database size={20} className="text-white" />
           </div>
           ExpertAP
         </h1>
-        <button onClick={() => setSidebarOpen(false)} className="md:hidden text-slate-400 hover:text-white p-1">
-          <X size={20} />
-        </button>
+        <p className="text-xs text-slate-500 mt-2 font-medium">Platformă de Business Intelligence <br/>pentru Achiziții Publice</p>
       </div>
 
       <nav className="flex-1 overflow-y-auto px-4 py-6 space-y-8">
         <div>
            <div className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3 px-2">Workspace</div>
-           <SidebarItem icon={LayoutDashboard} label="Dashboard" active={mode === 'dashboard'} onClick={() => navigateTo('dashboard')} />
-           <SidebarItem icon={Database} label="Data Lake" active={mode === 'datalake'} onClick={() => navigateTo('datalake')} badge={files.length} />
-           <SidebarItem icon={MessageSquare} label="Asistent AI" active={mode === 'chat'} onClick={() => navigateTo('chat')} />
+           <SidebarItem icon={LayoutDashboard} label="Dashboard" active={mode === 'dashboard'} onClick={() => setMode('dashboard')} />
+           <SidebarItem icon={Database} label="Data Lake" active={mode === 'datalake'} onClick={() => setMode('datalake')} badge={files.length} />
+           <SidebarItem icon={MessageSquare} label="Asistent AI" active={mode === 'chat'} onClick={() => setMode('chat')} />
         </div>
 
         <div>
            <div className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3 px-2">Instrumente Juridice</div>
-           <SidebarItem icon={Scale} label="Drafter Contestații" active={mode === 'drafter'} onClick={() => navigateTo('drafter')} />
-           <SidebarItem icon={AlertTriangle} label="Red Flags Detector" active={mode === 'redflags'} onClick={() => navigateTo('redflags')} />
-           <SidebarItem icon={Search} label="Clarificări" active={mode === 'clarification'} onClick={() => navigateTo('clarification')} />
-           <SidebarItem icon={BookOpen} label="Jurisprudență RAG" active={mode === 'rag'} onClick={() => navigateTo('rag')} />
+           <SidebarItem icon={Scale} label="Drafter Contestații" active={mode === 'drafter'} onClick={() => setMode('drafter')} />
+           <SidebarItem icon={AlertTriangle} label="Red Flags Detector" active={mode === 'redflags'} onClick={() => setMode('redflags')} />
+           <SidebarItem icon={Search} label="Clarificări" active={mode === 'clarification'} onClick={() => setMode('clarification')} />
+           <SidebarItem icon={BookOpen} label="Jurisprudență RAG" active={mode === 'rag'} onClick={() => setMode('rag')} />
         </div>
 
         <div>
            <div className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3 px-2">Formare</div>
-           <SidebarItem icon={GraduationCap} label="TrainingAP" active={mode === 'training'} onClick={() => navigateTo('training')} />
+           <SidebarItem icon={GraduationCap} label="TrainingAP" active={mode === 'training'} onClick={() => setMode('training')} />
         </div>
 
         <div>
            <div className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3 px-2">Sistem</div>
-           <SidebarItem icon={Settings} label="Setări LLM" active={mode === 'settings'} onClick={() => navigateTo('settings')} />
+           <SidebarItem icon={Settings} label="Setări LLM" active={mode === 'settings'} onClick={() => setMode('settings')} />
         </div>
       </nav>
 
@@ -1151,8 +1053,7 @@ const App = () => {
             </div>
          </div>
       </div>
-      </div>
-    </>
+    </div>
   );
 
   const renderDashboard = () => {
@@ -1319,7 +1220,7 @@ const App = () => {
       return <span className={`text-[11px] px-2.5 py-0.5 rounded-full font-semibold tracking-wide ${cls}`}>{label}</span>;
     };
 
-    return (<>
+    return (
       <div className="h-full flex flex-col bg-slate-50/80">
         {/* Header */}
         <div className="px-6 pt-5 pb-4 bg-white border-b border-slate-200 shrink-0">
@@ -1501,16 +1402,10 @@ const App = () => {
               </div>
             </div>
             {(filterRuling || filterType || filterYear || fileSearch || filterCritici.length > 0 || filterCpv.length > 0) && (
-              <>
-                <button onClick={() => { setFilterRuling(""); setFilterType(""); setFilterYear(""); setFileSearch(""); setFilterCritici([]); setFilterCpv([]); }}
-                  className="text-xs text-blue-600 hover:text-blue-800 font-medium whitespace-nowrap flex items-center gap-1 transition">
-                  <X size={13} /> Resetează
-                </button>
-                <button onClick={() => setShowScopeSaveModal(true)}
-                  className="text-xs text-emerald-600 hover:text-emerald-800 font-medium whitespace-nowrap flex items-center gap-1 transition border border-emerald-300 rounded-lg px-2 py-1 bg-emerald-50 hover:bg-emerald-100">
-                  <Save size={13} /> Salvează ca Scope
-                </button>
-              </>
+              <button onClick={() => { setFilterRuling(""); setFilterType(""); setFilterYear(""); setFileSearch(""); setFilterCritici([]); setFilterCpv([]); }}
+                className="text-xs text-blue-600 hover:text-blue-800 font-medium whitespace-nowrap flex items-center gap-1 transition">
+                <X size={13} /> Resetează
+              </button>
             )}
           </div>
           {/* Active filter pills */}
@@ -1707,51 +1602,7 @@ const App = () => {
           </div>
         </div>
       </div>
-
-      {/* Save Scope Modal */}
-      {showScopeSaveModal && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={() => setShowScopeSaveModal(false)}>
-          <div className="bg-white rounded-xl shadow-2xl p-6 w-96 max-w-[90vw]" onClick={(e) => e.stopPropagation()}>
-            <h3 className="font-bold text-slate-800 mb-4 flex items-center gap-2">
-              <Bookmark size={18} className="text-emerald-600" />
-              Salvează filtre ca Scope
-            </h3>
-            <div className="space-y-3">
-              <div>
-                <label className="text-xs text-slate-500 font-medium">Nume *</label>
-                <input type="text" value={scopeSaveName} onChange={(e) => setScopeSaveName(e.target.value)}
-                  className="w-full mt-1 border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500/40 outline-none"
-                  placeholder="ex: Catering ADMISE 2024" autoFocus />
-              </div>
-              <div>
-                <label className="text-xs text-slate-500 font-medium">Descriere (opțional)</label>
-                <input type="text" value={scopeSaveDesc} onChange={(e) => setScopeSaveDesc(e.target.value)}
-                  className="w-full mt-1 border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500/40 outline-none"
-                  placeholder="Filtre pentru..." />
-              </div>
-              <div className="text-xs text-slate-400 bg-slate-50 rounded-lg p-2">
-                Filtre active: {[
-                  filterRuling && `Soluție: ${filterRuling}`,
-                  filterType && `Tip: ${filterType}`,
-                  filterYear && `An: ${filterYear}`,
-                  filterCritici.length > 0 && `Critici: ${filterCritici.join(', ')}`,
-                  filterCpv.length > 0 && `CPV: ${filterCpv.length} coduri`,
-                  fileSearch && `Căutare: "${fileSearch}"`,
-                ].filter(Boolean).join(' | ') || 'Niciun filtru'}
-              </div>
-            </div>
-            <div className="flex justify-end gap-2 mt-4">
-              <button onClick={() => setShowScopeSaveModal(false)}
-                className="px-4 py-2 text-sm text-slate-600 hover:bg-slate-100 rounded-lg transition">Anulează</button>
-              <button onClick={handleSaveScope} disabled={!scopeSaveName.trim()}
-                className="px-4 py-2 text-sm bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 disabled:opacity-50 transition">
-                Salvează
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-    </>);
+    );
   };
 
   const renderDrafter = () => (
@@ -1816,12 +1667,12 @@ const App = () => {
             <CharCounter value={drafterContext.legalGrounds} maxLength={50000} />
           </div>
           
-          <button
+          <button 
             onClick={handleDrafting}
-            disabled={isDrafterLoading}
+            disabled={isLoading}
             className="w-full bg-slate-900 text-white py-4 rounded-xl font-medium hover:bg-slate-800 transition flex justify-center items-center gap-2 shadow-lg hover:shadow-xl mt-4"
           >
-            {isDrafterLoading ? <Loader2 className="animate-spin" /> : "Generează Proiect"}
+            {isLoading ? <Loader2 className="animate-spin" /> : "Generează Proiect"}
           </button>
         </div>
       </div>
@@ -2614,39 +2465,6 @@ const App = () => {
          </h2>
          <span className="text-xs text-slate-500 bg-slate-100 px-2 py-1 rounded">🗄️ Conectat la baza de date CNSC</span>
       </div>
-      {/* Scope selector + Reranking toggle */}
-      <div className="px-4 py-2 border-b border-slate-100 bg-slate-50/50 flex items-center gap-3 text-xs">
-        <div className="flex items-center gap-1.5 text-slate-500">
-          <Bookmark size={13} />
-          <span>Domeniu:</span>
-          <select value={chatScopeId} onChange={(e) => setChatScopeId(e.target.value)}
-            className="appearance-none border border-slate-300 rounded-md px-2 py-1 bg-white text-slate-700 focus:ring-2 focus:ring-blue-500/40 outline-none cursor-pointer min-w-[150px]">
-            <option value="">Toate deciziile</option>
-            {savedScopes.map((s: any) => (
-              <option key={s.id} value={s.id}>{s.name} ({s.decision_count} decizii)</option>
-            ))}
-          </select>
-        </div>
-        {chatScopeId && (
-          <button onClick={() => setChatScopeId("")} className="text-blue-500 hover:text-blue-700">
-            <X size={13} />
-          </button>
-        )}
-        <div className="ml-auto flex items-center gap-1.5 text-slate-400">
-          <label className="flex items-center gap-1.5 cursor-pointer select-none">
-            <input type="checkbox" checked={chatReranking} onChange={(e) => setChatReranking(e.target.checked)}
-              className="w-3.5 h-3.5 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer" />
-            Reranking
-          </label>
-        </div>
-      </div>
-      {chatScopeId && savedScopes.find((s: any) => s.id === chatScopeId) && (
-        <div className="px-4 py-1.5 bg-blue-50 border-b border-blue-100 text-xs text-blue-700 flex items-center gap-2">
-          <Search size={12} />
-          Căutare restricționată la: <strong>{savedScopes.find((s: any) => s.id === chatScopeId)?.name}</strong>
-          <button onClick={() => setChatScopeId("")} className="ml-1 text-blue-500 hover:text-blue-700"><X size={12} /></button>
-        </div>
-      )}
       <div className="flex-1 overflow-y-auto p-6 space-y-6 bg-slate-50/50">
         {chatMessages.length === 0 && (
            <div className="text-center text-slate-400 mt-20">
@@ -2670,7 +2488,7 @@ const App = () => {
             </div>
           </div>
         ))}
-        {isChatLoading && (
+        {isLoading && (
           <div className="flex justify-start">
              <div className="bg-white border border-slate-200 p-4 rounded-2xl rounded-bl-none shadow-sm flex gap-3 items-center">
                <Loader2 size={18} className="animate-spin text-blue-600" />
@@ -2693,7 +2511,7 @@ const App = () => {
             />
             <button
               onClick={handleChat}
-              disabled={isChatLoading || !chatInput.trim()}
+              disabled={isLoading || !chatInput.trim()}
               className="absolute right-2 top-2 bottom-2 bg-blue-600 text-white px-4 rounded-lg hover:bg-blue-700 disabled:opacity-50 transition flex items-center justify-center"
             >
               <Send size={18} />
@@ -2709,25 +2527,7 @@ const App = () => {
   return (
     <div className="flex h-screen bg-slate-50 font-sans text-slate-900">
       {renderSidebar()}
-      <main className="flex-1 overflow-hidden relative shadow-2xl z-10 md:rounded-l-2xl border-l border-slate-200/50 bg-white md:ml-[-1px]">
-        {/* Mobile header with hamburger */}
-        <div className="md:hidden flex items-center gap-3 px-4 py-3 border-b border-slate-200 bg-white sticky top-0 z-30">
-          <button onClick={() => setSidebarOpen(true)} className="text-slate-600 hover:text-slate-900 p-1">
-            <Menu size={22} />
-          </button>
-          <span className="text-sm font-semibold text-slate-700 truncate">
-            {mode === 'dashboard' ? 'Dashboard'
-              : mode === 'datalake' ? 'Data Lake'
-              : mode === 'chat' ? 'Asistent AI'
-              : mode === 'drafter' ? 'Drafter Contestații'
-              : mode === 'redflags' ? 'Red Flags'
-              : mode === 'clarification' ? 'Clarificări'
-              : mode === 'rag' ? 'Jurisprudență RAG'
-              : mode === 'training' ? 'TrainingAP'
-              : mode === 'settings' ? 'Setări LLM'
-              : 'ExpertAP'}
-          </span>
-        </div>
+      <main className="flex-1 overflow-hidden relative shadow-2xl z-10 rounded-l-2xl border-l border-slate-200/50 bg-white ml-[-1px]">
         {mode === 'dashboard' && renderDashboard()}
         {mode === 'datalake' && renderDataLake()}
         {mode === 'drafter' && renderDrafter()}
@@ -2782,13 +2582,13 @@ const App = () => {
                   </div>
                   <button
                     onClick={handleRedFlags}
-                    disabled={isRedFlagsLoading || !redFlagsText.trim()}
+                    disabled={isLoading || !redFlagsText.trim()}
                     className="w-full bg-red-600 text-white py-3 rounded-xl font-medium hover:bg-red-700 transition disabled:opacity-50 flex items-center gap-2 justify-center shadow-lg hover:shadow-xl"
                   >
-                    {isRedFlagsLoading ? <Loader2 className="animate-spin" size={18} /> : <AlertTriangle size={18} />}
-                    {isRedFlagsLoading ? 'Analizare în curs...' : 'Analizează Red Flags'}
+                    {isLoading ? <Loader2 className="animate-spin" size={18} /> : <AlertTriangle size={18} />}
+                    {isLoading ? 'Analizare în curs...' : 'Analizează Red Flags'}
                   </button>
-                  {isRedFlagsLoading && redFlagsProgress && (
+                  {isLoading && redFlagsProgress && (
                     <p className="text-sm text-slate-500 text-center animate-pulse">
                       {redFlagsProgress}
                     </p>
@@ -2822,13 +2622,13 @@ const App = () => {
                   </div>
                   <button
                     onClick={handleRedFlags}
-                    disabled={isRedFlagsLoading || !uploadedDocRedFlags}
+                    disabled={isLoading || !uploadedDocRedFlags}
                     className="w-full bg-red-600 text-white py-3 rounded-xl font-medium hover:bg-red-700 transition disabled:opacity-50 flex items-center gap-2 justify-center shadow-lg hover:shadow-xl"
                   >
-                    {isRedFlagsLoading ? <Loader2 className="animate-spin" size={18} /> : <AlertTriangle size={18} />}
-                    {isRedFlagsLoading ? 'Analizare în curs...' : 'Analizează Red Flags'}
+                    {isLoading ? <Loader2 className="animate-spin" size={18} /> : <AlertTriangle size={18} />}
+                    {isLoading ? 'Analizare în curs...' : 'Analizează Red Flags'}
                   </button>
-                  {isRedFlagsLoading && redFlagsProgress && (
+                  {isLoading && redFlagsProgress && (
                     <p className="text-sm text-slate-500 text-center animate-pulse">
                       {redFlagsProgress}
                     </p>
@@ -3015,10 +2815,10 @@ const App = () => {
                 </div>
                 <button
                   onClick={handleClarification}
-                  disabled={isClarificationLoading || !clarificationClause}
+                  disabled={isLoading || !clarificationClause}
                   className="w-full bg-purple-600 text-white py-3 rounded-xl font-medium hover:bg-purple-700 transition flex justify-center items-center gap-2 shadow-lg hover:shadow-xl"
                 >
-                  {isClarificationLoading ? <Loader2 className="animate-spin" size={18} /> : "Generează Cerere Clarificare"}
+                  {isLoading ? <Loader2 className="animate-spin" size={18} /> : "Generează Cerere Clarificare"}
                 </button>
               </div>
             </div>
@@ -3087,10 +2887,10 @@ const App = () => {
                        <CharCounter value={memoTopic} maxLength={100000} />
                        <button
                           onClick={handleRAGMemo}
-                          disabled={isMemoLoading || !memoTopic.trim()}
+                          disabled={isLoading || !memoTopic.trim()}
                           className="w-full bg-teal-600 text-white py-2.5 rounded-lg text-sm font-medium hover:bg-teal-700 transition disabled:opacity-50"
                        >
-                          {isMemoLoading ? "Analiză..." : "Generează Memo"}
+                          {isLoading ? "Analiză..." : "Generează Memo"}
                        </button>
                        <p className="text-xs text-slate-400 mt-3 text-center">Căutare semantică în {dbStats?.total_decisions || 0} decizii din baza de date.</p>
                     </div>

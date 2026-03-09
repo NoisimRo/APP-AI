@@ -2,12 +2,10 @@
 
 from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel, Field
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.logging import get_logger
 from app.db.session import get_session
-from app.models.decision import SearchScope
 from app.services.rag import RAGService
 from app.services.llm.factory import get_active_llm_provider
 from app.services.llm.streaming import create_sse_response
@@ -23,25 +21,12 @@ class ChatMessage(BaseModel):
     content: str = Field(..., description="Message content")
 
 
-class ChatFilters(BaseModel):
-    """Filtre opționale pentru restricționarea căutării RAG."""
-
-    scope_id: str | None = None
-    ruling: str | None = None
-    tip_contestatie: str | None = None
-    year: str | None = None
-    coduri_critici: list[str] | None = None
-    cpv_codes: list[str] | None = None
-
-
 class ChatRequest(BaseModel):
     """Chat request payload."""
 
     message: str = Field(..., min_length=1, max_length=100000)
     conversation_id: str | None = Field(None, description="Optional conversation ID")
     history: list[ChatMessage] = Field(default_factory=list)
-    rerank: bool = Field(False, description="Enable LLM-based reranking")
-    filters: ChatFilters | None = Field(None, description="Optional search scope filters")
 
 
 class Citation(BaseModel):
@@ -60,36 +45,6 @@ class ChatResponse(BaseModel):
     citations: list[Citation] = Field(default_factory=list)
     confidence: float = Field(ge=0.0, le=1.0)
     suggested_questions: list[str] = Field(default_factory=list)
-
-
-async def _resolve_filters(filters: ChatFilters | None, session: AsyncSession) -> dict | None:
-    """Resolve ChatFilters to a dict for RAG, loading scope filters if scope_id is set."""
-    if not filters:
-        return None
-
-    result = {}
-
-    # If scope_id is set, load filters from DB
-    if filters.scope_id:
-        stmt = select(SearchScope).where(SearchScope.id == filters.scope_id)
-        scope_result = await session.execute(stmt)
-        scope = scope_result.scalar_one_or_none()
-        if scope and scope.filters:
-            result.update(scope.filters)
-
-    # Overlay explicit filters (override scope)
-    if filters.ruling:
-        result["ruling"] = filters.ruling
-    if filters.tip_contestatie:
-        result["tip_contestatie"] = filters.tip_contestatie
-    if filters.year:
-        result["year"] = filters.year
-    if filters.coduri_critici:
-        result["coduri_critici"] = filters.coduri_critici
-    if filters.cpv_codes:
-        result["cpv_codes"] = filters.cpv_codes
-
-    return result if result else None
 
 
 @router.post("/", response_model=ChatResponse)
@@ -114,9 +69,6 @@ async def chat(
         llm = await get_active_llm_provider(session)
         rag = RAGService(llm_provider=llm)
 
-        # Resolve filters (scope_id → dict)
-        rag_filters = await _resolve_filters(request.filters, session)
-
         # Convert chat history to format expected by RAG
         history = [
             {"role": msg.role, "content": msg.content}
@@ -128,9 +80,7 @@ async def chat(
             query=request.message,
             session=session,
             conversation_history=history,
-            max_decisions=5,
-            rerank=request.rerank,
-            filters=rag_filters,
+            max_decisions=5
         )
 
         # Generate or reuse conversation ID
@@ -179,9 +129,6 @@ async def chat_stream(
         llm = await get_active_llm_provider(session)
         rag = RAGService(llm_provider=llm)
 
-        # Resolve filters (scope_id → dict)
-        rag_filters = await _resolve_filters(request.filters, session)
-
         history = [
             {"role": msg.role, "content": msg.content}
             for msg in request.history
@@ -190,8 +137,7 @@ async def chat_stream(
         # Run RAG search to get context and citations
         query = request.message
         contexts, system_prompt, citations, confidence, suggested = await rag.prepare_context(
-            query=query, session=session, conversation_history=history, max_decisions=5,
-            rerank=request.rerank, filters=rag_filters,
+            query=query, session=session, conversation_history=history, max_decisions=5
         )
 
         if contexts is None:
