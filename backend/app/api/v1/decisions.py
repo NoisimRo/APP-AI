@@ -76,7 +76,8 @@ async def list_decisions(
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     ruling: str | None = Query(None, description="Filter by ruling"),
-    year: int | None = Query(None, ge=2000, le=2100),
+    year: int | None = Query(None, ge=2000, le=2100, description="Filter by single year (legacy)"),
+    years: str | None = Query(None, description="Comma-separated years to filter by (e.g. 2025,2026)"),
     tip_contestatie: str | None = Query(None, description="Filter by type: documentatie or rezultat"),
     search: str | None = Query(None, description="Search by BO number, contestator, autoritate, CPV, or criticism codes"),
     coduri_critici: str | None = Query(None, description="Comma-separated critique codes to filter by (e.g. D1,R2,R4)"),
@@ -86,8 +87,8 @@ async def list_decisions(
     """
     List CNSC decisions with pagination, filters, and search.
     """
-    logger.info("list_decisions", page=page, ruling=ruling, year=year, search=search,
-                coduri_critici=coduri_critici, cpv_codes=cpv_codes)
+    logger.info("list_decisions", page=page, ruling=ruling, year=year, years=years,
+                search=search, coduri_critici=coduri_critici, cpv_codes=cpv_codes)
 
     # Check if database is available
     if not is_db_available():
@@ -104,8 +105,17 @@ async def list_decisions(
     # Apply filters
     if ruling:
         query = query.where(DecizieCNSC.solutie_contestatie == ruling)
-    if year:
+
+    # Multi-year support: 'years' param takes precedence over 'year'
+    if years:
+        year_list = [int(y.strip()) for y in years.split(",") if y.strip().isdigit()]
+        if len(year_list) == 1:
+            query = query.where(DecizieCNSC.an_bo == year_list[0])
+        elif year_list:
+            query = query.where(DecizieCNSC.an_bo.in_(year_list))
+    elif year:
         query = query.where(DecizieCNSC.an_bo == year)
+
     if tip_contestatie:
         query = query.where(DecizieCNSC.tip_contestatie == tip_contestatie)
 

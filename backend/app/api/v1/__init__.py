@@ -2,7 +2,7 @@
 
 from fastapi import APIRouter
 
-from app.api.v1 import chat, search, decisions, documents, redflags, ragmemo, drafter, clarification, training, settings
+from app.api.v1 import chat, search, decisions, documents, redflags, ragmemo, drafter, clarification, training, settings, scopes
 
 api_router = APIRouter()
 
@@ -16,3 +16,4 @@ api_router.include_router(drafter.router, prefix="/drafter", tags=["drafter"])
 api_router.include_router(clarification.router, prefix="/clarification", tags=["clarification"])
 api_router.include_router(training.router, prefix="/training", tags=["training"])
 api_router.include_router(settings.router, prefix="/settings", tags=["settings"])
+api_router.include_router(scopes.router, prefix="/scopes", tags=["scopes"])

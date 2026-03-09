@@ -6,6 +6,7 @@ from app.models.decision import (
     NomenclatorCPV,
     ActNormativ,
     LegislatieFragment,
+    SearchScope,
     # Legacy aliases
     Decision,
     DecisionChunk,
@@ -17,6 +18,7 @@ __all__ = [
     "NomenclatorCPV",
     "ActNormativ",
     "LegislatieFragment",
+    "SearchScope",
     "Decision",
     "DecisionChunk",
 ]

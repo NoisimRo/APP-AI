@@ -58,6 +58,7 @@ class RAGService:
         query: str,
         session: AsyncSession,
         limit: int = 10,
+        scope_decision_ids: list[str] | None = None,
     ) -> list[tuple[ArgumentareCritica, float]]:
         """Search ArgumentareCritica by vector cosine similarity.
 
@@ -65,6 +66,7 @@ class RAGService:
             query: User's search query.
             session: Database session.
             limit: Maximum number of results.
+            scope_decision_ids: If provided, restrict search to these decision IDs only.
 
         Returns:
             List of (ArgumentareCritica, distance) tuples ordered by similarity.
@@ -83,6 +85,10 @@ class RAGService:
             .limit(limit)
         )
 
+        # Scope pre-filter: restrict to specific decision IDs
+        if scope_decision_ids is not None:
+            stmt = stmt.where(ArgumentareCritica.decizie_id.in_(scope_decision_ids))
+
         result = await session.execute(stmt)
         rows = result.all()
 
@@ -91,6 +97,7 @@ class RAGService:
             query=query[:80],
             results=len(rows),
             top_distance=rows[0].distance if rows else None,
+            scoped=scope_decision_ids is not None,
         )
 
         return [(row.ArgumentareCritica, row.distance) for row in rows]
@@ -560,6 +567,7 @@ class RAGService:
         query: str,
         session: AsyncSession,
         limit: int = 5,
+        scope_decision_ids: list[str] | None = None,
     ) -> tuple[list[DecizieCNSC], list[tuple[ArgumentareCritica, float]]]:
         """Search for relevant decisions based on query.
 
@@ -574,12 +582,14 @@ class RAGService:
             query: User's search query.
             session: Database session.
             limit: Maximum number of decisions to return.
+            scope_decision_ids: If provided, restrict search to these decision IDs only.
 
         Returns:
             Tuple of (decisions, matched_chunks). matched_chunks is a list of
             (ArgumentareCritica, distance) tuples; empty if using fallback.
         """
-        logger.info("searching_decisions", query=query, limit=limit)
+        logger.info("searching_decisions", query=query, limit=limit,
+                     scoped=scope_decision_ids is not None)
 
         # 1. Check for direct BO references first
         bo_refs = self._extract_bo_references(query)
@@ -627,7 +637,8 @@ class RAGService:
         if has_embeddings and has_embeddings > 0:
             # Vector search path
             matched_chunks = await self.search_by_vector(
-                query, session, limit=limit * 3
+                query, session, limit=limit * 3,
+                scope_decision_ids=scope_decision_ids,
             )
 
             if matched_chunks:
@@ -693,7 +704,9 @@ class RAGService:
 
         # 6. Fallback: keyword ILIKE search
         logger.info("falling_back_to_keyword_search", query=query)
-        decisions = await self._keyword_search(query, session, limit)
+        decisions = await self._keyword_search(
+            query, session, limit, scope_decision_ids=scope_decision_ids
+        )
         return decisions, []
 
     async def _keyword_search(
@@ -701,6 +714,7 @@ class RAGService:
         query: str,
         session: AsyncSession,
         limit: int,
+        scope_decision_ids: list[str] | None = None,
     ) -> list[DecizieCNSC]:
         """Fallback keyword search using ILIKE."""
         keywords = self._extract_keywords(query)
@@ -728,6 +742,10 @@ class RAGService:
                 .order_by(DecizieCNSC.data_decizie.desc().nulls_last())
                 .limit(limit)
             )
+
+        # Scope pre-filter
+        if scope_decision_ids is not None:
+            stmt = stmt.where(DecizieCNSC.id.in_(scope_decision_ids))
 
         result = await session.execute(stmt)
         decisions = list(result.scalars().all())
@@ -1039,8 +1057,12 @@ class RAGService:
         session: AsyncSession,
         conversation_history: list[dict] | None = None,
         max_decisions: int = 5,
+        scope_decision_ids: list[str] | None = None,
     ) -> tuple[list[str], str, list[Citation], float, list[str]]:
         """Prepare RAG context without generating the LLM response.
+
+        Args:
+            scope_decision_ids: If provided, restrict search to these decision IDs only.
 
         Returns:
             Tuple of (contexts, system_prompt, citations, confidence, suggested_questions).
@@ -1050,7 +1072,8 @@ class RAGService:
             query, session, limit=5
         )
         decisions, matched_chunks = await self.search_decisions(
-            query, session, limit=max_decisions
+            query, session, limit=max_decisions,
+            scope_decision_ids=scope_decision_ids,
         )
 
         if not decisions and not legislation_fragments:
@@ -1135,6 +1158,7 @@ Răspunde în limba română, profesional și precis."""
         session: AsyncSession,
         conversation_history: list[dict] | None = None,
         max_decisions: int = 5,
+        scope_decision_ids: list[str] | None = None,
     ) -> tuple[str, list[Citation], float, list[str]]:
         """Generate a response to user query using RAG.
 
@@ -1143,14 +1167,17 @@ Răspunde în limba română, profesional și precis."""
             session: Database session.
             conversation_history: Optional previous conversation messages.
             max_decisions: Maximum number of decisions to retrieve.
+            scope_decision_ids: If provided, restrict search to these decision IDs only.
 
         Returns:
             Tuple of (response_text, citations, confidence, suggested_questions).
         """
-        logger.info("generating_rag_response", query=query)
+        logger.info("generating_rag_response", query=query,
+                     scoped=scope_decision_ids is not None)
 
         contexts, system_prompt, citations, confidence, suggested_questions = await self.prepare_context(
-            query, session, conversation_history, max_decisions
+            query, session, conversation_history, max_decisions,
+            scope_decision_ids=scope_decision_ids,
         )
 
         if contexts is None:

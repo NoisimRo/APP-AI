@@ -456,6 +456,48 @@ class LLMSettings(Base):
 
 
 # =============================================================================
+# SEARCH SCOPES (saved filter presets for RAG pre-filtering)
+# =============================================================================
+
+class SearchScope(Base):
+    """Saved search scope — a named set of filters for pre-filtering RAG search.
+
+    Users create scopes from the Data Lake filter UI to narrow down
+    which decisions the AI assistant searches through.
+    """
+
+    __tablename__ = "search_scopes"
+
+    id: Mapped[str] = mapped_column(
+        UUID(as_uuid=False),
+        primary_key=True,
+        default=lambda: str(uuid4())
+    )
+    name: Mapped[str] = mapped_column(String(100), nullable=False)
+    description: Mapped[Optional[str]] = mapped_column(Text)
+
+    # JSONB filters — mirrors Data Lake filter params
+    # Example: {"ruling": "ADMIS", "tip_contestatie": "rezultat",
+    #           "years": [2025, 2026], "coduri_critici": ["D3", "R2"],
+    #           "cpv_codes": ["55520000-1"], "search": "catering"}
+    filters: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+
+    # Cached count of matching decisions (updated on save)
+    decision_count: Mapped[int] = mapped_column(Integer, default=0)
+
+    # Timestamps
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+
+    def __repr__(self) -> str:
+        return f"<SearchScope '{self.name}' ({self.decision_count} decizii)>"
+
+
+# =============================================================================
 # LEGACY COMPATIBILITY (if needed)
 # =============================================================================
 
