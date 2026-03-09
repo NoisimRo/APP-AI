@@ -77,7 +77,24 @@ class GeminiProvider(LLMProvider):
                     f"Motiv posibil: filtru de siguranță. Feedback: {block_reason}"
                 )
 
+            # Try response.text first, fall back to extracting from parts
+            # (thinking models like gemini-2.5-pro may have text=None
+            #  because response contains thought parts alongside text parts)
             text = response.text
+            if text is None:
+                # Extract text from candidate parts directly
+                candidate = response.candidates[0]
+                if candidate.content and candidate.content.parts:
+                    text_parts = []
+                    for part in candidate.content.parts:
+                        # Skip thought parts, only collect text parts
+                        if hasattr(part, "thought") and part.thought:
+                            continue
+                        if hasattr(part, "text") and part.text:
+                            text_parts.append(part.text)
+                    if text_parts:
+                        text = "".join(text_parts)
+
             if text is None:
                 raise ValueError(
                     "Gemini a returnat un răspuns gol (text=None). "
