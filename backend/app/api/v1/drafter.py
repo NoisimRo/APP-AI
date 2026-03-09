@@ -54,12 +54,11 @@ async def _build_drafter_context(
     try:
         search_query = request.facts[:3000]
 
-        # Hybrid search: vector + trigram + RRF + query expansion
+        # Vector search for relevant jurisprudence
         matched_chunks = await rag.hybrid_search(
             query=search_query,
             session=session,
             limit=8,
-            expand=True,
         )
 
         # Filter by relevance (distance < 0.5 → similarity > 0.5)
