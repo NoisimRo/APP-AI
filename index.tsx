@@ -306,6 +306,7 @@ const StatCard = ({ label, value, icon: Icon, color }: { label: string, value: s
 
 const App = () => {
   const [mode, setMode] = useState<AppMode>('dashboard');
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const [apiKey] = useState(process.env.API_KEY || "");
   const [files, setFiles] = useState<UploadedFile[]>([]);
   const [fileSearch, setFileSearch] = useState("");
@@ -821,13 +822,14 @@ const App = () => {
           });
         },
       );
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
+      const errMsg = err?.message || String(err);
       setChatMessages(prev => {
         const updated = [...prev];
         updated[updated.length - 1] = {
           role: 'model',
-          text: "Eroare la procesarea cererii. Asigură-te că backend-ul este pornit și conectat la baza de date."
+          text: `Eroare la procesarea cererii: ${errMsg}`
         };
         return updated;
       });
@@ -1064,42 +1066,59 @@ const App = () => {
 
   // --- Render Functions ---
 
+  const navigateTo = (target: AppMode) => {
+    setMode(target);
+    setSidebarOpen(false);
+  };
+
   const renderSidebar = () => (
-    <div className="w-72 bg-slate-900 h-screen flex flex-col border-r border-slate-800 shrink-0 text-slate-300">
-      <div className="p-6 border-b border-slate-800">
+    <>
+      {/* Mobile overlay */}
+      {sidebarOpen && (
+        <div className="fixed inset-0 bg-black/50 z-40 md:hidden" onClick={() => setSidebarOpen(false)} />
+      )}
+      <div className={`
+        fixed inset-y-0 left-0 z-50 w-72 bg-slate-900 flex flex-col border-r border-slate-800 text-slate-300
+        transform transition-transform duration-200 ease-in-out
+        ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}
+        md:relative md:translate-x-0 md:shrink-0
+      `}>
+      <div className="p-6 border-b border-slate-800 flex items-center justify-between">
         <h1 className="text-2xl font-bold text-white flex items-center gap-2 tracking-tight">
           <div className="bg-blue-600 p-1.5 rounded-lg">
              <Database size={20} className="text-white" />
           </div>
           ExpertAP
         </h1>
-        <p className="text-xs text-slate-500 mt-2 font-medium">Platformă de Business Intelligence <br/>pentru Achiziții Publice</p>
+        <button onClick={() => setSidebarOpen(false)} className="md:hidden text-slate-400 hover:text-white p-1">
+          <X size={20} />
+        </button>
       </div>
 
       <nav className="flex-1 overflow-y-auto px-4 py-6 space-y-8">
         <div>
            <div className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3 px-2">Workspace</div>
-           <SidebarItem icon={LayoutDashboard} label="Dashboard" active={mode === 'dashboard'} onClick={() => setMode('dashboard')} />
-           <SidebarItem icon={Database} label="Data Lake" active={mode === 'datalake'} onClick={() => setMode('datalake')} badge={files.length} />
-           <SidebarItem icon={MessageSquare} label="Asistent AI" active={mode === 'chat'} onClick={() => setMode('chat')} />
+           <SidebarItem icon={LayoutDashboard} label="Dashboard" active={mode === 'dashboard'} onClick={() => navigateTo('dashboard')} />
+           <SidebarItem icon={Database} label="Data Lake" active={mode === 'datalake'} onClick={() => navigateTo('datalake')} badge={files.length} />
+           <SidebarItem icon={MessageSquare} label="Asistent AI" active={mode === 'chat'} onClick={() => navigateTo('chat')} />
         </div>
 
         <div>
            <div className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3 px-2">Instrumente Juridice</div>
-           <SidebarItem icon={Scale} label="Drafter Contestații" active={mode === 'drafter'} onClick={() => setMode('drafter')} />
-           <SidebarItem icon={AlertTriangle} label="Red Flags Detector" active={mode === 'redflags'} onClick={() => setMode('redflags')} />
-           <SidebarItem icon={Search} label="Clarificări" active={mode === 'clarification'} onClick={() => setMode('clarification')} />
-           <SidebarItem icon={BookOpen} label="Jurisprudență RAG" active={mode === 'rag'} onClick={() => setMode('rag')} />
+           <SidebarItem icon={Scale} label="Drafter Contestații" active={mode === 'drafter'} onClick={() => navigateTo('drafter')} />
+           <SidebarItem icon={AlertTriangle} label="Red Flags Detector" active={mode === 'redflags'} onClick={() => navigateTo('redflags')} />
+           <SidebarItem icon={Search} label="Clarificări" active={mode === 'clarification'} onClick={() => navigateTo('clarification')} />
+           <SidebarItem icon={BookOpen} label="Jurisprudență RAG" active={mode === 'rag'} onClick={() => navigateTo('rag')} />
         </div>
 
         <div>
            <div className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3 px-2">Formare</div>
-           <SidebarItem icon={GraduationCap} label="TrainingAP" active={mode === 'training'} onClick={() => setMode('training')} />
+           <SidebarItem icon={GraduationCap} label="TrainingAP" active={mode === 'training'} onClick={() => navigateTo('training')} />
         </div>
 
         <div>
            <div className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3 px-2">Sistem</div>
-           <SidebarItem icon={Settings} label="Setări LLM" active={mode === 'settings'} onClick={() => setMode('settings')} />
+           <SidebarItem icon={Settings} label="Setări LLM" active={mode === 'settings'} onClick={() => navigateTo('settings')} />
         </div>
       </nav>
 
@@ -1132,7 +1151,8 @@ const App = () => {
             </div>
          </div>
       </div>
-    </div>
+      </div>
+    </>
   );
 
   const renderDashboard = () => {
@@ -2689,7 +2709,25 @@ const App = () => {
   return (
     <div className="flex h-screen bg-slate-50 font-sans text-slate-900">
       {renderSidebar()}
-      <main className="flex-1 overflow-hidden relative shadow-2xl z-10 rounded-l-2xl border-l border-slate-200/50 bg-white ml-[-1px]">
+      <main className="flex-1 overflow-hidden relative shadow-2xl z-10 md:rounded-l-2xl border-l border-slate-200/50 bg-white md:ml-[-1px]">
+        {/* Mobile header with hamburger */}
+        <div className="md:hidden flex items-center gap-3 px-4 py-3 border-b border-slate-200 bg-white sticky top-0 z-30">
+          <button onClick={() => setSidebarOpen(true)} className="text-slate-600 hover:text-slate-900 p-1">
+            <Menu size={22} />
+          </button>
+          <span className="text-sm font-semibold text-slate-700 truncate">
+            {mode === 'dashboard' ? 'Dashboard'
+              : mode === 'datalake' ? 'Data Lake'
+              : mode === 'chat' ? 'Asistent AI'
+              : mode === 'drafter' ? 'Drafter Contestații'
+              : mode === 'redflags' ? 'Red Flags'
+              : mode === 'clarification' ? 'Clarificări'
+              : mode === 'rag' ? 'Jurisprudență RAG'
+              : mode === 'training' ? 'TrainingAP'
+              : mode === 'settings' ? 'Setări LLM'
+              : 'ExpertAP'}
+          </span>
+        </div>
         {mode === 'dashboard' && renderDashboard()}
         {mode === 'datalake' && renderDataLake()}
         {mode === 'drafter' && renderDrafter()}
