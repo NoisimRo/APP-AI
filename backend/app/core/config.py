@@ -35,6 +35,7 @@ class Settings(BaseSettings):
     gemini_api_key: str = ""
     openai_api_key: str = ""
     anthropic_api_key: str = ""
+    groq_api_key: str = ""
 
     # Embedding
     embedding_provider: Literal["vertex", "openai", "local"] = "vertex"

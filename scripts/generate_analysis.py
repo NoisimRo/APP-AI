@@ -17,6 +17,8 @@ Usage:
     python scripts/generate_analysis.py --limit 10       # Test with 10 decisions
     python scripts/generate_analysis.py --force           # Re-analyze everything
     python scripts/generate_analysis.py --dry-run         # Show what would be analyzed
+    python scripts/generate_analysis.py --provider gemini --model gemini-2.5-pro
+    python scripts/generate_analysis.py --provider groq --model llama-3.3-70b-versatile
 """
 
 import asyncio
@@ -116,6 +118,17 @@ async def main():
         default=RATE_LIMIT_DELAY,
         help=f"Seconds to wait between decisions (default: {RATE_LIMIT_DELAY})",
     )
+    parser.add_argument(
+        "--provider",
+        type=str,
+        choices=["gemini", "anthropic", "openai", "groq"],
+        help="LLM provider to use (default: auto-detect from env vars)",
+    )
+    parser.add_argument(
+        "--model",
+        type=str,
+        help="Specific model to use (e.g., gemini-2.5-pro, claude-sonnet-4-6, llama-3.3-70b-versatile)",
+    )
 
     args = parser.parse_args()
 
@@ -183,7 +196,17 @@ async def main():
         print()
 
     # Process decisions (new session per decision for isolation)
-    analysis_service = DecisionAnalysisService()
+    # Build LLM provider from CLI args if specified
+    llm_provider = None
+    if args.provider or args.model:
+        from app.services.llm.factory import get_llm_provider
+        kwargs = {}
+        if args.model:
+            kwargs["model"] = args.model
+        llm_provider = get_llm_provider(provider_type=args.provider, **kwargs)
+        print(f"  LLM Provider: {llm_provider.provider_name} / {llm_provider.model_name}")
+
+    analysis_service = DecisionAnalysisService(llm_provider=llm_provider)
     start_time = time.time()
     stats = {
         "analyzed": 0,

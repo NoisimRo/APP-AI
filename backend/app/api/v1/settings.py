@@ -54,6 +54,14 @@ PROVIDER_MODELS = {
         "o3-mini",
         "o4-mini",
     ],
+    "groq": [
+        "llama-3.3-70b-versatile",
+        "llama-3.1-8b-instant",
+        "deepseek-r1-distill-llama-70b",
+        "gemma2-9b-it",
+        "mixtral-8x7b-32768",
+        "llama-3-groq-70b-8192-tool-use-preview",
+    ],
 }
 
 # Default model per provider
@@ -61,6 +69,7 @@ DEFAULT_MODELS = {
     "gemini": "gemini-3.1-pro-preview",
     "anthropic": "claude-sonnet-4-6",
     "openai": "gpt-5.4-2026-03-05",
+    "groq": "llama-3.3-70b-versatile",
 }
 
 
@@ -79,7 +88,7 @@ class LLMSettingsResponse(BaseModel):
 
 class LLMSettingsUpdateRequest(BaseModel):
     """Request for PUT /settings/llm."""
-    active_provider: str = Field(..., pattern=r"^(gemini|anthropic|openai)$")
+    active_provider: str = Field(..., pattern=r"^(gemini|anthropic|openai|groq)$")
     active_model: str | None = None
     api_key: str | None = Field(None, description="API key for the provider (will be encrypted)")
 
@@ -108,6 +117,10 @@ def _is_provider_configured(provider: str, settings_row: LLMSettings | None) -> 
     elif provider == "openai":
         has_env = bool(app_settings.openai_api_key)
         has_db = bool(settings_row and settings_row.openai_api_key_enc)
+        return has_env or has_db
+    elif provider == "groq":
+        has_env = bool(app_settings.groq_api_key)
+        has_db = bool(settings_row and settings_row.groq_api_key_enc)
         return has_env or has_db
     return False
 
@@ -186,6 +199,8 @@ async def update_llm_settings(
             settings_row.anthropic_api_key_enc = encrypted
         elif request.active_provider == "openai":
             settings_row.openai_api_key_enc = encrypted
+        elif request.active_provider == "groq":
+            settings_row.groq_api_key_enc = encrypted
 
     await session.commit()
     await session.refresh(settings_row)
@@ -227,6 +242,8 @@ async def test_llm_connection(
             api_key = decrypt_value(settings_row.anthropic_api_key_enc)
         elif provider_type == "openai" and settings_row.openai_api_key_enc:
             api_key = decrypt_value(settings_row.openai_api_key_enc)
+        elif provider_type == "groq" and settings_row.groq_api_key_enc:
+            api_key = decrypt_value(settings_row.groq_api_key_enc)
 
     kwargs = {}
     if model:

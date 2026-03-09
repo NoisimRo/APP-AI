@@ -966,13 +966,20 @@ const App = () => {
             <div className={`w-8 h-8 rounded-full flex items-center justify-center text-white font-bold text-xs ${
               llmSettings?.active_provider === 'anthropic'
                 ? 'bg-gradient-to-tr from-orange-500 to-amber-500'
+                : llmSettings?.active_provider === 'groq'
+                ? 'bg-gradient-to-tr from-purple-500 to-pink-500'
+                : llmSettings?.active_provider === 'openai'
+                ? 'bg-gradient-to-tr from-green-500 to-emerald-500'
                 : 'bg-gradient-to-tr from-blue-500 to-purple-500'
             }`}>AI</div>
             <div>
                <p className="text-sm text-white font-medium">{
                  llmSettings?.active_model
-                   ? llmSettings.active_model.replace(/-preview$/, '').replace(/^gemini-/, 'Gemini ').replace(/^claude-/, 'Claude ')
-                   : llmSettings?.active_provider === 'anthropic' ? 'Claude' : 'Gemini'
+                   ? llmSettings.active_model.replace(/-preview$/, '').replace(/^gemini-/, 'Gemini ').replace(/^claude-/, 'Claude ').replace(/-versatile$/, '').replace(/-instant$/, '')
+                   : llmSettings?.active_provider === 'anthropic' ? 'Claude'
+                   : llmSettings?.active_provider === 'groq' ? 'Groq'
+                   : llmSettings?.active_provider === 'openai' ? 'OpenAI'
+                   : 'Gemini'
                }</p>
                <p className={`text-xs ${llmSettings?.providers?.[llmSettings.active_provider]?.configured ? 'text-green-400' : 'text-yellow-400'}`}>
                  {llmSettings?.providers?.[llmSettings.active_provider]?.configured ? 'Operațional' : 'Neconfigurat'}
@@ -2098,10 +2105,10 @@ const App = () => {
   };
 
   const renderSettings = () => {
-    const providerLabels: Record<string, string> = { gemini: 'Google Gemini', anthropic: 'Anthropic Claude', openai: 'OpenAI' };
-    const providerColors: Record<string, string> = { gemini: 'blue', anthropic: 'orange', openai: 'green' };
+    const providerLabels: Record<string, string> = { gemini: 'Google Gemini', anthropic: 'Anthropic Claude', openai: 'OpenAI', groq: 'Groq (Open Source)' };
+    const providerColors: Record<string, string> = { gemini: 'blue', anthropic: 'orange', openai: 'green', groq: 'purple' };
     const models = llmSettings?.providers?.[settingsProvider]?.models || [];
-    const keyFieldNames: Record<string, string> = { gemini: 'GEMINI_API_KEY', anthropic: 'ANTHROPIC_API_KEY', openai: 'OPENAI_API_KEY' };
+    const keyFieldNames: Record<string, string> = { gemini: 'GEMINI_API_KEY', anthropic: 'ANTHROPIC_API_KEY', openai: 'OPENAI_API_KEY', groq: 'GROQ_API_KEY' };
 
     return (
       <div className="h-full overflow-y-auto bg-slate-50/50 p-8">
@@ -2114,7 +2121,7 @@ const App = () => {
           {/* Provider Selection */}
           <div className="bg-white rounded-xl border border-slate-200 p-6 mb-6 shadow-sm">
             <h3 className="text-sm font-bold text-slate-600 uppercase tracking-wider mb-4">Provider activ</h3>
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-4 gap-3">
               {Object.entries(providerLabels).map(([key, label]) => {
                 const isActive = settingsProvider === key;
                 const isConfigured = llmSettings?.providers?.[key]?.configured;

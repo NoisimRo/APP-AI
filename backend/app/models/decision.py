@@ -445,6 +445,7 @@ class LLMSettings(Base):
     gemini_api_key_enc: Mapped[Optional[str]] = mapped_column(Text)
     anthropic_api_key_enc: Mapped[Optional[str]] = mapped_column(Text)
     openai_api_key_enc: Mapped[Optional[str]] = mapped_column(Text)
+    groq_api_key_enc: Mapped[Optional[str]] = mapped_column(Text)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, server_default=func.now(), onupdate=func.now(), nullable=False
     )
