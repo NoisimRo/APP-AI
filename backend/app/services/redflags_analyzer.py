@@ -7,11 +7,9 @@ Pass 1 — Dynamic Detection:
     No predefined categories, no legal references requested — pure detection.
 
 Pass 2 — Grounding per Red Flag:
-    For EACH detected issue, performs hybrid search (vector + trigram + RRF
-    + query expansion) against:
+    For EACH detected issue, performs vector search against:
     a) legislatie_fragmente — real articles/alineats/litere from Legea 98/2016, HG 395/2016
     b) argumentare_critica — real CNSC decisions/jurisprudence
-    Plus automatic legislation linking from matched jurisprudence chunks.
     Then composes a final LLM call with REAL context to produce the grounded
     red flag with verified legal references and recommendations.
 """
@@ -26,7 +24,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.logging import get_logger
 from app.models.decision import ArgumentareCritica, LegislatieFragment, ActNormativ, DecizieCNSC
 from app.services.embedding import EmbeddingService
-from app.services.rag import RAGService
 from app.services.llm.base import LLMProvider
 from app.services.llm.factory import get_llm_provider, get_embedding_provider
 
@@ -53,13 +50,11 @@ class RedFlagsAnalyzer:
     Uses a two-pass approach:
     1. Detection: LLM identifies problematic clauses dynamically
     2. Grounding: Each clause is grounded with real legislation + jurisprudence
-       using hybrid search (vector + trigram + RRF + query expansion)
     """
 
     def __init__(self, llm_provider: Optional[LLMProvider] = None):
         self.llm = llm_provider or get_llm_provider()
         self.embedding_service = EmbeddingService(llm_provider=get_embedding_provider())
-        self.rag = RAGService(llm_provider=self.llm)
 
     # =========================================================================
     # PASS 1: Dynamic clause detection
@@ -152,7 +147,16 @@ Severitate:
 - SCĂZUTĂ: Problemă minoră, ar putea fi îmbunătățită"""
 
     async def _detect_single_chunk(self, chunk_text: str, chunk_idx: int, total_chunks: int) -> list[dict]:
-        """Run Pass 1 detection on a single chunk with timeout."""
+        """Run Pass 1 detection on a single chunk with timeout.
+
+        Args:
+            chunk_text: Text of the chunk to analyze.
+            chunk_idx: Index of this chunk (for logging).
+            total_chunks: Total number of chunks (for logging).
+
+        Returns:
+            List of detected clause dicts.
+        """
         system_prompt = self._get_detection_system_prompt()
 
         if total_chunks > 1:
@@ -193,7 +197,17 @@ Severitate:
 
     @staticmethod
     def _deduplicate_clauses(all_clauses: list[dict]) -> list[dict]:
-        """Deduplicate clauses detected across multiple chunks."""
+        """Deduplicate clauses detected across multiple chunks.
+
+        Uses clause text similarity to remove near-duplicates that may
+        appear due to chunk overlap.
+
+        Args:
+            all_clauses: Combined list of clauses from all chunks.
+
+        Returns:
+            Deduplicated list of clauses.
+        """
         if len(all_clauses) <= 1:
             return all_clauses
 
@@ -205,8 +219,10 @@ Severitate:
             if not clause_text:
                 continue
 
+            # Check for substantial overlap with already-seen clauses
             is_duplicate = False
             for seen in seen_clauses:
+                # If one clause contains >60% of the other, consider duplicate
                 shorter = min(clause_text, seen, key=len)
                 longer = max(clause_text, seen, key=len)
                 if shorter in longer or (
@@ -227,14 +243,30 @@ Severitate:
         return unique
 
     async def _detect_clauses(self, document_text: str) -> list[dict]:
-        """Pass 1: LLM detects problematic clauses without legal references."""
+        """Pass 1: LLM detects problematic clauses without legal references.
+
+        For large documents (>15K chars), splits into overlapping chunks
+        and analyzes each in parallel, then deduplicates results.
+
+        Args:
+            document_text: Full text of the procurement document.
+
+        Returns:
+            List of detected clause dicts with keys:
+            - clause: exact text from the document
+            - issue: description of why it's problematic
+            - search_query: short query optimized for vector search
+            - severity: CRITICĂ / MEDIE / SCĂZUTĂ
+        """
         chunks = self._split_into_chunks(document_text)
 
         if len(chunks) == 1:
+            # Small document — single call
             clauses = await self._detect_single_chunk(chunks[0], 0, 1)
             logger.info("clauses_detected", count=len(clauses))
             return clauses
 
+        # Large document — parallel chunk analysis
         logger.info("large_document_parallel_detection", num_chunks=len(chunks))
         tasks = [
             self._detect_single_chunk(chunk, idx, len(chunks))
@@ -243,6 +275,7 @@ Severitate:
 
         results = await asyncio.gather(*tasks, return_exceptions=True)
 
+        # Collect all clauses, skip failed chunks
         all_clauses = []
         for idx, result in enumerate(results):
             if isinstance(result, Exception):
@@ -250,7 +283,9 @@ Severitate:
                 continue
             all_clauses.extend(result)
 
+        # Deduplicate clauses from overlapping chunks
         clauses = self._deduplicate_clauses(all_clauses)
+
         logger.info("clauses_detected", count=len(clauses), from_chunks=len(chunks))
         return clauses
 
@@ -259,6 +294,7 @@ Severitate:
         """Parse Pass 1 JSON response."""
         text = response.strip()
 
+        # Strip markdown code fences
         if "```json" in text:
             text = text.split("```json")[1].split("```")[0].strip()
         elif "```" in text:
@@ -309,7 +345,7 @@ Severitate:
         return clauses
 
     # =========================================================================
-    # PASS 2: Grounding per red flag (with hybrid search)
+    # PASS 2: Grounding per red flag
     # =========================================================================
 
     async def _search_legislation(
@@ -318,7 +354,16 @@ Severitate:
         session: AsyncSession,
         limit: int = 3,
     ) -> list[tuple[LegislatieFragment, str]]:
-        """Search legislation fragments by vector similarity."""
+        """Search legislation fragments by vector similarity.
+
+        Args:
+            query_text: Description of the issue to find relevant articles for.
+            session: Database session.
+            limit: Maximum fragments to return.
+
+        Returns:
+            List of (LegislatieFragment, act_denumire) tuples.
+        """
         has_articles = await session.scalar(
             select(func.count())
             .select_from(LegislatieFragment)
@@ -360,15 +405,13 @@ Severitate:
 
         return relevant
 
-    async def _search_jurisprudence_hybrid(
+    async def _search_jurisprudence(
         self,
         query_text: str,
         session: AsyncSession,
         limit: int = 5,
     ) -> tuple[list[DecizieCNSC], list[tuple[ArgumentareCritica, float]]]:
-        """Search CNSC decisions using hybrid search (vector + trigram + RRF + query expansion).
-
-        Replaces the old pure-vector search with the full RAGService hybrid pipeline.
+        """Search CNSC decisions by vector similarity.
 
         Args:
             query_text: Description of the issue to find jurisprudence for.
@@ -378,18 +421,35 @@ Severitate:
         Returns:
             Tuple of (decisions, matched_chunks with distances).
         """
-        # Use RAGService hybrid search
-        matched_chunks = await self.rag.hybrid_search(
-            query=query_text,
-            session=session,
-            limit=limit,
+        has_embeddings = await session.scalar(
+            select(func.count())
+            .select_from(ArgumentareCritica)
+            .where(ArgumentareCritica.embedding.isnot(None))
         )
 
-        if not matched_chunks:
+        if not has_embeddings:
             return [], []
 
-        # Filter by relevance (keep more permissive threshold since RRF normalizes scores)
-        relevant_chunks = [(arg, dist) for arg, dist in matched_chunks if dist < 0.8]
+        query_vector = await self.embedding_service.embed_query(query_text)
+
+        stmt = (
+            select(
+                ArgumentareCritica,
+                ArgumentareCritica.embedding.cosine_distance(query_vector).label("distance"),
+            )
+            .where(ArgumentareCritica.embedding.isnot(None))
+            .order_by("distance")
+            .limit(limit)
+        )
+
+        result = await session.execute(stmt)
+        rows = result.all()
+
+        if not rows:
+            return [], []
+
+        # Filter by relevance (cosine distance < 0.5 → similarity > 0.5)
+        relevant_chunks = [(row.ArgumentareCritica, row.distance) for row in rows if row.distance < 0.5]
 
         if not relevant_chunks:
             return [], []
@@ -401,7 +461,7 @@ Severitate:
         decisions = list(result.scalars().all())
 
         logger.info(
-            "jurisprudence_hybrid_search",
+            "jurisprudence_search",
             query_preview=query_text[:60],
             chunks_found=len(relevant_chunks),
             decisions_found=len(decisions),
@@ -416,9 +476,6 @@ Severitate:
     ) -> dict:
         """Fetch DB context (legislation + jurisprudence) for a single flag.
 
-        Uses hybrid search for jurisprudence and also extracts legislation
-        references from matched jurisprudence chunks (legislation linking).
-
         IMPORTANT: Must be called sequentially — AsyncSession is NOT safe
         for concurrent use from multiple coroutines.
 
@@ -432,26 +489,8 @@ Severitate:
         search_query = clause_info.get("search_query", clause_info.get("issue", ""))
 
         # Run searches SEQUENTIALLY — AsyncSession cannot handle concurrent queries
-
-        # 1. Direct legislation vector search
         legal_articles = await self._search_legislation(search_query, session, limit=3)
-
-        # 2. Hybrid jurisprudence search (vector + trigram + RRF + query expansion)
-        decisions, matched_chunks = await self._search_jurisprudence_hybrid(
-            search_query, session, limit=5,
-        )
-
-        # 3. Auto-extract legislation from matched jurisprudence chunks (legislation linking)
-        if matched_chunks:
-            linked_legislation = await self.rag.extract_legislation_from_chunks(
-                matched_chunks, session, max_total=5,
-            )
-            # Merge with direct search results, deduplicating by fragment ID
-            existing_ids = {frag.id for frag, _ in legal_articles}
-            for frag, act_name in linked_legislation:
-                if frag.id not in existing_ids:
-                    legal_articles.append((frag, act_name))
-                    existing_ids.add(frag.id)
+        decisions, matched_chunks = await self._search_jurisprudence(search_query, session, limit=5)
 
         return {
             "legal_articles": legal_articles,
@@ -468,6 +507,13 @@ Severitate:
 
         This method only calls the LLM (no DB access), so it's safe to
         run multiple instances in parallel.
+
+        Args:
+            clause_info: Dict from Pass 1 with clause, issue, search_query.
+            context: Pre-fetched DB context from _fetch_context_for_flag.
+
+        Returns:
+            Grounded red flag dict.
         """
         legal_articles = context["legal_articles"]
         decisions = context["decisions"]
@@ -479,6 +525,7 @@ Severitate:
             parts = []
             for frag, act_name in legal_articles:
                 header = f"--- {act_name}, {frag.citare} ---"
+                # Use articol_complet for richer context if available
                 body = frag.articol_complet or frag.text_fragment
                 parts.append(f"{header}\n{body}")
             legislation_context = "\n\n".join(parts)
@@ -506,11 +553,9 @@ Severitate:
                     similarity = 1.0 - dist
                     section.append(f"\n--- Critica {arg.cod_critica} (relevanță: {similarity:.2f}) ---")
                     if arg.argumentatie_cnsc:
-                        section.append(f"Argumentație CNSC: {arg.argumentatie_cnsc[:800]}")
+                        section.append(f"Argumentație CNSC: {arg.argumentatie_cnsc[:600]}")
                     if arg.elemente_retinute_cnsc:
-                        section.append(f"Elemente reținute: {arg.elemente_retinute_cnsc[:500]}")
-                    if arg.argumente_contestator:
-                        section.append(f"Argumente contestator: {arg.argumente_contestator[:400]}")
+                        section.append(f"Elemente reținute: {arg.elemente_retinute_cnsc[:400]}")
                     if arg.castigator_critica and arg.castigator_critica != "unknown":
                         section.append(f"Câștigător: {arg.castigator_critica}")
                 parts.append("\n".join(section))
@@ -530,13 +575,12 @@ REGULI STRICTE:
 - Pentru decision_refs: folosește DOAR ID-urile de decizii furnizate. NU inventa alte decizii.
 - Dacă nicio decizie furnizată nu e relevantă, lasă decision_refs ca listă goală.
 - recommendation: bazează-te pe articolele reale pentru a face o recomandare concretă.
-- În câmpul "issue": detaliază problema folosind informațiile din jurisprudența CNSC — cum a decis CNSC în cazuri similare, ce argumente au fost acceptate/respinse.
 
 Răspunde EXCLUSIV în format JSON:
 ```json
 {
   "clause": "textul exact al clauzei",
-  "issue": "descrierea DETALIATĂ a problemei, cu referire la cum a decis CNSC în cazuri similare",
+  "issue": "descrierea problemei",
   "severity": "CRITICĂ/MEDIE/SCĂZUTĂ",
   "legal_references": [
     {
@@ -546,7 +590,7 @@ Răspunde EXCLUSIV în format JSON:
     }
   ],
   "decision_refs": ["BO2025_1011"],
-  "recommendation": "recomandare concretă bazată pe legislație și jurisprudență CNSC"
+  "recommendation": "recomandare concretă bazată pe legislație"
 }
 ```"""
 
@@ -575,8 +619,6 @@ Răspunde EXCLUSIV în format JSON:
                 f"Decizii disponibile: {', '.join(decision_ids)}\n"
                 f"{jurisprudence_context}\n"
                 f"=== SFÂRȘIT JURISPRUDENȚĂ ===\n"
-                f"\nFolosește jurisprudența CNSC de mai sus pentru a fundamenta analiza. "
-                f"Explică cum a decis CNSC în cazuri similare.\n"
             )
         else:
             prompt_parts.append(
@@ -610,9 +652,11 @@ Răspunde EXCLUSIV în format JSON:
                 grounded["decision_refs"] = []
 
             # Post-process: verify legal_references against actual articles found
+            # Build lookup: act_name → set of citare strings
             valid_citari = {
                 (act_name, frag.citare) for frag, act_name in legal_articles
             }
+            # Also index by article number for flexible matching
             valid_art_nums = {
                 (act_name, frag.numar_articol) for frag, act_name in legal_articles
             }
@@ -623,11 +667,13 @@ Răspunde EXCLUSIV în format JSON:
                     if isinstance(ref, dict):
                         act = ref.get("act_normativ", "")
                         citare = ref.get("citare", "")
+                        # Exact match on citare
                         if any(citare in db_citare or db_citare in citare
                                for db_act, db_citare in valid_citari
                                if act in db_act or db_act in act):
                             verified_refs.append(ref)
                         else:
+                            # Fallback: match by article number
                             art_num_match = re.search(r'art\.\s*(\d+)', citare)
                             if art_num_match:
                                 art_num = int(art_num_match.group(1))
@@ -655,6 +701,7 @@ Răspunde EXCLUSIV în format JSON:
                 clause_preview=clause_info.get("clause", "")[:80],
                 error=str(e),
             )
+            # Return ungrounded flag on error
             return {
                 "clause": clause_info.get("clause", ""),
                 "issue": clause_info.get("issue", ""),
@@ -679,6 +726,7 @@ Răspunde EXCLUSIV în format JSON:
         except json.JSONDecodeError:
             pass
 
+        # Try to find a complete JSON object
         start = text.find("{")
         if start == -1:
             return {}
@@ -709,8 +757,7 @@ Răspunde EXCLUSIV în format JSON:
         """Analyze document for red flags with two-pass grounding.
 
         Pass 1: Detect problematic clauses dynamically (full document).
-        Pass 2: Ground each clause with real legislation + jurisprudence
-                using hybrid search (vector + trigram + RRF + query expansion).
+        Pass 2: Ground each clause with real legislation + jurisprudence.
 
         Args:
             document_text: Text of procurement document.
@@ -772,6 +819,7 @@ Răspunde EXCLUSIV în format JSON:
                 ]
             )
         else:
+            # No grounding — return detection results with empty refs
             grounded_flags = [
                 {
                     "clause": c.get("clause", ""),

@@ -1,19 +1,18 @@
 """Clarification request generation API endpoint.
 
-Uses RAG hybrid search (vector + trigram + RRF + query expansion) to ground
-clarifications in actual CNSC jurisprudence and real legislation.
+Uses RAG vector search to ground clarifications in actual CNSC jurisprudence.
 """
 
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field
-from sqlalchemy import select
+from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.logging import get_logger
 from app.db.session import get_session
-from app.models.decision import DecizieCNSC
-from app.services.rag import RAGService
-from app.services.llm.factory import get_active_llm_provider
+from app.models.decision import ArgumentareCritica, DecizieCNSC
+from app.services.embedding import EmbeddingService
+from app.services.llm.factory import get_active_llm_provider, get_embedding_provider
 
 router = APIRouter()
 logger = get_logger(__name__)
@@ -37,88 +36,89 @@ async def generate_clarification(
     request: ClarificationRequest,
     session: AsyncSession = Depends(get_session),
 ) -> ClarificationResponse:
-    """Generate a formal clarification request with RAG jurisprudence + legislation."""
+    """Generate a formal clarification request with RAG jurisprudence."""
     logger.info("clarification_request", clause_length=len(request.clause))
 
     llm = await get_active_llm_provider(session)
-    rag = RAGService(llm_provider=llm)
+    embedding_service = EmbeddingService(llm_provider=get_embedding_provider())
 
-    # Hybrid search for relevant CNSC jurisprudence
+    # Step 1: Search for relevant CNSC jurisprudence via vector search
     jurisprudence_context = ""
-    legislation_context = ""
     decision_refs: list[str] = []
 
     try:
-        search_query = request.clause[:3000]
-
-        # Vector search for relevant jurisprudence
-        matched_chunks = await rag.hybrid_search(
-            query=search_query,
-            session=session,
-            limit=6,
+        has_embeddings = await session.scalar(
+            select(func.count())
+            .select_from(ArgumentareCritica)
+            .where(ArgumentareCritica.embedding.isnot(None))
         )
 
-        # Filter by relevance
-        relevant_chunks = [(arg, dist) for arg, dist in matched_chunks if dist < 0.7]
+        if has_embeddings and has_embeddings > 0:
+            query_vector = await embedding_service.embed_query(request.clause[:3000])
 
-        if relevant_chunks:
-            # Load parent decisions
-            dec_ids = list({arg.decizie_id for arg, _ in relevant_chunks})
-            dec_result = await session.execute(
-                select(DecizieCNSC).where(DecizieCNSC.id.in_(dec_ids))
+            stmt = (
+                select(
+                    ArgumentareCritica,
+                    ArgumentareCritica.embedding.cosine_distance(query_vector).label("distance"),
+                )
+                .where(ArgumentareCritica.embedding.isnot(None))
+                .order_by("distance")
+                .limit(6)
             )
-            decisions = {d.id: d for d in dec_result.scalars().all()}
-            decision_refs = [d.external_id for d in decisions.values()]
 
-            context_parts = []
-            for arg, dist in relevant_chunks:
-                dec = decisions.get(arg.decizie_id)
-                if not dec:
-                    continue
-                similarity = 1.0 - dist
-                part = f"Decizia {dec.external_id} (relevanță: {similarity:.2f}):\n"
-                part += f"  Soluție: {dec.solutie_contestatie or 'N/A'}\n"
-                if arg.argumente_contestator:
-                    part += f"  Argumente contestator: {arg.argumente_contestator[:400]}\n"
-                if arg.jurisprudenta_contestator:
-                    part += f"  Jurisprudență contestator: {'; '.join(arg.jurisprudenta_contestator)}\n"
-                if arg.argumentatie_cnsc:
-                    part += f"  Argumentație CNSC: {arg.argumentatie_cnsc[:500]}\n"
-                if arg.jurisprudenta_cnsc:
-                    part += f"  Jurisprudență CNSC: {'; '.join(arg.jurisprudenta_cnsc)}\n"
-                if arg.elemente_retinute_cnsc:
-                    part += f"  Elemente reținute CNSC: {arg.elemente_retinute_cnsc[:300]}\n"
-                if arg.castigator_critica and arg.castigator_critica != "unknown":
-                    part += f"  Câștigător: {arg.castigator_critica}\n"
-                context_parts.append(part)
+            result = await session.execute(stmt)
+            rows = result.all()
 
-            jurisprudence_context = "\n---\n".join(context_parts)
+            # Filter by relevance
+            relevant_chunks = [
+                (row.ArgumentareCritica, row.distance)
+                for row in rows
+                if row.distance < 0.5
+            ]
 
-            # Extract legislation references from matched chunks
-            leg_fragments = await rag.extract_legislation_from_chunks(
-                relevant_chunks, session, max_total=6,
-            )
-            if leg_fragments:
-                leg_parts = []
-                for frag, act_name in leg_fragments:
-                    body = frag.articol_complet or frag.text_fragment
-                    leg_parts.append(f"--- {act_name}, {frag.citare} ---\n{body}")
-                legislation_context = "\n\n".join(leg_parts)
+            if relevant_chunks:
+                dec_ids = list({arg.decizie_id for arg, _ in relevant_chunks})
+                dec_result = await session.execute(
+                    select(DecizieCNSC).where(DecizieCNSC.id.in_(dec_ids))
+                )
+                decisions = {d.id: d for d in dec_result.scalars().all()}
+                decision_refs = [d.external_id for d in decisions.values()]
 
-            logger.info(
-                "clarification_jurisprudence_found",
-                decisions=len(decisions),
-                chunks=len(relevant_chunks),
-                legislation_fragments=len(leg_fragments) if leg_fragments else 0,
-            )
+                context_parts = []
+                for arg, dist in relevant_chunks:
+                    dec = decisions.get(arg.decizie_id)
+                    if not dec:
+                        continue
+                    similarity = 1.0 - dist
+                    part = f"Decizia {dec.external_id} (relevanță: {similarity:.2f}):\n"
+                    part += f"  Soluție: {dec.solutie_contestatie or 'N/A'}\n"
+                    if arg.argumente_contestator:
+                        part += f"  Argumente contestator: {arg.argumente_contestator[:300]}\n"
+                    if arg.jurisprudenta_contestator:
+                        part += f"  Jurisprudență contestator: {'; '.join(arg.jurisprudenta_contestator)}\n"
+                    if arg.argumentatie_cnsc:
+                        part += f"  Argumentație CNSC: {arg.argumentatie_cnsc[:400]}\n"
+                    if arg.jurisprudenta_cnsc:
+                        part += f"  Jurisprudență CNSC: {'; '.join(arg.jurisprudenta_cnsc)}\n"
+                    if arg.castigator_critica and arg.castigator_critica != "unknown":
+                        part += f"  Câștigător: {arg.castigator_critica}\n"
+                    context_parts.append(part)
+
+                jurisprudence_context = "\n---\n".join(context_parts)
+
+                logger.info(
+                    "clarification_jurisprudence_found",
+                    decisions=len(decisions),
+                    chunks=len(relevant_chunks),
+                )
 
     except Exception as e:
         logger.warning("clarification_jurisprudence_search_failed", error=str(e))
 
-    # Build prompt with jurisprudence + legislation
-    context_sections = ""
+    # Step 2: Build prompt with jurisprudence
+    jurisprudence_section = ""
     if jurisprudence_context:
-        context_sections += f"""
+        jurisprudence_section = f"""
 
 === JURISPRUDENȚĂ CNSC RELEVANTĂ (din baza de date) ===
 {jurisprudence_context}
@@ -128,23 +128,14 @@ IMPORTANT: Folosește jurisprudența CNSC de mai sus pentru a fundamenta cererea
 Citează deciziile specifice când susții că o cerință este restrictivă sau discriminatorie.
 Poți cita DOAR deciziile furnizate mai sus. NU inventa alte numere de decizii CNSC."""
     else:
-        context_sections += """
+        jurisprudence_section = """
 
 Notă: Nu s-a găsit jurisprudență CNSC specifică în baza de date. NU cita și NU inventa numere de decizii CNSC."""
-
-    if legislation_context:
-        context_sections += f"""
-
-=== LEGISLAȚIE APLICABILĂ (din baza de date) ===
-{legislation_context}
-=== SFÂRȘIT LEGISLAȚIE ===
-
-Folosește articolele de lege de mai sus cu citare exactă în argumentare."""
 
     prompt = f"""Ești un expert în achiziții publice din România. Clientul vrea să conteste sau clarifice următoarea clauză din documentația de atribuire:
 
 "{request.clause}"
-{context_sections}
+{jurisprudence_section}
 
 Redactează o Cerere de Clarificare formală către autoritatea contractantă, care:
 1. Este politicoasă și profesională
