@@ -333,7 +333,12 @@ const App = () => {
   // Chat/Interaction States
   const [chatMessages, setChatMessages] = useState<Message[]>([]);
   const [chatInput, setChatInput] = useState("");
-  const [isLoading, setIsLoading] = useState(false);
+  const [isChatLoading, setIsChatLoading] = useState(false);
+  const [isDrafterLoading, setIsDrafterLoading] = useState(false);
+  const [isRedFlagsLoading, setIsRedFlagsLoading] = useState(false);
+  const [isClarificationLoading, setIsClarificationLoading] = useState(false);
+  const [isMemoLoading, setIsMemoLoading] = useState(false);
+  const [isUploadLoading, setIsUploadLoading] = useState(false);
   const [chatReranking, setChatReranking] = useState(false);
   const [chatScopeId, setChatScopeId] = useState<string>("");
   const [savedScopes, setSavedScopes] = useState<any[]>([]);
@@ -456,7 +461,7 @@ const App = () => {
   // Fetch saved scopes on mount
   const fetchScopes = async () => {
     try {
-      const response = await fetch('/api/v1/scopes');
+      const response = await fetch('/api/v1/scopes/');
       if (response.ok) {
         const data = await response.json();
         setSavedScopes(data);
@@ -482,7 +487,7 @@ const App = () => {
     if (fileSearch) filters.search = fileSearch;
 
     try {
-      const response = await fetch('/api/v1/scopes', {
+      const response = await fetch('/api/v1/scopes/', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name: scopeSaveName, description: scopeSaveDesc || null, filters }),
@@ -492,9 +497,13 @@ const App = () => {
         setScopeSaveName("");
         setScopeSaveDesc("");
         fetchScopes();
+      } else {
+        const errData = await response.json().catch(() => null);
+        alert(`Eroare la salvarea scope-ului: ${errData?.detail || response.status}`);
       }
     } catch (error) {
       console.error('Failed to save scope:', error);
+      alert('Eroare de rețea la salvarea scope-ului. Verifică conexiunea.');
     }
   };
 
@@ -762,7 +771,7 @@ const App = () => {
     const userMsg = chatInput;
     setChatMessages(prev => [...prev, { role: 'user', text: userMsg }]);
     setChatInput("");
-    setIsLoading(true);
+    setIsChatLoading(true);
 
     // Add placeholder for streaming response
     setChatMessages(prev => [...prev, { role: 'model', text: '' }]);
@@ -823,12 +832,12 @@ const App = () => {
         return updated;
       });
     } finally {
-      setIsLoading(false);
+      setIsChatLoading(false);
     }
   };
 
   const handleDrafting = async () => {
-    setIsLoading(true);
+    setIsDrafterLoading(true);
     setGeneratedContent("");
     setGeneratedDecisionRefs([]);
 
@@ -856,7 +865,7 @@ const App = () => {
       console.error(err);
       setGeneratedContent("Eroare la generare. Verifică că backend-ul este pornit.");
     } finally {
-      setIsLoading(false);
+      setIsDrafterLoading(false);
     }
   };
 
@@ -876,7 +885,7 @@ const App = () => {
       return;
     }
 
-    setIsLoading(true);
+    setIsUploadLoading(true);
     try {
       // Convert to base64
       const base64 = await fileToBase64(file);
@@ -910,7 +919,7 @@ const App = () => {
       console.error(err);
       alert('Eroare la procesarea documentului. Verifică că backend-ul este pornit.');
     } finally {
-      setIsLoading(false);
+      setIsUploadLoading(false);
     }
   };
 
@@ -924,7 +933,7 @@ const App = () => {
       return;
     }
 
-    setIsLoading(true);
+    setIsRedFlagsLoading(true);
     setRedFlagsResults([]);
     setRedFlagsProgress("Se trimite documentul pentru analiză...");
 
@@ -987,13 +996,13 @@ const App = () => {
       clearTimeout(progressTimer2);
       clearTimeout(progressTimer3);
       clearTimeout(fetchTimeout);
-      setIsLoading(false);
+      setIsRedFlagsLoading(false);
       setRedFlagsProgress("");
     }
   };
 
   const handleClarification = async () => {
-    setIsLoading(true);
+    setIsClarificationLoading(true);
     setGeneratedContent("");
     setGeneratedDecisionRefs([]);
     try {
@@ -1014,7 +1023,7 @@ const App = () => {
       console.error(err);
       setGeneratedContent("Eroare la generare. Verifică că backend-ul este pornit.");
     } finally {
-      setIsLoading(false);
+      setIsClarificationLoading(false);
     }
   };
 
@@ -1024,7 +1033,7 @@ const App = () => {
       return;
     }
 
-    setIsLoading(true);
+    setIsMemoLoading(true);
     setGeneratedContent("");
 
     try {
@@ -1048,7 +1057,7 @@ const App = () => {
       console.error(err);
       setGeneratedContent("Eroare la generarea memo-ului. Verifică că backend-ul este pornit și conectat la baza de date.");
     } finally {
-      setIsLoading(false);
+      setIsMemoLoading(false);
     }
   };
 
@@ -1787,12 +1796,12 @@ const App = () => {
             <CharCounter value={drafterContext.legalGrounds} maxLength={50000} />
           </div>
           
-          <button 
+          <button
             onClick={handleDrafting}
-            disabled={isLoading}
+            disabled={isDrafterLoading}
             className="w-full bg-slate-900 text-white py-4 rounded-xl font-medium hover:bg-slate-800 transition flex justify-center items-center gap-2 shadow-lg hover:shadow-xl mt-4"
           >
-            {isLoading ? <Loader2 className="animate-spin" /> : "Generează Proiect"}
+            {isDrafterLoading ? <Loader2 className="animate-spin" /> : "Generează Proiect"}
           </button>
         </div>
       </div>
@@ -2641,7 +2650,7 @@ const App = () => {
             </div>
           </div>
         ))}
-        {isLoading && (
+        {isChatLoading && (
           <div className="flex justify-start">
              <div className="bg-white border border-slate-200 p-4 rounded-2xl rounded-bl-none shadow-sm flex gap-3 items-center">
                <Loader2 size={18} className="animate-spin text-blue-600" />
@@ -2664,7 +2673,7 @@ const App = () => {
             />
             <button
               onClick={handleChat}
-              disabled={isLoading || !chatInput.trim()}
+              disabled={isChatLoading || !chatInput.trim()}
               className="absolute right-2 top-2 bottom-2 bg-blue-600 text-white px-4 rounded-lg hover:bg-blue-700 disabled:opacity-50 transition flex items-center justify-center"
             >
               <Send size={18} />
@@ -2735,13 +2744,13 @@ const App = () => {
                   </div>
                   <button
                     onClick={handleRedFlags}
-                    disabled={isLoading || !redFlagsText.trim()}
+                    disabled={isRedFlagsLoading || !redFlagsText.trim()}
                     className="w-full bg-red-600 text-white py-3 rounded-xl font-medium hover:bg-red-700 transition disabled:opacity-50 flex items-center gap-2 justify-center shadow-lg hover:shadow-xl"
                   >
-                    {isLoading ? <Loader2 className="animate-spin" size={18} /> : <AlertTriangle size={18} />}
-                    {isLoading ? 'Analizare în curs...' : 'Analizează Red Flags'}
+                    {isRedFlagsLoading ? <Loader2 className="animate-spin" size={18} /> : <AlertTriangle size={18} />}
+                    {isRedFlagsLoading ? 'Analizare în curs...' : 'Analizează Red Flags'}
                   </button>
-                  {isLoading && redFlagsProgress && (
+                  {isRedFlagsLoading && redFlagsProgress && (
                     <p className="text-sm text-slate-500 text-center animate-pulse">
                       {redFlagsProgress}
                     </p>
@@ -2775,13 +2784,13 @@ const App = () => {
                   </div>
                   <button
                     onClick={handleRedFlags}
-                    disabled={isLoading || !uploadedDocRedFlags}
+                    disabled={isRedFlagsLoading || !uploadedDocRedFlags}
                     className="w-full bg-red-600 text-white py-3 rounded-xl font-medium hover:bg-red-700 transition disabled:opacity-50 flex items-center gap-2 justify-center shadow-lg hover:shadow-xl"
                   >
-                    {isLoading ? <Loader2 className="animate-spin" size={18} /> : <AlertTriangle size={18} />}
-                    {isLoading ? 'Analizare în curs...' : 'Analizează Red Flags'}
+                    {isRedFlagsLoading ? <Loader2 className="animate-spin" size={18} /> : <AlertTriangle size={18} />}
+                    {isRedFlagsLoading ? 'Analizare în curs...' : 'Analizează Red Flags'}
                   </button>
-                  {isLoading && redFlagsProgress && (
+                  {isRedFlagsLoading && redFlagsProgress && (
                     <p className="text-sm text-slate-500 text-center animate-pulse">
                       {redFlagsProgress}
                     </p>
@@ -2968,10 +2977,10 @@ const App = () => {
                 </div>
                 <button
                   onClick={handleClarification}
-                  disabled={isLoading || !clarificationClause}
+                  disabled={isClarificationLoading || !clarificationClause}
                   className="w-full bg-purple-600 text-white py-3 rounded-xl font-medium hover:bg-purple-700 transition flex justify-center items-center gap-2 shadow-lg hover:shadow-xl"
                 >
-                  {isLoading ? <Loader2 className="animate-spin" size={18} /> : "Generează Cerere Clarificare"}
+                  {isClarificationLoading ? <Loader2 className="animate-spin" size={18} /> : "Generează Cerere Clarificare"}
                 </button>
               </div>
             </div>
@@ -3040,10 +3049,10 @@ const App = () => {
                        <CharCounter value={memoTopic} maxLength={100000} />
                        <button
                           onClick={handleRAGMemo}
-                          disabled={isLoading || !memoTopic.trim()}
+                          disabled={isMemoLoading || !memoTopic.trim()}
                           className="w-full bg-teal-600 text-white py-2.5 rounded-lg text-sm font-medium hover:bg-teal-700 transition disabled:opacity-50"
                        >
-                          {isLoading ? "Analiză..." : "Generează Memo"}
+                          {isMemoLoading ? "Analiză..." : "Generează Memo"}
                        </button>
                        <p className="text-xs text-slate-400 mt-3 text-center">Căutare semantică în {dbStats?.total_decisions || 0} decizii din baza de date.</p>
                     </div>

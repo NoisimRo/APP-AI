@@ -252,6 +252,9 @@ class RAGService:
         merges results with Reciprocal Rank Fusion, and optionally
         expands the query into multiple search variants for better recall.
 
+        IMPORTANT: Runs DB queries sequentially because AsyncSession is not
+        safe for concurrent use from multiple coroutines.
+
         Args:
             query: Search query.
             session: Database session.
@@ -278,22 +281,14 @@ class RAGService:
         else:
             expanded_queries = [query]
 
-        # Hybrid search: vector + trigram for each expanded query
-        all_tasks = []
-        for eq in expanded_queries:
-            all_tasks.append(self.search_by_vector(eq, session, limit=limit * 2, filters=filters))
-            all_tasks.append(self._trigram_search(eq, session, limit=limit * 2, filters=filters))
-
-        all_results = await asyncio.gather(*all_tasks)
-
-        # Separate vector and trigram results
+        # Run searches SEQUENTIALLY (AsyncSession not safe for concurrent use)
         all_vector = []
         all_trigram = []
-        for i, result_list in enumerate(all_results):
-            if i % 2 == 0:
-                all_vector.extend(result_list)
-            else:
-                all_trigram.extend(result_list)
+        for eq in expanded_queries:
+            vec_results = await self.search_by_vector(eq, session, limit=limit * 2, filters=filters)
+            all_vector.extend(vec_results)
+            tri_results = await self._trigram_search(eq, session, limit=limit * 2, filters=filters)
+            all_trigram.extend(tri_results)
 
         # Deduplicate each list (keep best score)
         def _dedup(results: list[tuple[ArgumentareCritica, float]]) -> list[tuple[ArgumentareCritica, float]]:
@@ -422,10 +417,13 @@ class RAGService:
             return [query]
 
         try:
-            response = await self.llm.complete(
-                prompt=EXPANSION_PROMPT.format(query=query),
-                temperature=0.3,
-                max_tokens=200,
+            response = await asyncio.wait_for(
+                self.llm.complete(
+                    prompt=EXPANSION_PROMPT.format(query=query),
+                    temperature=0.3,
+                    max_tokens=200,
+                ),
+                timeout=10.0,  # 10s max for expansion — skip if slow
             )
             variants = [
                 line.strip().lstrip("0123456789.-) ")
@@ -442,6 +440,9 @@ class RAGService:
             )
             return expanded
 
+        except asyncio.TimeoutError:
+            logger.warning("query_expansion_timeout", query=query[:80])
+            return [query]
         except Exception as e:
             logger.warning("query_expansion_failed", error=str(e))
             return [query]
@@ -1104,22 +1105,15 @@ class RAGService:
             # Query expansion: generate search variants in parallel with first search
             expanded_queries = await self._expand_query(query)
 
-            # Hybrid search: vector + trigram for each expanded query, all in parallel
-            all_tasks = []
-            for eq in expanded_queries:
-                all_tasks.append(self.search_by_vector(eq, session, limit=limit * 2, filters=filters))
-                all_tasks.append(self._trigram_search(eq, session, limit=limit * 2, filters=filters))
-
-            all_results = await asyncio.gather(*all_tasks)
-
-            # Separate vector and trigram results
+            # Hybrid search: vector + trigram for each expanded query
+            # SEQUENTIAL — AsyncSession is not safe for concurrent use
             all_vector_results = []
             all_trigram_results = []
-            for i, result_list in enumerate(all_results):
-                if i % 2 == 0:  # Even indices = vector
-                    all_vector_results.extend(result_list)
-                else:  # Odd indices = trigram
-                    all_trigram_results.extend(result_list)
+            for eq in expanded_queries:
+                vec_results = await self.search_by_vector(eq, session, limit=limit * 2, filters=filters)
+                all_vector_results.extend(vec_results)
+                tri_results = await self._trigram_search(eq, session, limit=limit * 2, filters=filters)
+                all_trigram_results.extend(tri_results)
 
             # Deduplicate by chunk ID (keep best score)
             def _dedup(results: list[tuple[ArgumentareCritica, float]]) -> list[tuple[ArgumentareCritica, float]]:
