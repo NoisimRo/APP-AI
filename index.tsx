@@ -396,6 +396,8 @@ const App = () => {
   const [scopes, setScopes] = useState<{id: string, name: string, description: string | null, filters: any, decision_count: number}[]>([]);
   const [activeScopeId, setActiveScopeId] = useState<string | null>(null);
   const [showScopeModal, setShowScopeModal] = useState(false);
+  const [showScopeManager, setShowScopeManager] = useState(false);
+  const [editingScope, setEditingScope] = useState<{id: string, name: string, description: string | null} | null>(null);
   const [scopeName, setScopeName] = useState("");
   const [scopeDescription, setScopeDescription] = useState("");
   const [showYearDropdown, setShowYearDropdown] = useState(false);
@@ -488,6 +490,67 @@ const App = () => {
   useEffect(() => {
     fetchScopes();
   }, []);
+
+  const deleteScope = async (id: string) => {
+    try {
+      const res = await fetch(`/api/v1/scopes/${id}`, { method: 'DELETE' });
+      if (res.ok) {
+        if (activeScopeId === id) setActiveScopeId(null);
+        await fetchScopes();
+      }
+    } catch (e) { console.error('Failed to delete scope:', e); }
+  };
+
+  const updateScope = async (id: string, name: string, description: string | null) => {
+    try {
+      const res = await fetch(`/api/v1/scopes/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, description }),
+      });
+      if (res.ok) {
+        setEditingScope(null);
+        await fetchScopes();
+      }
+    } catch (e) { console.error('Failed to update scope:', e); }
+  };
+
+  // Reusable scope selector component
+  const ScopeSelector = ({ compact = false }: { compact?: boolean }) => (
+    <div className={`flex items-center gap-2 ${compact ? '' : 'mb-3'}`}>
+      <Filter size={compact ? 12 : 14} className="text-slate-400 shrink-0" />
+      <select
+        value={activeScopeId || ''}
+        onChange={(e) => setActiveScopeId(e.target.value || null)}
+        className={`border border-slate-200 rounded-lg px-2 py-1.5 bg-white text-slate-600 focus:ring-2 focus:ring-blue-500/40 outline-none transition cursor-pointer ${compact ? 'text-[11px] max-w-[200px]' : 'text-xs flex-1 max-w-xs'}`}
+      >
+        <option value="">Toate deciziile</option>
+        {scopes.map(s => (
+          <option key={s.id} value={s.id}>{s.name} ({s.decision_count})</option>
+        ))}
+      </select>
+      {scopes.length > 0 && (
+        <button onClick={() => setShowScopeManager(true)} className="text-[10px] text-slate-400 hover:text-blue-600 transition whitespace-nowrap">
+          Gestionează
+        </button>
+      )}
+    </div>
+  );
+
+  // Active scope indicator pill
+  const ActiveScopeIndicator = () => {
+    const scope = scopes.find(s => s.id === activeScopeId);
+    if (!scope) return null;
+    return (
+      <div className="flex items-center gap-2 bg-blue-50 border border-blue-200 rounded-lg px-3 py-1.5 mb-3">
+        <Filter size={13} className="text-blue-600 shrink-0" />
+        <span className="text-xs text-blue-700 font-medium">
+          Căutare restricționată la: <strong>"{scope.name}"</strong> ({scope.decision_count} decizii)
+        </span>
+        <button onClick={() => setActiveScopeId(null)} className="ml-auto text-blue-400 hover:text-blue-700 shrink-0"><X size={14} /></button>
+      </div>
+    );
+  };
 
   const handleSaveSettings = async () => {
     setSettingsSaving(true);
@@ -795,6 +858,7 @@ const App = () => {
           facts: drafterContext.facts,
           authority_args: drafterContext.authorityArgs,
           legal_grounds: drafterContext.legalGrounds,
+          scope_id: activeScopeId || undefined,
         },
         (chunk) => {
           setGeneratedContent(prev => prev + chunk);
@@ -989,6 +1053,7 @@ const App = () => {
         {
           topic: memoTopic,
           max_decisions: 5,
+          scope_id: activeScopeId || undefined,
         },
         (chunk) => {
           setGeneratedContent(prev => prev + chunk);
@@ -1721,11 +1786,13 @@ const App = () => {
   const renderDrafter = () => (
     <div className="h-full flex flex-col md:flex-row bg-white">
       <div className="w-full md:w-1/3 border-r border-slate-200 p-6 overflow-y-auto bg-slate-50/50">
-        <h2 className="text-lg font-bold text-slate-800 mb-6 flex gap-2 items-center">
-          <Scale className="text-blue-600" size={20}/> 
+        <h2 className="text-lg font-bold text-slate-800 mb-4 flex gap-2 items-center">
+          <Scale className="text-blue-600" size={20}/>
           Configurare Contestație
         </h2>
-        
+        <ScopeSelector compact />
+        <ActiveScopeIndicator />
+
         <div className="space-y-5">
           <div className="bg-slate-50 p-4 rounded-lg border border-dashed border-slate-300">
             <label className="text-xs font-bold text-slate-500 uppercase mb-2 block">
@@ -1840,6 +1907,7 @@ const App = () => {
     context_suplimentar: trainingContext,
     public_tinta: trainingPublicTinta || undefined,
     program_plan: trainingMode === 'program' ? trainingProgramPlan : undefined,
+    scope_id: activeScopeId || undefined,
   });
 
   // Toggle a material type in multi-select
@@ -2000,10 +2068,12 @@ const App = () => {
       <div className="h-full flex flex-col md:flex-row bg-white">
         {/* Left panel — form */}
         <div className="w-full md:w-1/3 border-r border-slate-200 p-6 overflow-y-auto bg-slate-50/50">
-          <h2 className="text-lg font-bold text-slate-800 mb-6 flex gap-2 items-center">
+          <h2 className="text-lg font-bold text-slate-800 mb-4 flex gap-2 items-center">
             <GraduationCap className="text-amber-600" size={20}/>
             TrainingAP — Materiale Didactice
           </h2>
+          <ScopeSelector compact />
+          <ActiveScopeIndicator />
 
           <div className="space-y-5">
             {/* Mode selector */}
@@ -2569,8 +2639,6 @@ const App = () => {
     );
   };
 
-  const activeScope = scopes.find(s => s.id === activeScopeId);
-
   const renderChat = () => (
     <div className="flex flex-col h-full bg-white">
       <div className="border-b border-slate-100 p-4 bg-white">
@@ -2582,14 +2650,8 @@ const App = () => {
            <span className="text-xs text-slate-500 bg-slate-100 px-2 py-1 rounded">Conectat la baza de date CNSC</span>
         </div>
         {/* Active scope indicator */}
-        {activeScope && (
-          <div className="mt-2 flex items-center gap-2 bg-blue-50 border border-blue-200 rounded-lg px-3 py-1.5">
-            <Filter size={13} className="text-blue-600 shrink-0" />
-            <span className="text-xs text-blue-700 font-medium">
-              Căutare restricționată la: <strong>"{activeScope.name}"</strong> ({activeScope.decision_count} decizii)
-            </span>
-            <button onClick={() => setActiveScopeId(null)} className="ml-auto text-blue-400 hover:text-blue-700 shrink-0"><X size={14} /></button>
-          </div>
+        {activeScopeId && (
+          <div className="mt-2"><ActiveScopeIndicator /></div>
         )}
       </div>
       <div className="flex-1 overflow-y-auto p-6 space-y-6 bg-slate-50/50">
@@ -2628,27 +2690,12 @@ const App = () => {
       <div className="p-4 bg-white border-t border-slate-200">
         <div className="max-w-4xl mx-auto">
           {/* Scope selector */}
-          <div className="flex items-center gap-2 mb-2">
-            <Filter size={14} className="text-slate-400 shrink-0" />
-            <select
-              value={activeScopeId || ''}
-              onChange={(e) => setActiveScopeId(e.target.value || null)}
-              className="text-xs border border-slate-200 rounded-lg px-2 py-1.5 bg-white text-slate-600 focus:ring-2 focus:ring-blue-500/40 outline-none transition flex-1 max-w-xs cursor-pointer"
-            >
-              <option value="">Toate deciziile</option>
-              {scopes.map(s => (
-                <option key={s.id} value={s.id}>{s.name} ({s.decision_count} decizii)</option>
-              ))}
-            </select>
-            {scopes.length > 0 && (
-              <span className="text-[10px] text-slate-400">Domeniu căutare</span>
-            )}
-          </div>
+          <ScopeSelector />
           <div className="flex gap-2 relative">
             <input
               type="text"
               className={`flex-1 border rounded-xl pl-5 pr-12 py-4 focus:ring-2 focus:ring-blue-500 outline-none shadow-sm ${chatInput.length > 100000 ? 'border-red-400 bg-red-50' : 'border-slate-300'}`}
-              placeholder={activeScope ? `Caută în "${activeScope.name}"...` : "Scrie mesajul tău..."}
+              placeholder={activeScopeId ? `Caută în scope-ul selectat...` : "Scrie mesajul tău..."}
               value={chatInput}
               onChange={(e) => setChatInput(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && handleChat()}
@@ -2994,12 +3041,14 @@ const App = () => {
         )}
         {mode === 'rag' && handleRAGMemo && (
            <div className="h-full flex flex-col p-6">
-              <header className="mb-6">
+              <header className="mb-4">
                  <h2 className="text-2xl font-bold text-slate-800 flex items-center gap-2"><BookOpen className="text-teal-600"/> Jurisprudență RAG</h2>
               </header>
+              <ActiveScopeIndicator />
               <div className="flex gap-6 h-full overflow-hidden">
                  <div className="w-80 shrink-0 flex flex-col gap-4">
                     <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
+                       <ScopeSelector compact />
                        <div className="bg-slate-50 p-3 rounded-lg border border-dashed border-slate-300 mb-3">
                          <label className="text-xs font-bold text-slate-500 uppercase mb-2 block">
                            Încarcă document (.txt, .md, .pdf)
@@ -3055,6 +3104,119 @@ const App = () => {
         {mode === 'training' && renderTraining()}
         {mode === 'settings' && renderSettings()}
       </main>
+
+      {/* Scope Manager Modal */}
+      {showScopeManager && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={() => { setShowScopeManager(false); setEditingScope(null); }}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg p-6 max-h-[80vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2">
+                <Bookmark size={20} className="text-blue-600" />
+                Gestionare Scope-uri
+              </h3>
+              <button onClick={() => { setShowScopeManager(false); setEditingScope(null); }} className="text-slate-400 hover:text-slate-600">
+                <X size={20} />
+              </button>
+            </div>
+
+            {scopes.length === 0 ? (
+              <div className="text-center py-12 text-slate-400">
+                <Bookmark size={32} className="mx-auto mb-3 opacity-30" />
+                <p className="text-sm">Nu ai niciun scope salvat.</p>
+                <p className="text-xs mt-1">Mergi pe pagina Data Lake, aplică filtre, apoi apasă "Salvează Scope".</p>
+              </div>
+            ) : (
+              <div className="flex-1 overflow-y-auto space-y-3">
+                {scopes.map(s => (
+                  <div key={s.id} className={`border rounded-xl p-4 transition ${activeScopeId === s.id ? 'border-blue-400 bg-blue-50/50' : 'border-slate-200 bg-white'}`}>
+                    {editingScope?.id === s.id ? (
+                      /* Editing mode */
+                      <div className="space-y-2">
+                        <input
+                          type="text"
+                          className="w-full border border-slate-300 rounded-lg px-3 py-1.5 text-sm focus:ring-2 focus:ring-blue-500/40 outline-none"
+                          value={editingScope.name}
+                          onChange={(e) => setEditingScope({ ...editingScope, name: e.target.value })}
+                          autoFocus
+                        />
+                        <input
+                          type="text"
+                          className="w-full border border-slate-300 rounded-lg px-3 py-1.5 text-xs focus:ring-2 focus:ring-blue-500/40 outline-none"
+                          placeholder="Descriere (opțional)"
+                          value={editingScope.description || ''}
+                          onChange={(e) => setEditingScope({ ...editingScope, description: e.target.value || null })}
+                        />
+                        <div className="flex gap-2 pt-1">
+                          <button
+                            onClick={() => updateScope(editingScope.id, editingScope.name, editingScope.description)}
+                            disabled={!editingScope.name.trim()}
+                            className="text-xs bg-blue-600 text-white px-3 py-1.5 rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center gap-1"
+                          >
+                            <Save size={12} /> Salvează
+                          </button>
+                          <button
+                            onClick={() => setEditingScope(null)}
+                            className="text-xs border border-slate-300 text-slate-600 px-3 py-1.5 rounded-lg hover:bg-slate-50"
+                          >
+                            Anulează
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      /* Display mode */
+                      <div>
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="min-w-0">
+                            <div className="font-semibold text-sm text-slate-800 truncate">{s.name}</div>
+                            {s.description && <div className="text-xs text-slate-500 mt-0.5 truncate">{s.description}</div>}
+                          </div>
+                          <span className="text-xs bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full whitespace-nowrap shrink-0">
+                            {s.decision_count} decizii
+                          </span>
+                        </div>
+                        {/* Filter pills */}
+                        <div className="flex flex-wrap gap-1 mt-2">
+                          {s.filters.ruling && <span className="text-[10px] bg-green-50 text-green-700 border border-green-200 rounded-full px-2 py-0.5">{s.filters.ruling}</span>}
+                          {s.filters.tip_contestatie && <span className="text-[10px] bg-purple-50 text-purple-700 border border-purple-200 rounded-full px-2 py-0.5">{s.filters.tip_contestatie}</span>}
+                          {s.filters.years?.map((y: number) => <span key={y} className="text-[10px] bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-full px-2 py-0.5">{y}</span>)}
+                          {s.filters.coduri_critici?.map((c: string) => <span key={c} className="text-[10px] bg-blue-50 text-blue-700 border border-blue-200 rounded-full px-2 py-0.5 font-mono">{c}</span>)}
+                          {s.filters.cpv_codes?.map((c: string) => <span key={c} className="text-[10px] bg-purple-50 text-purple-700 border border-purple-200 rounded-full px-2 py-0.5 font-mono">{c}</span>)}
+                          {s.filters.search && <span className="text-[10px] bg-slate-100 text-slate-600 border border-slate-200 rounded-full px-2 py-0.5">"{s.filters.search}"</span>}
+                        </div>
+                        {/* Actions */}
+                        <div className="flex items-center gap-2 mt-3 pt-2 border-t border-slate-100">
+                          <button
+                            onClick={() => { setActiveScopeId(s.id); setShowScopeManager(false); }}
+                            className={`text-xs font-medium transition ${activeScopeId === s.id ? 'text-blue-600' : 'text-slate-500 hover:text-blue-600'}`}
+                          >
+                            {activeScopeId === s.id ? 'Activ' : 'Activează'}
+                          </button>
+                          <span className="text-slate-200">|</span>
+                          <button
+                            onClick={() => setEditingScope({ id: s.id, name: s.name, description: s.description })}
+                            className="text-xs text-slate-500 hover:text-amber-600 transition flex items-center gap-1"
+                          >
+                            <Pencil size={11} /> Editează
+                          </button>
+                          <span className="text-slate-200">|</span>
+                          <button
+                            onClick={() => {
+                              if (confirm(`Șterge scope-ul "${s.name}"?`)) deleteScope(s.id);
+                            }}
+                            className="text-xs text-slate-500 hover:text-red-600 transition flex items-center gap-1"
+                          >
+                            <Trash2 size={11} /> Șterge
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Save Scope Modal */}
       {showScopeModal && (

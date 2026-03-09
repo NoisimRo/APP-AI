@@ -14,6 +14,7 @@ from app.models.decision import ArgumentareCritica, DecizieCNSC
 from app.services.embedding import EmbeddingService
 from app.services.llm.factory import get_active_llm_provider, get_embedding_provider
 from app.services.llm.streaming import create_sse_response
+from app.api.v1.scopes import get_scope_decision_ids
 
 router = APIRouter()
 logger = get_logger(__name__)
@@ -25,6 +26,7 @@ class DrafterRequest(BaseModel):
     facts: str = Field(..., min_length=1, max_length=200000)
     authority_args: str = Field(default="", max_length=200000)
     legal_grounds: str = Field(default="", max_length=50000)
+    scope_id: str | None = Field(None, description="Optional scope ID for pre-filtering decisions")
 
 
 class DrafterResponse(BaseModel):
@@ -37,6 +39,7 @@ class DrafterResponse(BaseModel):
 async def _build_drafter_context(
     request: DrafterRequest,
     session: AsyncSession,
+    scope_decision_ids: list[str] | None = None,
 ) -> tuple[str, list[str]]:
     """Build drafter prompt and search for relevant jurisprudence.
 
@@ -68,6 +71,10 @@ async def _build_drafter_context(
                 .order_by("distance")
                 .limit(8)
             )
+
+            # Scope pre-filter
+            if scope_decision_ids is not None:
+                stmt = stmt.where(ArgumentareCritica.decizie_id.in_(scope_decision_ids))
 
             result = await session.execute(stmt)
             rows = result.all()
@@ -181,7 +188,14 @@ async def draft_complaint(
         has_legal_grounds=bool(request.legal_grounds),
     )
 
-    prompt, decision_refs = await _build_drafter_context(request, session)
+    # Resolve scope
+    scope_ids = None
+    if request.scope_id:
+        scope_ids = await get_scope_decision_ids(request.scope_id, session)
+        if scope_ids is None:
+            raise HTTPException(status_code=404, detail="Scope not found")
+
+    prompt, decision_refs = await _build_drafter_context(request, session, scope_decision_ids=scope_ids)
     llm = await get_active_llm_provider(session)
 
     try:
@@ -211,7 +225,14 @@ async def draft_complaint_stream(
     """Stream a legal complaint draft via SSE."""
     logger.info("draft_complaint_stream_request", facts_length=len(request.facts))
 
-    prompt, decision_refs = await _build_drafter_context(request, session)
+    # Resolve scope
+    scope_ids = None
+    if request.scope_id:
+        scope_ids = await get_scope_decision_ids(request.scope_id, session)
+        if scope_ids is None:
+            raise HTTPException(status_code=404, detail="Scope not found")
+
+    prompt, decision_refs = await _build_drafter_context(request, session, scope_decision_ids=scope_ids)
     llm = await get_active_llm_provider(session)
 
     return await create_sse_response(

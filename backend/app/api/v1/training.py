@@ -20,6 +20,7 @@ from app.services.training_generator import (
 from app.services.export_service import export_markdown, export_docx, export_pdf
 from app.services.llm.factory import get_active_llm_provider
 from app.services.llm.streaming import create_sse_response
+from app.api.v1.scopes import get_scope_decision_ids
 from sqlalchemy.ext.asyncio import AsyncSession
 
 router = APIRouter()
@@ -43,6 +44,7 @@ class TrainingGenerateRequest(BaseModel):
     batch_index: int | None = Field(default=None, description="Current batch index (1-based)")
     batch_total: int | None = Field(default=None, description="Total batch count")
     selected_types: list[str] | None = Field(default=None, description="Selected material types for program/batch modes")
+    scope_id: str | None = Field(None, description="Optional scope ID for pre-filtering decisions")
 
 
 class TrainingExportRequest(BaseModel):
@@ -94,6 +96,13 @@ async def generate_material(
     llm = await get_active_llm_provider(session)
     generator = TrainingGenerator(llm_provider=llm)
 
+    # Resolve scope
+    scope_ids = None
+    if request.scope_id:
+        scope_ids = await get_scope_decision_ids(request.scope_id, session)
+        if scope_ids is None:
+            raise HTTPException(status_code=404, detail="Scope not found")
+
     try:
         result = await generator.generate(
             tema=request.tema,
@@ -107,6 +116,7 @@ async def generate_material(
             batch_total=request.batch_total,
             selected_types=request.selected_types,
             session=session,
+            scope_decision_ids=scope_ids,
         )
 
         logger.info(
@@ -139,6 +149,13 @@ async def generate_material_stream(
     llm = await get_active_llm_provider(session)
     generator = TrainingGenerator(llm_provider=llm)
 
+    # Resolve scope
+    scope_ids = None
+    if request.scope_id:
+        scope_ids = await get_scope_decision_ids(request.scope_id, session)
+        if scope_ids is None:
+            raise HTTPException(status_code=404, detail="Scope not found")
+
     try:
         user_prompt, system_prompt, metadata = await generator.prepare_for_streaming(
             tema=request.tema,
@@ -152,6 +169,7 @@ async def generate_material_stream(
             batch_total=request.batch_total,
             selected_types=request.selected_types,
             session=session,
+            scope_decision_ids=scope_ids,
         )
 
         # Token budget per length (4 sections × words per section × ~1.5 tokens/word)
