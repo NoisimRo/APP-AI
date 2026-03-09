@@ -169,6 +169,7 @@ Foreign-key constraints:
  anthropic_api_key_enc | text                      |           |          |
  openai_api_key_enc  | text                        |           |          |
  groq_api_key_enc    | text                        |           |          |
+ openrouter_api_key_enc | text                     |           |          |
  updated_at          | timestamp without time zone |           | not null | now()
 Indexes:
     "llm_settings_pkey" PRIMARY KEY, btree (id)
@@ -200,3 +201,4 @@ Indexes:
 | 2026-03-07 | `DROP INDEX IF EXISTS ix_decizii_cnsc_solutie_contestatie` (duplicate of ix_decizii_solutie) | Utilizator | DA |
 | 2026-03-08 | `CREATE TABLE llm_settings (id INTEGER PRIMARY KEY DEFAULT 1, active_provider VARCHAR(30) NOT NULL DEFAULT 'gemini', active_model VARCHAR(100), gemini_api_key_enc TEXT, anthropic_api_key_enc TEXT, openai_api_key_enc TEXT, updated_at TIMESTAMP NOT NULL DEFAULT now()); INSERT INTO llm_settings (id, active_provider) VALUES (1, 'gemini');` | Utilizator | DA |
 | 2026-03-09 | `ALTER TABLE llm_settings ADD COLUMN groq_api_key_enc TEXT;` | Utilizator | DA |
+| 2026-03-09 | `ALTER TABLE llm_settings ADD COLUMN openrouter_api_key_enc TEXT;` | Utilizator | DA |
