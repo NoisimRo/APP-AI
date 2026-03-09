@@ -311,6 +311,16 @@ const App = () => {
   const [filterRuling, setFilterRuling] = useState("");
   const [filterType, setFilterType] = useState("");
   const [filterYear, setFilterYear] = useState("");
+  const [filterCritici, setFilterCritici] = useState<string[]>([]);
+  const [filterCpv, setFilterCpv] = useState<string[]>([]);
+  const [criticiOptions, setCriticiOptions] = useState<{code: string, count: number}[]>([]);
+  const [cpvOptions, setCpvOptions] = useState<{code: string, description: string | null, count: number}[]>([]);
+  const [cpvSearchTerm, setCpvSearchTerm] = useState("");
+  const [showCriticiDropdown, setShowCriticiDropdown] = useState(false);
+  const [showCpvDropdown, setShowCpvDropdown] = useState(false);
+  const [decisionViewTab, setDecisionViewTab] = useState<'raw' | 'analysis'>('raw');
+  const [decisionAnalysis, setDecisionAnalysis] = useState<any>(null);
+  const [isLoadingAnalysis, setIsLoadingAnalysis] = useState(false);
 
   // Chat/Interaction States
   const [chatMessages, setChatMessages] = useState<Message[]>([]);
@@ -507,6 +517,8 @@ const App = () => {
       if (filterRuling) params.set('ruling', filterRuling);
       if (filterType) params.set('tip_contestatie', filterType);
       if (filterYear) params.set('year', filterYear);
+      if (filterCritici.length > 0) params.set('coduri_critici', filterCritici.join(','));
+      if (filterCpv.length > 0) params.set('cpv_codes', filterCpv.join(','));
       const response = await fetch(`/api/v1/decisions/?${params}`);
       if (response.ok) {
         const data = await response.json();
@@ -521,8 +533,21 @@ const App = () => {
     }
   };
 
+  // Fetch filter options (critique codes + CPV codes)
+  const fetchFilterOptions = async () => {
+    try {
+      const [critRes, cpvRes] = await Promise.all([
+        fetch('/api/v1/decisions/filters/critici-codes'),
+        fetch('/api/v1/decisions/filters/cpv-codes'),
+      ]);
+      if (critRes.ok) setCriticiOptions(await critRes.json());
+      if (cpvRes.ok) setCpvOptions(await cpvRes.json());
+    } catch (e) { console.error('Failed to fetch filter options:', e); }
+  };
+
   useEffect(() => {
     fetchDecisions(1);
+    fetchFilterOptions();
   }, []);
 
   // Debounced search for Data Lake (triggers on search or filter change)
@@ -531,7 +556,19 @@ const App = () => {
       fetchDecisions(1, fileSearch);
     }, 300);
     return () => clearTimeout(timer);
-  }, [fileSearch, filterRuling, filterType, filterYear]);
+  }, [fileSearch, filterRuling, filterType, filterYear, filterCritici, filterCpv]);
+
+  // Debounced CPV search for dropdown filtering
+  useEffect(() => {
+    if (!cpvSearchTerm.trim()) return;
+    const timer = setTimeout(async () => {
+      try {
+        const res = await fetch(`/api/v1/decisions/filters/cpv-codes?search=${encodeURIComponent(cpvSearchTerm)}`);
+        if (res.ok) setCpvOptions(await res.json());
+      } catch (e) { /* ignore */ }
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [cpvSearchTerm]);
 
   // --- File Management ---
 
@@ -604,13 +641,19 @@ const App = () => {
 
   // --- Decision Viewer ---
 
-  const openDecision = async (decisionId: string) => {
+  const openDecision = async (decisionId: string, tab: 'raw' | 'analysis' = 'raw') => {
     setIsLoadingDecision(true);
+    setDecisionViewTab(tab);
+    setDecisionAnalysis(null);
     try {
       const response = await fetch(`/api/v1/decisions/${encodeURIComponent(decisionId)}`);
       if (response.ok) {
         const data = await response.json();
         setViewingDecision(data);
+        // If analysis tab requested, also fetch analysis
+        if (tab === 'analysis') {
+          fetchDecisionAnalysis(decisionId);
+        }
       } else {
         alert('Nu s-a putut încărca decizia.');
       }
@@ -619,6 +662,20 @@ const App = () => {
       alert('Eroare la încărcarea deciziei.');
     } finally {
       setIsLoadingDecision(false);
+    }
+  };
+
+  const fetchDecisionAnalysis = async (decisionId: string) => {
+    setIsLoadingAnalysis(true);
+    try {
+      const res = await fetch(`/api/v1/decisions/${encodeURIComponent(decisionId)}/analysis`);
+      if (res.ok) {
+        setDecisionAnalysis(await res.json());
+      }
+    } catch (e) {
+      console.error('Failed to fetch analysis:', e);
+    } finally {
+      setIsLoadingAnalysis(false);
     }
   };
 
@@ -1201,7 +1258,8 @@ const App = () => {
 
         {/* Search + Filters Bar */}
         <div className="px-6 py-3 border-b border-slate-200 bg-white shrink-0">
-          <div className="flex items-center gap-4">
+          {/* Row 1: Search + basic dropdowns */}
+          <div className="flex items-center gap-3">
             {/* Search */}
             <div className="relative flex-1">
               <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
@@ -1213,10 +1271,10 @@ const App = () => {
                 onChange={(e) => setFileSearch(e.target.value)}
               />
             </div>
-            {/* Dropdowns */}
+            {/* Basic Dropdowns */}
             <div className="flex items-center gap-2">
               <div className="relative">
-                <select value={filterRuling} onChange={(e) => setFilterRuling(e.target.value)} className="appearance-none text-xs border border-slate-300 rounded-lg pl-3 pr-7 py-2 bg-white text-slate-700 focus:ring-2 focus:ring-blue-500/40 focus:border-blue-400 outline-none transition min-w-[120px] cursor-pointer">
+                <select value={filterRuling} onChange={(e) => setFilterRuling(e.target.value)} className="appearance-none text-xs border border-slate-300 rounded-lg pl-3 pr-7 py-2 bg-white text-slate-700 focus:ring-2 focus:ring-blue-500/40 focus:border-blue-400 outline-none transition min-w-[110px] cursor-pointer">
                   <option value="">Soluție: Toate</option>
                   <option value="ADMIS">Admis</option>
                   <option value="ADMIS_PARTIAL">Admis Parțial</option>
@@ -1225,7 +1283,7 @@ const App = () => {
                 <ChevronDown size={13} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
               </div>
               <div className="relative">
-                <select value={filterType} onChange={(e) => setFilterType(e.target.value)} className="appearance-none text-xs border border-slate-300 rounded-lg pl-3 pr-7 py-2 bg-white text-slate-700 focus:ring-2 focus:ring-blue-500/40 focus:border-blue-400 outline-none transition min-w-[120px] cursor-pointer">
+                <select value={filterType} onChange={(e) => setFilterType(e.target.value)} className="appearance-none text-xs border border-slate-300 rounded-lg pl-3 pr-7 py-2 bg-white text-slate-700 focus:ring-2 focus:ring-blue-500/40 focus:border-blue-400 outline-none transition min-w-[110px] cursor-pointer">
                   <option value="">Tip: Toate</option>
                   <option value="documentatie">Documentație</option>
                   <option value="rezultat">Rezultat</option>
@@ -1233,7 +1291,7 @@ const App = () => {
                 <ChevronDown size={13} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
               </div>
               <div className="relative">
-                <select value={filterYear} onChange={(e) => setFilterYear(e.target.value)} className="appearance-none text-xs border border-slate-300 rounded-lg pl-3 pr-7 py-2 bg-white text-slate-700 focus:ring-2 focus:ring-blue-500/40 focus:border-blue-400 outline-none transition min-w-[120px] cursor-pointer">
+                <select value={filterYear} onChange={(e) => setFilterYear(e.target.value)} className="appearance-none text-xs border border-slate-300 rounded-lg pl-3 pr-7 py-2 bg-white text-slate-700 focus:ring-2 focus:ring-blue-500/40 focus:border-blue-400 outline-none transition min-w-[100px] cursor-pointer">
                   <option value="">An: Toate</option>
                   {Array.from({length: 6}, (_, i) => 2026 - i).map(y => (
                     <option key={y} value={String(y)}>{y}</option>
@@ -1241,18 +1299,130 @@ const App = () => {
                 </select>
                 <ChevronDown size={13} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
               </div>
+
+              {/* Critici Multi-select Dropdown */}
+              <div className="relative">
+                <button
+                  onClick={() => { setShowCriticiDropdown(!showCriticiDropdown); setShowCpvDropdown(false); }}
+                  className={`text-xs border rounded-lg px-3 py-2 bg-white text-slate-700 focus:ring-2 focus:ring-blue-500/40 outline-none transition min-w-[110px] cursor-pointer flex items-center gap-1.5 ${filterCritici.length > 0 ? 'border-blue-400 bg-blue-50 text-blue-700' : 'border-slate-300'}`}
+                >
+                  <Filter size={12} />
+                  Critici{filterCritici.length > 0 && ` (${filterCritici.length})`}
+                  <ChevronDown size={12} className="ml-auto" />
+                </button>
+                {showCriticiDropdown && (
+                  <div className="absolute top-full left-0 mt-1 bg-white border border-slate-200 rounded-lg shadow-lg z-50 w-64 max-h-72 overflow-y-auto py-1">
+                    {criticiOptions.map(opt => {
+                      const isSelected = filterCritici.includes(opt.code);
+                      const legend = (CRITIQUE_LEGEND as any)[opt.code] || '';
+                      return (
+                        <button
+                          key={opt.code}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setFilterCritici(prev => isSelected ? prev.filter(c => c !== opt.code) : [...prev, opt.code]);
+                          }}
+                          className="w-full text-left px-3 py-1.5 text-xs hover:bg-slate-50 flex items-center gap-2"
+                        >
+                          <span className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 ${isSelected ? 'bg-blue-600 border-blue-600 text-white' : 'border-slate-300'}`}>
+                            {isSelected && <CheckSquare size={11} />}
+                          </span>
+                          <span className="font-mono font-bold text-slate-700">{opt.code}</span>
+                          <span className="text-slate-400 truncate flex-1">{legend}</span>
+                          <span className="text-slate-300 tabular-nums">{opt.count}</span>
+                        </button>
+                      );
+                    })}
+                    {filterCritici.length > 0 && (
+                      <div className="border-t border-slate-100 mt-1 pt-1 px-3 pb-1">
+                        <button onClick={() => setFilterCritici([])} className="text-xs text-blue-600 hover:text-blue-800">Șterge selecția</button>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* CPV Multi-select Dropdown with Search */}
+              <div className="relative">
+                <button
+                  onClick={() => { setShowCpvDropdown(!showCpvDropdown); setShowCriticiDropdown(false); }}
+                  className={`text-xs border rounded-lg px-3 py-2 bg-white text-slate-700 focus:ring-2 focus:ring-blue-500/40 outline-none transition min-w-[100px] cursor-pointer flex items-center gap-1.5 ${filterCpv.length > 0 ? 'border-blue-400 bg-blue-50 text-blue-700' : 'border-slate-300'}`}
+                >
+                  <Filter size={12} />
+                  CPV{filterCpv.length > 0 && ` (${filterCpv.length})`}
+                  <ChevronDown size={12} className="ml-auto" />
+                </button>
+                {showCpvDropdown && (
+                  <div className="absolute top-full right-0 mt-1 bg-white border border-slate-200 rounded-lg shadow-lg z-50 w-80 max-h-80 flex flex-col">
+                    <div className="p-2 border-b border-slate-100 shrink-0">
+                      <input
+                        type="text"
+                        placeholder="Caută cod CPV sau descriere..."
+                        value={cpvSearchTerm}
+                        onChange={(e) => setCpvSearchTerm(e.target.value)}
+                        onClick={(e) => e.stopPropagation()}
+                        className="w-full text-xs border border-slate-200 rounded px-2.5 py-1.5 focus:ring-2 focus:ring-blue-500/40 outline-none"
+                      />
+                    </div>
+                    <div className="overflow-y-auto flex-1 py-1">
+                      {cpvOptions.map(opt => {
+                        const isSelected = filterCpv.includes(opt.code);
+                        return (
+                          <button
+                            key={opt.code}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setFilterCpv(prev => isSelected ? prev.filter(c => c !== opt.code) : [...prev, opt.code]);
+                            }}
+                            className="w-full text-left px-3 py-1.5 text-xs hover:bg-slate-50 flex items-center gap-2"
+                          >
+                            <span className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 ${isSelected ? 'bg-blue-600 border-blue-600 text-white' : 'border-slate-300'}`}>
+                              {isSelected && <CheckSquare size={11} />}
+                            </span>
+                            <span className="font-mono font-semibold text-slate-700 shrink-0">{opt.code}</span>
+                            <span className="text-slate-400 truncate flex-1">{opt.description || ''}</span>
+                            <span className="text-slate-300 tabular-nums shrink-0">{opt.count}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                    {filterCpv.length > 0 && (
+                      <div className="border-t border-slate-100 px-3 py-1.5 shrink-0">
+                        <button onClick={() => setFilterCpv([])} className="text-xs text-blue-600 hover:text-blue-800">Șterge selecția</button>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
             </div>
-            {(filterRuling || filterType || filterYear || fileSearch) && (
-              <button onClick={() => { setFilterRuling(""); setFilterType(""); setFilterYear(""); setFileSearch(""); }}
+            {(filterRuling || filterType || filterYear || fileSearch || filterCritici.length > 0 || filterCpv.length > 0) && (
+              <button onClick={() => { setFilterRuling(""); setFilterType(""); setFilterYear(""); setFileSearch(""); setFilterCritici([]); setFilterCpv([]); }}
                 className="text-xs text-blue-600 hover:text-blue-800 font-medium whitespace-nowrap flex items-center gap-1 transition">
                 <X size={13} /> Resetează
               </button>
             )}
           </div>
+          {/* Active filter pills */}
+          {(filterCritici.length > 0 || filterCpv.length > 0) && (
+            <div className="flex items-center gap-1.5 mt-2 flex-wrap">
+              {filterCritici.map(c => (
+                <span key={c} className="text-[10px] bg-blue-50 text-blue-700 border border-blue-200 rounded-full px-2 py-0.5 flex items-center gap-1 font-mono font-semibold">
+                  {c}
+                  <button onClick={() => setFilterCritici(prev => prev.filter(x => x !== c))} className="hover:text-red-500"><X size={10} /></button>
+                </span>
+              ))}
+              {filterCpv.map(c => (
+                <span key={c} className="text-[10px] bg-purple-50 text-purple-700 border border-purple-200 rounded-full px-2 py-0.5 flex items-center gap-1 font-mono">
+                  {c}
+                  <button onClick={() => setFilterCpv(prev => prev.filter(x => x !== c))} className="hover:text-red-500"><X size={10} /></button>
+                </span>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* Decision Cards */}
-        <div className="flex-1 overflow-y-auto px-6 py-4">
+        <div className="flex-1 overflow-y-auto px-6 py-4" onClick={() => { setShowCriticiDropdown(false); setShowCpvDropdown(false); }}>
           {isLoadingDecisions ? (
             <div className="flex flex-col items-center justify-center py-20">
               <Loader2 size={32} className="text-blue-500 animate-spin mb-3" />
@@ -1265,6 +1435,14 @@ const App = () => {
               const firstCritiqueCode = dec.coduri_critici?.[0];
               const critiqueDesc = firstCritiqueCode ? CRITIQUE_LEGEND[firstCritiqueCode] || '' : '';
 
+              // Semaphore: green=all done, yellow=analyzed but no embeddings, grey=just imported
+              const semColor = dec.has_embeddings ? 'bg-emerald-500' : dec.has_analysis ? 'bg-amber-400' : 'bg-slate-300';
+              const semTooltip = [
+                `Importat: Da`,
+                `Analizat: ${dec.has_analysis ? 'Da' : 'Nu'}`,
+                `Embedded: ${dec.has_embeddings ? 'Da' : 'Nu'}`,
+              ].join('\n');
+
               return (
                 <div key={dec.id}
                   className="group bg-white rounded-xl border border-slate-200/80 hover:border-blue-300 hover:shadow-md transition-all cursor-pointer flex items-stretch"
@@ -1272,17 +1450,21 @@ const App = () => {
                 >
                   {/* Main content area */}
                   <div className="flex-1 p-4 min-w-0">
-                    {/* Row 1: ID + Status Badge + Date */}
+                    {/* Row 1: ID + Semaphore */}
                     <div className="flex items-center gap-2.5 mb-2">
                       <span className="text-sm font-bold text-slate-900 font-mono tracking-tight">
                         BO{dec.an_bo}_{dec.numar_bo}
                       </span>
-                      {rulingBadge(dec.solutie_contestatie)}
-                      {dec.data_decizie && (
-                        <span className="text-[11px] text-slate-400 font-medium">
-                          {new Date(dec.data_decizie).toLocaleDateString('ro-RO')}
-                        </span>
-                      )}
+                      {/* Semaphore indicator */}
+                      <div className="relative group/sem">
+                        <div className={`w-2.5 h-2.5 rounded-full ${semColor} ring-2 ring-white shadow-sm`}></div>
+                        <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover/sem:block z-50">
+                          <div className="bg-slate-800 text-white text-[10px] rounded-lg px-3 py-2 whitespace-pre shadow-lg leading-relaxed">
+                            {semTooltip}
+                          </div>
+                          <div className="w-2 h-2 bg-slate-800 rotate-45 absolute left-1/2 -translate-x-1/2 -bottom-1"></div>
+                        </div>
+                      </div>
                     </div>
 
                     {/* Row 2: CPV */}
@@ -1298,7 +1480,7 @@ const App = () => {
                       </p>
                     )}
 
-                    {/* Row 4: Tag Footer — Type + Critique codes + descriptions */}
+                    {/* Row 4: Tag Footer — Type + Ruling + Date + Critique codes + descriptions */}
                     <div className="flex items-center gap-2 flex-wrap">
                       {/* Type pill */}
                       <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${
@@ -1308,6 +1490,14 @@ const App = () => {
                       }`}>
                         {dec.tip_contestatie === 'documentatie' ? 'Documentație' : 'Rezultat'}
                       </span>
+                      {/* Ruling badge (moved from row 1) */}
+                      {rulingBadge(dec.solutie_contestatie)}
+                      {/* Date (moved from row 1) */}
+                      {dec.data_decizie && (
+                        <span className="text-[10px] text-slate-400 font-medium">
+                          {new Date(dec.data_decizie).toLocaleDateString('ro-RO')}
+                        </span>
+                      )}
                       {/* Critique code pills + description */}
                       {dec.coduri_critici?.map((cod: string) => (
                         <span key={cod} className="text-[10px] bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full font-mono font-semibold border border-slate-200">
@@ -1322,8 +1512,15 @@ const App = () => {
                     </div>
                   </div>
 
-                  {/* Right action: Eye icon */}
-                  <div className="flex items-center justify-center px-5 border-l border-slate-100 group-hover:border-blue-100 transition-colors shrink-0">
+                  {/* Right action: Eye icon (opens analysis view) */}
+                  <div
+                    className="flex items-center justify-center px-5 border-l border-slate-100 group-hover:border-blue-100 transition-colors shrink-0"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      openDecision(`BO${dec.an_bo}_${dec.numar_bo}`, 'analysis');
+                    }}
+                    title="Vezi analiza LLM"
+                  >
                     <Eye size={22} className="text-slate-300 group-hover:text-blue-500 transition-colors" />
                   </div>
                 </div>
@@ -2145,11 +2342,13 @@ const App = () => {
                         : 'border-slate-200 hover:border-slate-300 bg-white'
                     }`}
                   >
-                    <div className="flex items-center justify-between mb-1">
+                    <div className="mb-1">
                       <span className={`text-sm font-bold ${isActive ? `text-${color}-700` : 'text-slate-700'}`}>{label}</span>
-                      {isConfigured && <span className="text-xs text-green-600 bg-green-50 px-1.5 py-0.5 rounded">Configurat</span>}
                     </div>
-                    <span className="text-xs text-slate-400">{(llmSettings?.providers?.[key]?.models || []).length} modele</span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-slate-400">{(llmSettings?.providers?.[key]?.models || []).length} modele</span>
+                      {isConfigured && <span className="text-[10px] text-green-600 bg-green-50 px-1 py-0.5 rounded whitespace-nowrap">✓</span>}
+                    </div>
                   </button>
                 );
               })}
@@ -2790,36 +2989,154 @@ const App = () => {
                   </div>
                 </div>
 
-                {/* Content */}
-                <div className="flex-1 overflow-y-auto p-6" ref={decisionContentRef}>
-                  <div
-                    className="prose prose-slate max-w-none text-sm leading-relaxed whitespace-pre-wrap font-mono bg-slate-50 p-6 rounded-lg border border-slate-200"
-                    dangerouslySetInnerHTML={{
-                      __html: (() => {
-                        const raw = viewingDecision.content || "";
-                        const escaped = raw.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-                        if (!searchActive) return escaped;
-                        const regex = new RegExp(`(${safeSearch})`, 'gi');
-                        let idx = 0;
-                        return escaped.replace(regex, (match: string) => {
-                          const isActive = idx === decisionSearchIndex;
-                          const style = isActive
-                            ? 'background:#fb923c;color:white;padding:1px 2px;border-radius:2px'
-                            : 'background:#fef08a;padding:1px 2px;border-radius:2px';
-                          return `<mark data-match="${idx++}" style="${style}">${match}</mark>`;
-                        });
-                      })()
+                {/* Tab switcher */}
+                <div className="flex items-center gap-1 px-6 pt-3 pb-0 shrink-0 border-b border-slate-200">
+                  <button
+                    onClick={() => setDecisionViewTab('raw')}
+                    className={`px-4 py-2 text-xs font-medium rounded-t-lg border border-b-0 transition ${
+                      decisionViewTab === 'raw'
+                        ? 'bg-white text-slate-800 border-slate-200'
+                        : 'bg-slate-50 text-slate-400 border-transparent hover:text-slate-600'
+                    }`}
+                  >
+                    <FileText size={13} className="inline mr-1.5 -mt-0.5" />Text brut
+                  </button>
+                  <button
+                    onClick={() => {
+                      setDecisionViewTab('analysis');
+                      if (!decisionAnalysis) {
+                        const caseNum = viewingDecision.metadata?.case_number || viewingDecision.title;
+                        fetchDecisionAnalysis(caseNum);
+                      }
                     }}
-                  />
+                    className={`px-4 py-2 text-xs font-medium rounded-t-lg border border-b-0 transition ${
+                      decisionViewTab === 'analysis'
+                        ? 'bg-white text-slate-800 border-slate-200'
+                        : 'bg-slate-50 text-slate-400 border-transparent hover:text-slate-600'
+                    }`}
+                  >
+                    <BookOpen size={13} className="inline mr-1.5 -mt-0.5" />Analiză LLM
+                  </button>
                 </div>
+
+                {/* Content */}
+                {decisionViewTab === 'raw' ? (
+                  <div className="flex-1 overflow-y-auto p-6" ref={decisionContentRef}>
+                    <div
+                      className="prose prose-slate max-w-none text-sm leading-relaxed whitespace-pre-wrap font-mono bg-slate-50 p-6 rounded-lg border border-slate-200"
+                      dangerouslySetInnerHTML={{
+                        __html: (() => {
+                          const raw = viewingDecision.content || "";
+                          const escaped = raw.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+                          if (!searchActive) return escaped;
+                          const regex = new RegExp(`(${safeSearch})`, 'gi');
+                          let idx = 0;
+                          return escaped.replace(regex, (match: string) => {
+                            const isActive = idx === decisionSearchIndex;
+                            const style = isActive
+                              ? 'background:#fb923c;color:white;padding:1px 2px;border-radius:2px'
+                              : 'background:#fef08a;padding:1px 2px;border-radius:2px';
+                            return `<mark data-match="${idx++}" style="${style}">${match}</mark>`;
+                          });
+                        })()
+                      }}
+                    />
+                  </div>
+                ) : (
+                  <div className="flex-1 overflow-y-auto p-6">
+                    {isLoadingAnalysis ? (
+                      <div className="flex items-center justify-center py-16">
+                        <Loader2 size={24} className="animate-spin text-blue-500 mr-2" />
+                        <span className="text-sm text-slate-500">Se încarcă analiza...</span>
+                      </div>
+                    ) : decisionAnalysis?.chunks?.length > 0 ? (
+                      <div className="space-y-4">
+                        {decisionAnalysis.chunks.map((chunk: any, i: number) => (
+                          <div key={i} className="bg-slate-50 rounded-lg border border-slate-200 p-5">
+                            {/* Chunk header */}
+                            <div className="flex items-center gap-2 mb-3">
+                              <span className="text-xs font-mono font-bold bg-blue-100 text-blue-700 px-2 py-0.5 rounded">
+                                {chunk.cod_critica || `Critica ${i + 1}`}
+                              </span>
+                              {chunk.cod_critica && (CRITIQUE_LEGEND as any)[chunk.cod_critica] && (
+                                <span className="text-xs text-slate-500">{(CRITIQUE_LEGEND as any)[chunk.cod_critica]}</span>
+                              )}
+                              {chunk.castigator_critica && chunk.castigator_critica !== 'unknown' && (
+                                <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold ml-auto ${
+                                  chunk.castigator_critica === 'contestator' ? 'bg-emerald-100 text-emerald-700' :
+                                  chunk.castigator_critica === 'autoritate' ? 'bg-red-100 text-red-700' :
+                                  'bg-amber-100 text-amber-700'
+                                }`}>
+                                  {chunk.castigator_critica === 'contestator' ? 'Contestator' :
+                                   chunk.castigator_critica === 'autoritate' ? 'Autoritate' : 'Parțial'}
+                                </span>
+                              )}
+                            </div>
+                            {/* Sections */}
+                            <div className="space-y-3 text-xs leading-relaxed">
+                              {chunk.argumente_contestator && (
+                                <div>
+                                  <h4 className="font-bold text-blue-700 mb-1">Argumente contestator</h4>
+                                  <p className="text-slate-600 whitespace-pre-wrap">{chunk.argumente_contestator}</p>
+                                  {chunk.jurisprudenta_contestator?.length > 0 && (
+                                    <p className="text-slate-400 mt-1 italic">Jurisprudență: {chunk.jurisprudenta_contestator.join('; ')}</p>
+                                  )}
+                                </div>
+                              )}
+                              {chunk.argumente_ac && (
+                                <div>
+                                  <h4 className="font-bold text-orange-700 mb-1">Argumente AC</h4>
+                                  <p className="text-slate-600 whitespace-pre-wrap">{chunk.argumente_ac}</p>
+                                  {chunk.jurisprudenta_ac?.length > 0 && (
+                                    <p className="text-slate-400 mt-1 italic">Jurisprudență: {chunk.jurisprudenta_ac.join('; ')}</p>
+                                  )}
+                                </div>
+                              )}
+                              {chunk.argumente_intervenienti?.length > 0 && chunk.argumente_intervenienti.map((interv: any, j: number) => (
+                                <div key={j}>
+                                  <h4 className="font-bold text-purple-700 mb-1">Intervenient #{interv.nr || j + 1}</h4>
+                                  <p className="text-slate-600 whitespace-pre-wrap">{interv.argumente}</p>
+                                </div>
+                              ))}
+                              {chunk.elemente_retinute_cnsc && (
+                                <div>
+                                  <h4 className="font-bold text-slate-700 mb-1">Elemente reținute CNSC</h4>
+                                  <p className="text-slate-600 whitespace-pre-wrap">{chunk.elemente_retinute_cnsc}</p>
+                                </div>
+                              )}
+                              {chunk.argumentatie_cnsc && (
+                                <div>
+                                  <h4 className="font-bold text-emerald-700 mb-1">Argumentație CNSC</h4>
+                                  <p className="text-slate-600 whitespace-pre-wrap">{chunk.argumentatie_cnsc}</p>
+                                  {chunk.jurisprudenta_cnsc?.length > 0 && (
+                                    <p className="text-slate-400 mt-1 italic">Jurisprudență: {chunk.jurisprudenta_cnsc.join('; ')}</p>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="text-center py-16 text-slate-400">
+                        <BookOpen size={32} className="mx-auto mb-3 text-slate-300" />
+                        <p className="text-sm font-medium text-slate-500">Nu există analiză LLM</p>
+                        <p className="text-xs mt-1">Această decizie nu a fost încă analizată cu LLM.</p>
+                      </div>
+                    )}
+                  </div>
+                )}
 
                 {/* Footer */}
                 <div className="p-4 border-t border-slate-200 flex justify-between items-center shrink-0">
                   <span className="text-xs text-slate-400">
-                    {viewingDecision.content?.length?.toLocaleString()} caractere
+                    {decisionViewTab === 'raw'
+                      ? `${viewingDecision.content?.length?.toLocaleString()} caractere`
+                      : `${decisionAnalysis?.chunks?.length || 0} critici analizate`
+                    }
                   </span>
                   <button
-                    onClick={() => { setDecisionSearchTerm(""); setDecisionSearchIndex(0); setViewingDecision(null); }}
+                    onClick={() => { setDecisionSearchTerm(""); setDecisionSearchIndex(0); setViewingDecision(null); setDecisionAnalysis(null); }}
                     className="px-4 py-2 bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200 transition text-sm font-medium"
                   >
                     Închide

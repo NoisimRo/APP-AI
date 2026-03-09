@@ -57,15 +57,15 @@ PROVIDER_MODELS = {
     "groq": [
         "llama-3.3-70b-versatile",
         "llama-3.1-8b-instant",
-        "deepseek-r1-distill-llama-70b",
-        "deepseek-r1-distill-qwen-32b",
+        "openai/gpt-oss-120b",
+        "qwen/qwen3-32b",
+        "meta-llama/llama-4-scout-17b-16e-instruct",
         "gemma2-9b-it",
         "qwen-qwq-32b",
-        "meta-llama/llama-4-scout-17b-16e-instruct",
     ],
     "openrouter": [
-        "deepseek/deepseek-chat-v3.1:free",
-        "deepseek/deepseek-r1:free",
+        "deepseek/deepseek-chat-v3-0324:free",
+        "deepseek/deepseek-r1-0528:free",
         "meta-llama/llama-4-maverick:free",
         "meta-llama/llama-4-scout:free",
         "meta-llama/llama-3.3-70b-instruct:free",
@@ -83,7 +83,7 @@ DEFAULT_MODELS = {
     "anthropic": "claude-sonnet-4-6",
     "openai": "gpt-5.4-2026-03-05",
     "groq": "llama-3.3-70b-versatile",
-    "openrouter": "deepseek/deepseek-chat-v3.1:free",
+    "openrouter": "deepseek/deepseek-chat-v3-0324:free",
 }
 
 
