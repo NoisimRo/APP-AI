@@ -18,18 +18,22 @@ logger = get_logger(__name__)
 GROQ_BASE_URL = "https://api.groq.com/openai/v1"
 
 # Max input tokens per model on Groq free tier (on_demand).
-# Conservative limits: leave room for max_tokens response (4096).
-# TPM limits from https://console.groq.com/settings/limits
+# Values derived from actual TPM errors — leave ~2000 tokens for response.
+# TPM = total tokens per minute (input + output combined).
 MODEL_INPUT_LIMITS: dict[str, int] = {
-    "llama-3.3-70b-versatile": 7000,       # TPM 12000, minus response budget
-    "llama-3.1-8b-instant": 7000,           # TPM 12000
-    "openai/gpt-oss-120b": 28000,           # Higher tier model
-    "qwen/qwen3-32b": 28000,               # Higher tier model
-    "meta-llama/llama-4-scout-17b-16e-instruct": 28000,
-    "gemma2-9b-it": 7000,                   # TPM 12000
-    "qwen-qwq-32b": 28000,
+    "llama-3.3-70b-versatile": 8000,       # TPM 12000
+    "llama-3.1-8b-instant": 3500,           # TPM 6000
+    "openai/gpt-oss-120b": 5000,            # TPM 8000
+    "qwen/qwen3-32b": 3500,                 # TPM 6000
+    "meta-llama/llama-4-scout-17b-16e-instruct": 5000,  # TPM ~8000
 }
-DEFAULT_INPUT_LIMIT = 7000  # Conservative default for unknown models
+DEFAULT_INPUT_LIMIT = 3500  # Conservative default for unknown models
+
+# Max output tokens per model (some models cap lower than 4096)
+MODEL_MAX_OUTPUT_TOKENS: dict[str, int] = {
+    "meta-llama/llama-4-scout-17b-16e-instruct": 8192,
+}
+DEFAULT_MAX_OUTPUT_TOKENS = 4096
 
 
 class GroqProvider(LLMProvider):
@@ -160,6 +164,11 @@ class GroqProvider(LLMProvider):
         messages.append({"role": "user", "content": "\n".join(parts)})
         return messages
 
+    def _get_max_output_tokens(self, requested: int) -> int:
+        """Cap max_tokens to model's limit."""
+        model_max = MODEL_MAX_OUTPUT_TOKENS.get(self._model_name, DEFAULT_MAX_OUTPUT_TOKENS)
+        return min(requested, model_max)
+
     async def complete(
         self,
         prompt: str,
@@ -170,13 +179,14 @@ class GroqProvider(LLMProvider):
     ) -> str:
         """Generate a completion using Groq."""
         messages = self._build_messages(prompt, context, system_prompt)
+        safe_max_tokens = self._get_max_output_tokens(max_tokens)
 
         try:
             response = await self._client.chat.completions.create(
                 model=self._model_name,
                 messages=messages,
                 temperature=temperature,
-                max_tokens=max_tokens,
+                max_tokens=safe_max_tokens,
             )
 
             content = response.choices[0].message.content
@@ -201,17 +211,20 @@ class GroqProvider(LLMProvider):
     ) -> AsyncIterator[str]:
         """Stream a completion using Groq."""
         messages = self._build_messages(prompt, context, system_prompt)
+        safe_max_tokens = self._get_max_output_tokens(max_tokens)
 
         try:
             stream = await self._client.chat.completions.create(
                 model=self._model_name,
                 messages=messages,
                 temperature=temperature,
-                max_tokens=max_tokens,
+                max_tokens=safe_max_tokens,
                 stream=True,
             )
 
             async for chunk in stream:
+                if not chunk.choices:
+                    continue
                 delta = chunk.choices[0].delta
                 if delta.content:
                     yield delta.content

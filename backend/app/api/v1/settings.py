@@ -2,10 +2,12 @@
 
 Allows viewing, updating, and testing LLM provider configuration.
 API keys are encrypted before storage.
+OpenRouter models are fetched dynamically from their API.
 """
 
 import time
 
+import httpx
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy import select
@@ -60,20 +62,9 @@ PROVIDER_MODELS = {
         "openai/gpt-oss-120b",
         "qwen/qwen3-32b",
         "meta-llama/llama-4-scout-17b-16e-instruct",
-        "gemma2-9b-it",
-        "qwen-qwq-32b",
     ],
     "openrouter": [
-        "deepseek/deepseek-chat-v3-0324:free",
-        "deepseek/deepseek-r1-0528:free",
-        "meta-llama/llama-4-maverick:free",
-        "meta-llama/llama-4-scout:free",
-        "meta-llama/llama-3.3-70b-instruct:free",
-        "qwen/qwen3-235b-a22b:free",
-        "google/gemma-3-27b-it:free",
-        "mistralai/mistral-small-3.1-24b-instruct:free",
-        "nvidia/llama-3.1-nemotron-ultra-253b-v1:free",
-        "openrouter/free",
+        "openrouter/free",  # Fallback — always kept first
     ],
 }
 
@@ -83,14 +74,113 @@ DEFAULT_MODELS = {
     "anthropic": "claude-sonnet-4-6",
     "openai": "gpt-5.4-2026-03-05",
     "groq": "llama-3.3-70b-versatile",
-    "openrouter": "deepseek/deepseek-chat-v3-0324:free",
+    "openrouter": "openrouter/free",
 }
+
+# Token limits per model: (max_input_tokens, max_output_tokens)
+MODEL_TOKEN_LIMITS: dict[str, tuple[int, int]] = {
+    # Gemini
+    "gemini-3.1-pro-preview": (1_048_576, 65_536),
+    "gemini-3.1-pro-preview-customtools": (1_048_576, 65_536),
+    "gemini-3-flash-preview": (1_048_576, 65_536),
+    "gemini-3.1-flash-lite-preview": (1_048_576, 65_536),
+    "gemini-2.5-flash": (1_048_576, 65_536),
+    "gemini-2.5-pro": (1_048_576, 65_536),
+    "gemini-2.5-flash-lite": (1_048_576, 65_536),
+    # Anthropic
+    "claude-opus-4-6": (200_000, 32_000),
+    "claude-sonnet-4-6": (200_000, 16_000),
+    "claude-opus-4-5": (200_000, 32_000),
+    "claude-sonnet-4-5": (200_000, 16_000),
+    # OpenAI
+    "gpt-5.4-2026-03-05": (200_000, 100_000),
+    "gpt-5-2025-08-07": (128_000, 32_768),
+    "gpt-5-mini-2025-08-07": (128_000, 16_384),
+    "gpt-4.1": (1_047_576, 32_768),
+    "gpt-4.1-mini": (1_047_576, 32_768),
+    "gpt-4.1-nano": (1_047_576, 32_768),
+    "gpt-4o": (128_000, 16_384),
+    "gpt-4o-mini": (128_000, 16_384),
+    "o3": (200_000, 100_000),
+    "o3-mini": (200_000, 100_000),
+    "o4-mini": (200_000, 100_000),
+    # Groq (free tier TPM limits — much lower than model max)
+    "llama-3.3-70b-versatile": (8_000, 4_096),
+    "llama-3.1-8b-instant": (3_500, 4_096),
+    "openai/gpt-oss-120b": (5_000, 4_096),
+    "qwen/qwen3-32b": (3_500, 4_096),
+    "meta-llama/llama-4-scout-17b-16e-instruct": (5_000, 8_192),
+    # OpenRouter
+    "openrouter/free": (10_000, 4_096),
+}
+
+# Cache for dynamically fetched OpenRouter models
+_openrouter_models_cache: list[str] | None = None
+_openrouter_cache_time: float = 0
+OPENROUTER_CACHE_TTL = 3600  # 1 hour
+
+
+async def _fetch_openrouter_free_models() -> list[str]:
+    """Fetch available free models from OpenRouter API. Cached for 1 hour."""
+    global _openrouter_models_cache, _openrouter_cache_time
+
+    now = time.monotonic()
+    if _openrouter_models_cache is not None and (now - _openrouter_cache_time) < OPENROUTER_CACHE_TTL:
+        return _openrouter_models_cache
+
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            resp = await client.get("https://openrouter.ai/api/v1/models")
+            resp.raise_for_status()
+            data = resp.json()
+
+        free_models = []
+        for model in data.get("data", []):
+            model_id = model.get("id", "")
+            pricing = model.get("pricing", {})
+            # A model is free if both prompt and completion cost are "0"
+            prompt_cost = str(pricing.get("prompt", "1"))
+            completion_cost = str(pricing.get("completion", "1"))
+            if prompt_cost == "0" and completion_cost == "0":
+                free_models.append(model_id)
+
+        # Sort: prioritize well-known providers
+        priority_prefixes = ["deepseek/", "meta-llama/", "qwen/", "google/", "mistralai/", "nvidia/"]
+        def sort_key(m: str) -> tuple:
+            for i, prefix in enumerate(priority_prefixes):
+                if m.startswith(prefix):
+                    return (i, m)
+            return (len(priority_prefixes), m)
+
+        free_models.sort(key=sort_key)
+
+        # Always include openrouter/free at the start
+        result = ["openrouter/free"] + [m for m in free_models if m != "openrouter/free"]
+
+        _openrouter_models_cache = result
+        _openrouter_cache_time = now
+        logger.info("openrouter_models_fetched", count=len(result))
+        return result
+
+    except Exception as e:
+        logger.warning("openrouter_models_fetch_failed", error=str(e))
+        # Return cached if available, otherwise fallback
+        if _openrouter_models_cache:
+            return _openrouter_models_cache
+        return PROVIDER_MODELS["openrouter"]
+
+
+class ModelInfo(BaseModel):
+    """Info about a single model."""
+    id: str
+    input_tokens: int
+    output_tokens: int
 
 
 class ProviderInfo(BaseModel):
     """Info about a provider's configuration status."""
     configured: bool
-    models: list[str]
+    models: list[ModelInfo]
 
 
 class LLMSettingsResponse(BaseModel):
@@ -143,6 +233,16 @@ def _is_provider_configured(provider: str, settings_row: LLMSettings | None) -> 
     return False
 
 
+def _build_model_list(model_ids: list[str]) -> list[ModelInfo]:
+    """Build sorted ModelInfo list from model IDs (largest input first)."""
+    models = []
+    for mid in model_ids:
+        limits = MODEL_TOKEN_LIMITS.get(mid, (0, 0))
+        models.append(ModelInfo(id=mid, input_tokens=limits[0], output_tokens=limits[1]))
+    models.sort(key=lambda m: m.input_tokens, reverse=True)
+    return models
+
+
 async def _get_settings_row(session: AsyncSession) -> LLMSettings | None:
     """Get the single settings row from DB."""
     result = await session.execute(
@@ -161,11 +261,15 @@ async def get_llm_settings(
     active_provider = settings_row.active_provider if settings_row else "gemini"
     active_model = settings_row.active_model if settings_row else None
 
+    # Fetch dynamic OpenRouter model list
+    openrouter_models = await _fetch_openrouter_free_models()
+
     providers = {}
-    for provider_name, models in PROVIDER_MODELS.items():
+    for provider_name, model_ids in PROVIDER_MODELS.items():
+        raw_ids = openrouter_models if provider_name == "openrouter" else model_ids
         providers[provider_name] = ProviderInfo(
             configured=_is_provider_configured(provider_name, settings_row),
-            models=models,
+            models=_build_model_list(raw_ids),
         )
 
     return LLMSettingsResponse(
@@ -188,8 +292,8 @@ async def update_llm_settings(
         has_key=bool(request.api_key),
     )
 
-    # Validate model is in the provider's list (if specified)
-    if request.active_model:
+    # Validate model is in the provider's list (skip for OpenRouter — models are dynamic)
+    if request.active_model and request.active_provider != "openrouter":
         valid_models = PROVIDER_MODELS.get(request.active_provider, [])
         if valid_models and request.active_model not in valid_models:
             raise HTTPException(
@@ -228,12 +332,14 @@ async def update_llm_settings(
     # Clear provider cache so next request uses new settings
     clear_provider_cache()
 
-    # Return updated settings
+    # Return updated settings (use cached OpenRouter models if available)
+    openrouter_models = _openrouter_models_cache or PROVIDER_MODELS["openrouter"]
     providers = {}
-    for provider_name, models in PROVIDER_MODELS.items():
+    for provider_name, model_ids in PROVIDER_MODELS.items():
+        raw_ids = openrouter_models if provider_name == "openrouter" else model_ids
         providers[provider_name] = ProviderInfo(
             configured=_is_provider_configured(provider_name, settings_row),
-            models=models,
+            models=_build_model_list(raw_ids),
         )
 
     return LLMSettingsResponse(
