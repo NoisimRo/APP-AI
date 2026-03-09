@@ -2,10 +2,12 @@
 
 Allows viewing, updating, and testing LLM provider configuration.
 API keys are encrypted before storage.
+OpenRouter models are fetched dynamically from their API.
 """
 
 import time
 
+import httpx
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy import select
@@ -60,20 +62,9 @@ PROVIDER_MODELS = {
         "openai/gpt-oss-120b",
         "qwen/qwen3-32b",
         "meta-llama/llama-4-scout-17b-16e-instruct",
-        "gemma2-9b-it",
-        "qwen-qwq-32b",
     ],
     "openrouter": [
-        "deepseek/deepseek-chat-v3-0324:free",
-        "deepseek/deepseek-r1-0528:free",
-        "meta-llama/llama-4-maverick:free",
-        "meta-llama/llama-4-scout:free",
-        "meta-llama/llama-3.3-70b-instruct:free",
-        "qwen/qwen3-235b-a22b:free",
-        "google/gemma-3-27b-it:free",
-        "mistralai/mistral-small-3.1-24b-instruct:free",
-        "nvidia/llama-3.1-nemotron-ultra-253b-v1:free",
-        "openrouter/free",
+        "openrouter/free",  # Fallback — always kept first
     ],
 }
 
@@ -83,8 +74,63 @@ DEFAULT_MODELS = {
     "anthropic": "claude-sonnet-4-6",
     "openai": "gpt-5.4-2026-03-05",
     "groq": "llama-3.3-70b-versatile",
-    "openrouter": "deepseek/deepseek-chat-v3-0324:free",
+    "openrouter": "openrouter/free",
 }
+
+# Cache for dynamically fetched OpenRouter models
+_openrouter_models_cache: list[str] | None = None
+_openrouter_cache_time: float = 0
+OPENROUTER_CACHE_TTL = 3600  # 1 hour
+
+
+async def _fetch_openrouter_free_models() -> list[str]:
+    """Fetch available free models from OpenRouter API. Cached for 1 hour."""
+    global _openrouter_models_cache, _openrouter_cache_time
+
+    now = time.monotonic()
+    if _openrouter_models_cache is not None and (now - _openrouter_cache_time) < OPENROUTER_CACHE_TTL:
+        return _openrouter_models_cache
+
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            resp = await client.get("https://openrouter.ai/api/v1/models")
+            resp.raise_for_status()
+            data = resp.json()
+
+        free_models = []
+        for model in data.get("data", []):
+            model_id = model.get("id", "")
+            pricing = model.get("pricing", {})
+            # A model is free if both prompt and completion cost are "0"
+            prompt_cost = str(pricing.get("prompt", "1"))
+            completion_cost = str(pricing.get("completion", "1"))
+            if prompt_cost == "0" and completion_cost == "0":
+                free_models.append(model_id)
+
+        # Sort: prioritize well-known providers
+        priority_prefixes = ["deepseek/", "meta-llama/", "qwen/", "google/", "mistralai/", "nvidia/"]
+        def sort_key(m: str) -> tuple:
+            for i, prefix in enumerate(priority_prefixes):
+                if m.startswith(prefix):
+                    return (i, m)
+            return (len(priority_prefixes), m)
+
+        free_models.sort(key=sort_key)
+
+        # Always include openrouter/free at the start
+        result = ["openrouter/free"] + [m for m in free_models if m != "openrouter/free"]
+
+        _openrouter_models_cache = result
+        _openrouter_cache_time = now
+        logger.info("openrouter_models_fetched", count=len(result))
+        return result
+
+    except Exception as e:
+        logger.warning("openrouter_models_fetch_failed", error=str(e))
+        # Return cached if available, otherwise fallback
+        if _openrouter_models_cache:
+            return _openrouter_models_cache
+        return PROVIDER_MODELS["openrouter"]
 
 
 class ProviderInfo(BaseModel):
@@ -161,11 +207,15 @@ async def get_llm_settings(
     active_provider = settings_row.active_provider if settings_row else "gemini"
     active_model = settings_row.active_model if settings_row else None
 
+    # Fetch dynamic OpenRouter model list
+    openrouter_models = await _fetch_openrouter_free_models()
+
     providers = {}
     for provider_name, models in PROVIDER_MODELS.items():
+        provider_models = openrouter_models if provider_name == "openrouter" else models
         providers[provider_name] = ProviderInfo(
             configured=_is_provider_configured(provider_name, settings_row),
-            models=models,
+            models=provider_models,
         )
 
     return LLMSettingsResponse(
@@ -188,8 +238,8 @@ async def update_llm_settings(
         has_key=bool(request.api_key),
     )
 
-    # Validate model is in the provider's list (if specified)
-    if request.active_model:
+    # Validate model is in the provider's list (skip for OpenRouter — models are dynamic)
+    if request.active_model and request.active_provider != "openrouter":
         valid_models = PROVIDER_MODELS.get(request.active_provider, [])
         if valid_models and request.active_model not in valid_models:
             raise HTTPException(
@@ -228,12 +278,14 @@ async def update_llm_settings(
     # Clear provider cache so next request uses new settings
     clear_provider_cache()
 
-    # Return updated settings
+    # Return updated settings (use cached OpenRouter models if available)
+    openrouter_models = _openrouter_models_cache or PROVIDER_MODELS["openrouter"]
     providers = {}
     for provider_name, models in PROVIDER_MODELS.items():
+        provider_models = openrouter_models if provider_name == "openrouter" else models
         providers[provider_name] = ProviderInfo(
             configured=_is_provider_configured(provider_name, settings_row),
-            models=models,
+            models=provider_models,
         )
 
     return LLMSettingsResponse(

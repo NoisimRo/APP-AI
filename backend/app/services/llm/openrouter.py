@@ -17,23 +17,12 @@ logger = get_logger(__name__)
 
 OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 
-# Max input tokens per model on OpenRouter.
-# Free models (:free suffix) have tighter limits; paid versions are generous.
-# These are conservative budgets (leaving room for max_tokens response).
+# Conservative input token budgets for OpenRouter free models.
+# Free models route through shared infrastructure — keep conservative.
 MODEL_INPUT_LIMITS: dict[str, int] = {
-    # Free models — conservative limits (free tier rate-limited)
-    "deepseek/deepseek-chat-v3-0324:free": 28000,
-    "deepseek/deepseek-r1-0528:free": 28000,
-    "meta-llama/llama-4-maverick:free": 28000,
-    "meta-llama/llama-4-scout:free": 28000,
-    "meta-llama/llama-3.3-70b-instruct:free": 28000,
-    "qwen/qwen3-235b-a22b:free": 28000,
-    "google/gemma-3-27b-it:free": 12000,
-    "mistralai/mistral-small-3.1-24b-instruct:free": 12000,
-    "nvidia/llama-3.1-nemotron-ultra-253b-v1:free": 28000,
-    "openrouter/free": 12000,  # Router — unknown model, be conservative
+    "openrouter/free": 10000,  # Auto-router — unknown model, be conservative
 }
-DEFAULT_INPUT_LIMIT = 28000  # Most OpenRouter models have large contexts
+DEFAULT_INPUT_LIMIT = 12000  # Most free models have decent context windows
 
 
 class OpenRouterProvider(LLMProvider):
@@ -45,7 +34,7 @@ class OpenRouterProvider(LLMProvider):
 
     def __init__(
         self,
-        model: str = "deepseek/deepseek-chat-v3-0324:free",
+        model: str = "openrouter/free",
         api_key: str | None = None,
     ):
         self._model_name = model
@@ -208,6 +197,8 @@ class OpenRouterProvider(LLMProvider):
             )
 
             async for chunk in stream:
+                if not chunk.choices:
+                    continue
                 delta = chunk.choices[0].delta
                 if delta.content:
                     yield delta.content
