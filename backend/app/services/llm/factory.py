@@ -18,7 +18,7 @@ from app.services.llm.base import LLMProvider
 
 logger = get_logger(__name__)
 
-ProviderType = Literal["gemini", "anthropic", "openai", "vertex", "ollama"]
+ProviderType = Literal["gemini", "anthropic", "openai", "groq", "vertex", "ollama"]
 
 _provider_cache: dict[str, LLMProvider] = {}
 
@@ -121,6 +121,8 @@ async def get_active_llm_provider(session: AsyncSession) -> LLMProvider:
         api_key = decrypt_value(settings_row.anthropic_api_key_enc)
     elif provider_type == "openai" and settings_row.openai_api_key_enc:
         api_key = decrypt_value(settings_row.openai_api_key_enc)
+    elif provider_type == "groq" and settings_row.groq_api_key_enc:
+        api_key = decrypt_value(settings_row.groq_api_key_enc)
 
     kwargs = {}
     if model:
@@ -167,12 +169,14 @@ def _detect_available_provider(settings) -> ProviderType:
         return "anthropic"
     if settings.openai_api_key:
         return "openai"
+    if settings.groq_api_key:
+        return "groq"
     if settings.vertex_ai_project:
         return "vertex"
 
     raise ValueError(
         "No LLM provider configured. Set at least one of: "
-        "GEMINI_API_KEY, ANTHROPIC_API_KEY, OPENAI_API_KEY, or VERTEX_AI_PROJECT"
+        "GEMINI_API_KEY, ANTHROPIC_API_KEY, OPENAI_API_KEY, GROQ_API_KEY, or VERTEX_AI_PROJECT"
     )
 
 
@@ -196,6 +200,11 @@ def _create_provider(
         from app.services.llm.openai import OpenAIProvider
 
         return OpenAIProvider(api_key=api_key, **kwargs)
+
+    if provider_type == "groq":
+        from app.services.llm.groq import GroqProvider
+
+        return GroqProvider(api_key=api_key, **kwargs)
 
     if provider_type == "vertex":
         raise NotImplementedError("Vertex AI provider not yet implemented")
