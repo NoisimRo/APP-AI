@@ -360,8 +360,12 @@ class TrainingGenerator:
         session: AsyncSession,
         max_jurisprudenta: int = 5,
         max_legislatie: int = 5,
+        scope_decision_ids: list[str] | None = None,
     ) -> tuple[str, list[str], list[str]]:
         """Search for relevant jurisprudence and legislation.
+
+        Args:
+            scope_decision_ids: If provided, restrict jurisprudence search to these decision IDs only.
 
         Returns:
             Tuple of (context_text, decision_refs, legislation_refs).
@@ -392,6 +396,10 @@ class TrainingGenerator:
                     .order_by("distance")
                     .limit(max_jurisprudenta)
                 )
+
+                # Scope pre-filter
+                if scope_decision_ids is not None:
+                    stmt = stmt.where(ArgumentareCritica.decizie_id.in_(scope_decision_ids))
 
                 result = await session.execute(stmt)
                 rows = result.all()
@@ -652,6 +660,7 @@ INTERDICȚII STRICTE:
         batch_index: int | None = None,
         batch_total: int | None = None,
         selected_types: list[str] | None = None,
+        scope_decision_ids: list[str] | None = None,
     ) -> dict:
         """Generate a training material (non-streaming).
 
@@ -659,7 +668,7 @@ INTERDICȚII STRICTE:
             Dict with material, rezolvare, note_trainer, legislatie_citata, jurisprudenta_citata, metadata.
         """
         context, decision_refs, legislation_refs = await self._search_relevant_context(
-            tema, session
+            tema, session, scope_decision_ids=scope_decision_ids,
         )
 
         system_prompt = self._build_system_prompt(
@@ -730,6 +739,7 @@ INTERDICȚII STRICTE:
         batch_index: int | None = None,
         batch_total: int | None = None,
         selected_types: list[str] | None = None,
+        scope_decision_ids: list[str] | None = None,
     ) -> tuple[str, str, dict]:
         """Prepare prompt and system prompt for streaming generation.
 
@@ -737,7 +747,7 @@ INTERDICȚII STRICTE:
             Tuple of (user_prompt, system_prompt, metadata).
         """
         context, decision_refs, legislation_refs = await self._search_relevant_context(
-            tema, session
+            tema, session, scope_decision_ids=scope_decision_ids,
         )
 
         system_prompt = self._build_system_prompt(

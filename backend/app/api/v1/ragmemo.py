@@ -8,6 +8,7 @@ from app.core.logging import get_logger
 from app.db.session import get_session
 from app.services.rag import RAGService
 from app.services.llm.streaming import create_sse_response
+from app.api.v1.scopes import get_scope_decision_ids
 
 router = APIRouter()
 logger = get_logger(__name__)
@@ -23,6 +24,7 @@ class RAGMemoRequest(BaseModel):
         le=10,
         description="Maximum number of decisions to include"
     )
+    scope_id: str | None = Field(None, description="Optional scope ID for pre-filtering decisions")
 
 
 class RAGMemoResponse(BaseModel):
@@ -57,6 +59,13 @@ async def generate_rag_memo(
         # Initialize RAG service
         rag = RAGService()
 
+        # Resolve scope
+        scope_ids = None
+        if request.scope_id:
+            scope_ids = await get_scope_decision_ids(request.scope_id, session)
+            if scope_ids is None:
+                raise HTTPException(status_code=404, detail="Scope not found")
+
         # Build query from topic
         query = f"Generează un memo juridic despre: {request.topic}. Include jurisprudență CNSC relevantă, argumente cheie și recomandări."
 
@@ -65,7 +74,8 @@ async def generate_rag_memo(
             query=query,
             session=session,
             conversation_history=None,
-            max_decisions=request.max_decisions
+            max_decisions=request.max_decisions,
+            scope_decision_ids=scope_ids,
         )
 
         logger.info(
@@ -99,10 +109,19 @@ async def generate_rag_memo_stream(
     logger.info("rag_memo_stream_request", topic=request.topic)
 
     rag = RAGService()
+
+    # Resolve scope
+    scope_ids = None
+    if request.scope_id:
+        scope_ids = await get_scope_decision_ids(request.scope_id, session)
+        if scope_ids is None:
+            raise HTTPException(status_code=404, detail="Scope not found")
+
     query = f"Generează un memo juridic despre: {request.topic}. Include jurisprudență CNSC relevantă, argumente cheie și recomandări."
 
     contexts, system_prompt, citations, confidence, _ = await rag.prepare_context(
-        query=query, session=session, conversation_history=None, max_decisions=request.max_decisions
+        query=query, session=session, conversation_history=None, max_decisions=request.max_decisions,
+        scope_decision_ids=scope_ids,
     )
 
     if contexts is None:
