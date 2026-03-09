@@ -1,7 +1,7 @@
 """Groq LLM Provider — free open-source models with blazing fast inference.
 
 Uses OpenAI-compatible API with Groq's base_url.
-Supports Llama 3.3 70B, DeepSeek R1 Distill, Gemma 2, Mixtral, etc.
+Supports Llama 3.3 70B, GPT-OSS 120B, Qwen3, Llama 4 Scout, etc.
 Free tier: https://console.groq.com/
 """
 
@@ -16,6 +16,20 @@ from app.services.llm.base import LLMProvider
 logger = get_logger(__name__)
 
 GROQ_BASE_URL = "https://api.groq.com/openai/v1"
+
+# Max input tokens per model on Groq free tier (on_demand).
+# Conservative limits: leave room for max_tokens response (4096).
+# TPM limits from https://console.groq.com/settings/limits
+MODEL_INPUT_LIMITS: dict[str, int] = {
+    "llama-3.3-70b-versatile": 7000,       # TPM 12000, minus response budget
+    "llama-3.1-8b-instant": 7000,           # TPM 12000
+    "openai/gpt-oss-120b": 28000,           # Higher tier model
+    "qwen/qwen3-32b": 28000,               # Higher tier model
+    "meta-llama/llama-4-scout-17b-16e-instruct": 28000,
+    "gemma2-9b-it": 7000,                   # TPM 12000
+    "qwen-qwq-32b": 28000,
+}
+DEFAULT_INPUT_LIMIT = 7000  # Conservative default for unknown models
 
 
 class GroqProvider(LLMProvider):
@@ -55,17 +69,84 @@ class GroqProvider(LLMProvider):
     def model_name(self) -> str:
         return self._model_name
 
+    def _estimate_tokens(self, text: str) -> int:
+        """Estimate token count (~4 chars per token for Romanian/mixed text)."""
+        return len(text) // 4
+
+    def _get_max_input_tokens(self) -> int:
+        """Get max input token budget for the current model."""
+        return MODEL_INPUT_LIMITS.get(self._model_name, DEFAULT_INPUT_LIMIT)
+
+    def _truncate_context_to_budget(
+        self,
+        context: list[str],
+        system_prompt: str | None,
+        prompt: str,
+    ) -> list[str]:
+        """Truncate context documents to fit within model's token limit.
+
+        Strategy: estimate total tokens, then progressively truncate
+        context documents (largest first) until within budget.
+        """
+        max_input = self._get_max_input_tokens()
+        overhead = self._estimate_tokens(prompt)
+        if system_prompt:
+            overhead += self._estimate_tokens(system_prompt)
+        # XML tags, doc headers, etc.
+        overhead += 100
+
+        available = max_input - overhead
+        if available <= 0:
+            logger.warning(
+                "groq_no_context_budget",
+                model=self._model_name,
+                max_input=max_input,
+                overhead=overhead,
+            )
+            return []
+
+        # Check if context already fits
+        total_ctx_tokens = sum(self._estimate_tokens(c) for c in context)
+        if total_ctx_tokens <= available:
+            return context
+
+        logger.info(
+            "groq_truncating_context",
+            model=self._model_name,
+            original_tokens=total_ctx_tokens,
+            budget=available,
+            num_docs=len(context),
+        )
+
+        # Progressively truncate: first try cutting each doc proportionally
+        ratio = available / total_ctx_tokens
+        truncated = []
+        for ctx in context:
+            max_chars = int(len(ctx) * ratio)
+            if max_chars < 200:
+                continue  # Skip docs that would be too small to be useful
+            if len(ctx) > max_chars:
+                truncated.append(ctx[:max_chars] + "\n[... trunchiat pentru limita modelului]")
+            else:
+                truncated.append(ctx)
+
+        return truncated
+
     def _build_messages(
         self,
         prompt: str,
         context: list[str] | None,
         system_prompt: str | None,
     ) -> list[dict]:
-        """Build OpenAI-compatible messages array."""
+        """Build OpenAI-compatible messages array with token-aware truncation."""
         messages = []
 
         if system_prompt:
             messages.append({"role": "system", "content": system_prompt})
+
+        # Truncate context to fit model's token limits
+        if context:
+            context = self._truncate_context_to_budget(context, system_prompt, prompt)
 
         parts = []
         if context:

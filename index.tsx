@@ -2145,11 +2145,13 @@ const App = () => {
                         : 'border-slate-200 hover:border-slate-300 bg-white'
                     }`}
                   >
-                    <div className="flex items-center justify-between mb-1">
+                    <div className="mb-1">
                       <span className={`text-sm font-bold ${isActive ? `text-${color}-700` : 'text-slate-700'}`}>{label}</span>
-                      {isConfigured && <span className="text-xs text-green-600 bg-green-50 px-1.5 py-0.5 rounded">Configurat</span>}
                     </div>
-                    <span className="text-xs text-slate-400">{(llmSettings?.providers?.[key]?.models || []).length} modele</span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-slate-400">{(llmSettings?.providers?.[key]?.models || []).length} modele</span>
+                      {isConfigured && <span className="text-[10px] text-green-600 bg-green-50 px-1 py-0.5 rounded whitespace-nowrap">✓</span>}
+                    </div>
                   </button>
                 );
               })}

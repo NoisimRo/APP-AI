@@ -25,7 +25,7 @@ DATABASE_URL="postgresql+asyncpg://..." python scripts/generate_embeddings.py
 
 - **Frontend:** Single `index.tsx` file (React 19 + Vite + TailwindCSS)
 - **Backend:** `backend/app/` - FastAPI with async SQLAlchemy
-- **LLM:** Multi-provider (Gemini + Claude + OpenAI + Groq + OpenRouter) via factory pattern (`backend/app/services/llm/factory.py`). Groq = modele open-source gratuite (Llama, DeepSeek, Qwen). OpenRouter = 400+ modele, multe gratuite (suffix `:free`). Embeddings always on Gemini.
+- **LLM:** Multi-provider (Gemini + Claude + OpenAI + Groq + OpenRouter) via factory pattern (`backend/app/services/llm/factory.py`). Groq = modele open-source gratuite (Llama, GPT-OSS, Qwen, Llama 4 Scout). OpenRouter = 400+ modele, multe gratuite (suffix `:free`). Fiecare provider cu token-aware context truncation (estimare ~4 chars/token, truncare proporțională automată). Embeddings always on Gemini.
 - **RAG Pipeline:** `backend/app/services/rag.py` - vector search on ArgumentareCritica → LLM generation
 - **Database Models:** `backend/app/models/decision.py` - DecizieCNSC, ArgumentareCritica, etc.
 
