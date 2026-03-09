@@ -33,7 +33,9 @@ import {
   ChevronUp,
   GraduationCap,
   Download,
-  Pencil
+  Pencil,
+  Save,
+  Bookmark,
 } from "lucide-react";
 
 // --- Types ---
@@ -316,7 +318,7 @@ const App = () => {
   const [dbStats, setDbStats] = useState<any>(null);
   const [filterRuling, setFilterRuling] = useState("");
   const [filterType, setFilterType] = useState("");
-  const [filterYear, setFilterYear] = useState("");
+  const [filterYears, setFilterYears] = useState<string[]>([]);
   const [filterCritici, setFilterCritici] = useState<string[]>([]);
   const [filterCpv, setFilterCpv] = useState<string[]>([]);
   const [criticiOptions, setCriticiOptions] = useState<{code: string, count: number}[]>([]);
@@ -389,6 +391,17 @@ const App = () => {
   const [decisionSearchTerm, setDecisionSearchTerm] = useState("");
   const [decisionSearchIndex, setDecisionSearchIndex] = useState(0);
   const decisionContentRef = useRef<HTMLDivElement>(null);
+
+  // Search Scopes State
+  const [scopes, setScopes] = useState<{id: string, name: string, description: string | null, filters: any, decision_count: number}[]>([]);
+  const [activeScopeId, setActiveScopeId] = useState<string | null>(null);
+  const [showScopeModal, setShowScopeModal] = useState(false);
+  const [scopeName, setScopeName] = useState("");
+  const [scopeDescription, setScopeDescription] = useState("");
+  const [showYearDropdown, setShowYearDropdown] = useState(false);
+
+  // Mobile Sidebar State
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   const chatEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -464,6 +477,18 @@ const App = () => {
     fetchLLMSettings();
   }, []);
 
+  // Fetch search scopes
+  const fetchScopes = async () => {
+    try {
+      const res = await fetch('/api/v1/scopes/');
+      if (res.ok) setScopes(await res.json());
+    } catch (e) { console.error('Failed to fetch scopes:', e); }
+  };
+
+  useEffect(() => {
+    fetchScopes();
+  }, []);
+
   const handleSaveSettings = async () => {
     setSettingsSaving(true);
     setSettingsMessage(null);
@@ -522,7 +547,7 @@ const App = () => {
       }
       if (filterRuling) params.set('ruling', filterRuling);
       if (filterType) params.set('tip_contestatie', filterType);
-      if (filterYear) params.set('year', filterYear);
+      if (filterYears.length > 0) params.set('years', filterYears.join(','));
       if (filterCritici.length > 0) params.set('coduri_critici', filterCritici.join(','));
       if (filterCpv.length > 0) params.set('cpv_codes', filterCpv.join(','));
       const response = await fetch(`/api/v1/decisions/?${params}`);
@@ -562,7 +587,7 @@ const App = () => {
       fetchDecisions(1, fileSearch);
     }, 300);
     return () => clearTimeout(timer);
-  }, [fileSearch, filterRuling, filterType, filterYear, filterCritici, filterCpv]);
+  }, [fileSearch, filterRuling, filterType, filterYears, filterCritici, filterCpv]);
 
   // Debounced CPV search for dropdown filtering
   useEffect(() => {
@@ -712,7 +737,8 @@ const App = () => {
           history: chatMessages.map(m => ({
             role: m.role === 'model' ? 'assistant' : m.role,
             content: m.text
-          }))
+          })),
+          scope_id: activeScopeId || undefined,
         },
         (chunk) => {
           accumulated += chunk;
@@ -985,46 +1011,89 @@ const App = () => {
 
   // --- Render Functions ---
 
+  const MODE_LABELS: Record<AppMode, string> = {
+    dashboard: 'Dashboard',
+    datalake: 'Data Lake',
+    chat: 'Asistent AI',
+    drafter: 'Drafter Contestații',
+    redflags: 'Red Flags Detector',
+    clarification: 'Clarificări',
+    rag: 'Jurisprudență RAG',
+    training: 'TrainingAP',
+    settings: 'Setări LLM',
+  };
+
   const renderSidebar = () => (
-    <div className="w-72 bg-slate-900 h-screen flex flex-col border-r border-slate-800 shrink-0 text-slate-300">
-      <div className="p-6 border-b border-slate-800">
+    <>
+      {/* Mobile header bar */}
+      <div className="md:hidden fixed top-0 left-0 right-0 z-40 bg-slate-900 border-b border-slate-800 flex items-center gap-3 px-4 py-3">
+        <button onClick={() => setSidebarOpen(true)} className="text-white p-1">
+          <Menu size={22} />
+        </button>
+        <div className="flex items-center gap-2">
+          <div className="bg-blue-600 p-1 rounded-md">
+            <Database size={14} className="text-white" />
+          </div>
+          <span className="text-white font-bold text-sm">ExpertAP</span>
+        </div>
+        <span className="text-slate-400 text-xs ml-auto">{MODE_LABELS[mode]}</span>
+      </div>
+
+      {/* Backdrop for mobile */}
+      {sidebarOpen && (
+        <div
+          className="md:hidden fixed inset-0 bg-black/50 z-40"
+          onClick={() => setSidebarOpen(false)}
+        />
+      )}
+
+      {/* Sidebar */}
+      <div className={`
+        w-72 bg-slate-900 h-screen flex flex-col border-r border-slate-800 shrink-0 text-slate-300
+        fixed md:static z-50 transition-transform duration-300 ease-in-out
+        ${sidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}
+      `}>
+      <div className="p-6 border-b border-slate-800 flex items-center justify-between">
         <h1 className="text-2xl font-bold text-white flex items-center gap-2 tracking-tight">
           <div className="bg-blue-600 p-1.5 rounded-lg">
              <Database size={20} className="text-white" />
           </div>
           ExpertAP
         </h1>
-        <p className="text-xs text-slate-500 mt-2 font-medium">Platformă de Business Intelligence <br/>pentru Achiziții Publice</p>
+        <button onClick={() => setSidebarOpen(false)} className="md:hidden text-slate-400 hover:text-white p-1">
+          <X size={20} />
+        </button>
       </div>
+      <p className="text-xs text-slate-500 px-6 pt-2 font-medium">Platformă de Business Intelligence <br/>pentru Achiziții Publice</p>
 
       <nav className="flex-1 overflow-y-auto px-4 py-6 space-y-8">
         <div>
            <div className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3 px-2">Workspace</div>
-           <SidebarItem icon={LayoutDashboard} label="Dashboard" active={mode === 'dashboard'} onClick={() => setMode('dashboard')} />
-           <SidebarItem icon={Database} label="Data Lake" active={mode === 'datalake'} onClick={() => setMode('datalake')} badge={files.length} />
-           <SidebarItem icon={MessageSquare} label="Asistent AI" active={mode === 'chat'} onClick={() => setMode('chat')} />
+           <SidebarItem icon={LayoutDashboard} label="Dashboard" active={mode === 'dashboard'} onClick={() => { setMode('dashboard'); setSidebarOpen(false); }} />
+           <SidebarItem icon={Database} label="Data Lake" active={mode === 'datalake'} onClick={() => { setMode('datalake'); setSidebarOpen(false); }} badge={files.length} />
+           <SidebarItem icon={MessageSquare} label="Asistent AI" active={mode === 'chat'} onClick={() => { setMode('chat'); setSidebarOpen(false); }} />
         </div>
 
         <div>
            <div className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3 px-2">Instrumente Juridice</div>
-           <SidebarItem icon={Scale} label="Drafter Contestații" active={mode === 'drafter'} onClick={() => setMode('drafter')} />
-           <SidebarItem icon={AlertTriangle} label="Red Flags Detector" active={mode === 'redflags'} onClick={() => setMode('redflags')} />
-           <SidebarItem icon={Search} label="Clarificări" active={mode === 'clarification'} onClick={() => setMode('clarification')} />
-           <SidebarItem icon={BookOpen} label="Jurisprudență RAG" active={mode === 'rag'} onClick={() => setMode('rag')} />
+           <SidebarItem icon={Scale} label="Drafter Contestații" active={mode === 'drafter'} onClick={() => { setMode('drafter'); setSidebarOpen(false); }} />
+           <SidebarItem icon={AlertTriangle} label="Red Flags Detector" active={mode === 'redflags'} onClick={() => { setMode('redflags'); setSidebarOpen(false); }} />
+           <SidebarItem icon={Search} label="Clarificări" active={mode === 'clarification'} onClick={() => { setMode('clarification'); setSidebarOpen(false); }} />
+           <SidebarItem icon={BookOpen} label="Jurisprudență RAG" active={mode === 'rag'} onClick={() => { setMode('rag'); setSidebarOpen(false); }} />
         </div>
 
         <div>
            <div className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3 px-2">Formare</div>
-           <SidebarItem icon={GraduationCap} label="TrainingAP" active={mode === 'training'} onClick={() => setMode('training')} />
+           <SidebarItem icon={GraduationCap} label="TrainingAP" active={mode === 'training'} onClick={() => { setMode('training'); setSidebarOpen(false); }} />
         </div>
 
         <div>
            <div className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3 px-2">Sistem</div>
-           <SidebarItem icon={Settings} label="Setări LLM" active={mode === 'settings'} onClick={() => setMode('settings')} />
+           <SidebarItem icon={Settings} label="Setări LLM" active={mode === 'settings'} onClick={() => { setMode('settings'); setSidebarOpen(false); }} />
         </div>
       </nav>
 
-      <div className="p-4 border-t border-slate-800 bg-slate-900/50 cursor-pointer hover:bg-slate-800/50 transition-colors" onClick={() => setMode('settings')}>
+      <div className="p-4 border-t border-slate-800 bg-slate-900/50 cursor-pointer hover:bg-slate-800/50 transition-colors" onClick={() => { setMode('settings'); setSidebarOpen(false); }}>
          <div className="flex items-center gap-3">
             <div className={`w-8 h-8 rounded-full flex items-center justify-center text-white font-bold text-xs ${
               llmSettings?.active_provider === 'anthropic'
@@ -1054,6 +1123,7 @@ const App = () => {
          </div>
       </div>
     </div>
+    </>
   );
 
   const renderDashboard = () => {
@@ -1242,7 +1312,7 @@ const App = () => {
           </div>
 
           {/* Stats Cards */}
-          <div className="grid grid-cols-4 gap-3">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
             <div className="bg-gradient-to-br from-blue-50 to-blue-100/50 rounded-xl p-3.5 border border-blue-200/60">
               <div className="text-2xl font-extrabold text-blue-700 tracking-tight">{totalDecisions.toLocaleString()}</div>
               <div className="text-[11px] text-blue-600/80 font-medium mt-0.5">Total Decizii</div>
@@ -1265,7 +1335,7 @@ const App = () => {
         {/* Search + Filters Bar */}
         <div className="px-6 py-3 border-b border-slate-200 bg-white shrink-0">
           {/* Row 1: Search + basic dropdowns */}
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 flex-wrap">
             {/* Search */}
             <div className="relative flex-1">
               <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
@@ -1296,14 +1366,42 @@ const App = () => {
                 </select>
                 <ChevronDown size={13} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
               </div>
+              {/* Year Multi-select Dropdown */}
               <div className="relative">
-                <select value={filterYear} onChange={(e) => setFilterYear(e.target.value)} className="appearance-none text-xs border border-slate-300 rounded-lg pl-3 pr-7 py-2 bg-white text-slate-700 focus:ring-2 focus:ring-blue-500/40 focus:border-blue-400 outline-none transition min-w-[100px] cursor-pointer">
-                  <option value="">An: Toate</option>
-                  {Array.from({length: 6}, (_, i) => 2026 - i).map(y => (
-                    <option key={y} value={String(y)}>{y}</option>
-                  ))}
-                </select>
-                <ChevronDown size={13} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                <button
+                  onClick={() => { setShowYearDropdown(!showYearDropdown); setShowCriticiDropdown(false); setShowCpvDropdown(false); }}
+                  className={`text-xs border rounded-lg px-3 py-2 bg-white text-slate-700 focus:ring-2 focus:ring-blue-500/40 outline-none transition min-w-[100px] cursor-pointer flex items-center gap-1.5 ${filterYears.length > 0 ? 'border-blue-400 bg-blue-50 text-blue-700' : 'border-slate-300'}`}
+                >
+                  An{filterYears.length > 0 ? `: ${filterYears.join(', ')}` : ': Toate'}
+                  <ChevronDown size={12} className="ml-auto" />
+                </button>
+                {showYearDropdown && (
+                  <div className="absolute top-full left-0 mt-1 bg-white border border-slate-200 rounded-lg shadow-lg z-50 w-40 py-1">
+                    {Array.from({length: 7}, (_, i) => String(2026 - i)).map(y => {
+                      const isSelected = filterYears.includes(y);
+                      return (
+                        <button
+                          key={y}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setFilterYears(prev => isSelected ? prev.filter(x => x !== y) : [...prev, y]);
+                          }}
+                          className="w-full text-left px-3 py-1.5 text-xs hover:bg-slate-50 flex items-center gap-2"
+                        >
+                          <span className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 ${isSelected ? 'bg-blue-600 border-blue-600 text-white' : 'border-slate-300'}`}>
+                            {isSelected && <CheckSquare size={11} />}
+                          </span>
+                          <span className="font-medium text-slate-700">{y}</span>
+                        </button>
+                      );
+                    })}
+                    {filterYears.length > 0 && (
+                      <div className="border-t border-slate-100 mt-1 pt-1 px-3 pb-1">
+                        <button onClick={() => setFilterYears([])} className="text-xs text-blue-600 hover:text-blue-800">Șterge selecția</button>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
 
               {/* Critici Multi-select Dropdown */}
@@ -1401,16 +1499,31 @@ const App = () => {
                 )}
               </div>
             </div>
-            {(filterRuling || filterType || filterYear || fileSearch || filterCritici.length > 0 || filterCpv.length > 0) && (
-              <button onClick={() => { setFilterRuling(""); setFilterType(""); setFilterYear(""); setFileSearch(""); setFilterCritici([]); setFilterCpv([]); }}
+            {(filterRuling || filterType || filterYears.length > 0 || fileSearch || filterCritici.length > 0 || filterCpv.length > 0) && (
+              <button onClick={() => { setFilterRuling(""); setFilterType(""); setFilterYears([]); setFileSearch(""); setFilterCritici([]); setFilterCpv([]); }}
                 className="text-xs text-blue-600 hover:text-blue-800 font-medium whitespace-nowrap flex items-center gap-1 transition">
                 <X size={13} /> Resetează
               </button>
             )}
+            {/* Save as Scope button - appears when any filter is active */}
+            {(filterRuling || filterType || filterYears.length > 0 || filterCritici.length > 0 || filterCpv.length > 0 || fileSearch) && (
+              <button
+                onClick={() => setShowScopeModal(true)}
+                className="text-xs bg-blue-600 text-white hover:bg-blue-700 font-medium whitespace-nowrap flex items-center gap-1.5 transition px-3 py-1.5 rounded-lg shadow-sm"
+              >
+                <Bookmark size={13} /> Salvează Scope
+              </button>
+            )}
           </div>
           {/* Active filter pills */}
-          {(filterCritici.length > 0 || filterCpv.length > 0) && (
+          {(filterCritici.length > 0 || filterCpv.length > 0 || filterYears.length > 0) && (
             <div className="flex items-center gap-1.5 mt-2 flex-wrap">
+              {filterYears.map(y => (
+                <span key={y} className="text-[10px] bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-full px-2 py-0.5 flex items-center gap-1 font-semibold">
+                  {y}
+                  <button onClick={() => setFilterYears(prev => prev.filter(x => x !== y))} className="hover:text-red-500"><X size={10} /></button>
+                </span>
+              ))}
               {filterCritici.map(c => (
                 <span key={c} className="text-[10px] bg-blue-50 text-blue-700 border border-blue-200 rounded-full px-2 py-0.5 flex items-center gap-1 font-mono font-semibold">
                   {c}
@@ -1428,7 +1541,7 @@ const App = () => {
         </div>
 
         {/* Decision Cards */}
-        <div className="flex-1 overflow-y-auto px-6 py-4" onClick={() => { setShowCriticiDropdown(false); setShowCpvDropdown(false); }}>
+        <div className="flex-1 overflow-y-auto px-6 py-4" onClick={() => { setShowCriticiDropdown(false); setShowCpvDropdown(false); setShowYearDropdown(false); }}>
           {isLoadingDecisions ? (
             <div className="flex flex-col items-center justify-center py-20">
               <Loader2 size={32} className="text-blue-500 animate-spin mb-3" />
@@ -2456,14 +2569,28 @@ const App = () => {
     );
   };
 
+  const activeScope = scopes.find(s => s.id === activeScopeId);
+
   const renderChat = () => (
     <div className="flex flex-col h-full bg-white">
-      <div className="border-b border-slate-100 p-4 flex justify-between items-center bg-white">
-         <h2 className="font-bold text-slate-800 flex items-center gap-2">
-            <MessageSquare className="text-blue-500" size={18} /> 
-            ExpertAP Chat
-         </h2>
-         <span className="text-xs text-slate-500 bg-slate-100 px-2 py-1 rounded">🗄️ Conectat la baza de date CNSC</span>
+      <div className="border-b border-slate-100 p-4 bg-white">
+        <div className="flex justify-between items-center">
+           <h2 className="font-bold text-slate-800 flex items-center gap-2">
+              <MessageSquare className="text-blue-500" size={18} />
+              ExpertAP Chat
+           </h2>
+           <span className="text-xs text-slate-500 bg-slate-100 px-2 py-1 rounded">Conectat la baza de date CNSC</span>
+        </div>
+        {/* Active scope indicator */}
+        {activeScope && (
+          <div className="mt-2 flex items-center gap-2 bg-blue-50 border border-blue-200 rounded-lg px-3 py-1.5">
+            <Filter size={13} className="text-blue-600 shrink-0" />
+            <span className="text-xs text-blue-700 font-medium">
+              Căutare restricționată la: <strong>"{activeScope.name}"</strong> ({activeScope.decision_count} decizii)
+            </span>
+            <button onClick={() => setActiveScopeId(null)} className="ml-auto text-blue-400 hover:text-blue-700 shrink-0"><X size={14} /></button>
+          </div>
+        )}
       </div>
       <div className="flex-1 overflow-y-auto p-6 space-y-6 bg-slate-50/50">
         {chatMessages.length === 0 && (
@@ -2500,11 +2627,28 @@ const App = () => {
       </div>
       <div className="p-4 bg-white border-t border-slate-200">
         <div className="max-w-4xl mx-auto">
+          {/* Scope selector */}
+          <div className="flex items-center gap-2 mb-2">
+            <Filter size={14} className="text-slate-400 shrink-0" />
+            <select
+              value={activeScopeId || ''}
+              onChange={(e) => setActiveScopeId(e.target.value || null)}
+              className="text-xs border border-slate-200 rounded-lg px-2 py-1.5 bg-white text-slate-600 focus:ring-2 focus:ring-blue-500/40 outline-none transition flex-1 max-w-xs cursor-pointer"
+            >
+              <option value="">Toate deciziile</option>
+              {scopes.map(s => (
+                <option key={s.id} value={s.id}>{s.name} ({s.decision_count} decizii)</option>
+              ))}
+            </select>
+            {scopes.length > 0 && (
+              <span className="text-[10px] text-slate-400">Domeniu căutare</span>
+            )}
+          </div>
           <div className="flex gap-2 relative">
             <input
               type="text"
               className={`flex-1 border rounded-xl pl-5 pr-12 py-4 focus:ring-2 focus:ring-blue-500 outline-none shadow-sm ${chatInput.length > 100000 ? 'border-red-400 bg-red-50' : 'border-slate-300'}`}
-              placeholder="Scrie mesajul tău..."
+              placeholder={activeScope ? `Caută în "${activeScope.name}"...` : "Scrie mesajul tău..."}
               value={chatInput}
               onChange={(e) => setChatInput(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && handleChat()}
@@ -2519,7 +2663,7 @@ const App = () => {
           </div>
           {chatInput.length > 1000 && <CharCounter value={chatInput} maxLength={100000} />}
         </div>
-        <p className="text-center text-xs text-slate-400 mt-2">Gemini Pro poate face greșeli. Verifică informațiile importante.</p>
+        <p className="text-center text-xs text-slate-400 mt-2">AI-ul poate face greșeli. Verifică informațiile importante.</p>
       </div>
     </div>
   );
@@ -2527,7 +2671,7 @@ const App = () => {
   return (
     <div className="flex h-screen bg-slate-50 font-sans text-slate-900">
       {renderSidebar()}
-      <main className="flex-1 overflow-hidden relative shadow-2xl z-10 rounded-l-2xl border-l border-slate-200/50 bg-white ml-[-1px]">
+      <main className="flex-1 overflow-hidden relative shadow-2xl z-10 md:rounded-l-2xl md:border-l border-slate-200/50 bg-white md:ml-[-1px] pt-[52px] md:pt-0">
         {mode === 'dashboard' && renderDashboard()}
         {mode === 'datalake' && renderDataLake()}
         {mode === 'drafter' && renderDrafter()}
@@ -2911,6 +3055,108 @@ const App = () => {
         {mode === 'training' && renderTraining()}
         {mode === 'settings' && renderSettings()}
       </main>
+
+      {/* Save Scope Modal */}
+      {showScopeModal && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={() => setShowScopeModal(false)}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6" onClick={(e) => e.stopPropagation()}>
+            <h3 className="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2">
+              <Bookmark size={20} className="text-blue-600" />
+              Salvează filtrele ca Scope
+            </h3>
+            <p className="text-xs text-slate-500 mb-4">
+              Scope-ul salvat va putea fi utilizat în pagina Chat pentru a restricționa căutarea AI doar la deciziile filtrate.
+            </p>
+
+            <div className="space-y-3 mb-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Nume Scope *</label>
+                <input
+                  type="text"
+                  className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500/40 outline-none"
+                  placeholder="Ex: Catering ADMISE 2024"
+                  value={scopeName}
+                  onChange={(e) => setScopeName(e.target.value)}
+                  maxLength={100}
+                  autoFocus
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Descriere (opțional)</label>
+                <input
+                  type="text"
+                  className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500/40 outline-none"
+                  placeholder="Ex: Decizii admise pe cod CPV catering"
+                  value={scopeDescription}
+                  onChange={(e) => setScopeDescription(e.target.value)}
+                />
+              </div>
+
+              {/* Preview of current filters */}
+              <div className="bg-slate-50 rounded-lg p-3 border border-slate-200">
+                <div className="text-xs font-bold text-slate-500 uppercase mb-2">Filtre active</div>
+                <div className="flex flex-wrap gap-1.5">
+                  {filterRuling && <span className="text-[10px] bg-green-50 text-green-700 border border-green-200 rounded-full px-2 py-0.5">Soluție: {filterRuling}</span>}
+                  {filterType && <span className="text-[10px] bg-purple-50 text-purple-700 border border-purple-200 rounded-full px-2 py-0.5">Tip: {filterType}</span>}
+                  {filterYears.map(y => <span key={y} className="text-[10px] bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-full px-2 py-0.5">An: {y}</span>)}
+                  {filterCritici.map(c => <span key={c} className="text-[10px] bg-blue-50 text-blue-700 border border-blue-200 rounded-full px-2 py-0.5 font-mono">{c}</span>)}
+                  {filterCpv.map(c => <span key={c} className="text-[10px] bg-purple-50 text-purple-700 border border-purple-200 rounded-full px-2 py-0.5 font-mono">{c}</span>)}
+                  {fileSearch && <span className="text-[10px] bg-slate-100 text-slate-600 border border-slate-200 rounded-full px-2 py-0.5">"{fileSearch}"</span>}
+                </div>
+                <div className="text-xs text-slate-500 mt-2">{apiDecisionsTotal} decizii corespund filtrelor</div>
+              </div>
+            </div>
+
+            <div className="flex gap-2">
+              <button
+                onClick={() => setShowScopeModal(false)}
+                className="flex-1 border border-slate-300 text-slate-600 py-2.5 rounded-lg text-sm font-medium hover:bg-slate-50 transition"
+              >
+                Anulează
+              </button>
+              <button
+                onClick={async () => {
+                  if (!scopeName.trim()) return;
+                  try {
+                    const filters: any = {};
+                    if (filterRuling) filters.ruling = filterRuling;
+                    if (filterType) filters.tip_contestatie = filterType;
+                    if (filterYears.length > 0) filters.years = filterYears.map(Number);
+                    if (filterCritici.length > 0) filters.coduri_critici = filterCritici;
+                    if (filterCpv.length > 0) filters.cpv_codes = filterCpv;
+                    if (fileSearch.trim()) filters.search = fileSearch.trim();
+
+                    const res = await fetch('/api/v1/scopes/', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({
+                        name: scopeName.trim(),
+                        description: scopeDescription.trim() || null,
+                        filters,
+                      }),
+                    });
+                    if (res.ok) {
+                      await fetchScopes();
+                      setShowScopeModal(false);
+                      setScopeName("");
+                      setScopeDescription("");
+                    } else {
+                      const err = await res.json();
+                      alert(err.detail || 'Eroare la salvare');
+                    }
+                  } catch (e) {
+                    alert('Eroare de rețea');
+                  }
+                }}
+                disabled={!scopeName.trim()}
+                className="flex-1 bg-blue-600 text-white py-2.5 rounded-lg text-sm font-medium hover:bg-blue-700 transition disabled:opacity-50 flex items-center justify-center gap-1.5"
+              >
+                <Save size={14} /> Salvează
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Decision Viewer Modal */}
       {(viewingDecision || isLoadingDecision) && (

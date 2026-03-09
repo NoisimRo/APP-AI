@@ -9,6 +9,7 @@ from app.db.session import get_session
 from app.services.rag import RAGService
 from app.services.llm.factory import get_active_llm_provider
 from app.services.llm.streaming import create_sse_response
+from app.api.v1.scopes import get_scope_decision_ids
 
 router = APIRouter()
 logger = get_logger(__name__)
@@ -27,6 +28,7 @@ class ChatRequest(BaseModel):
     message: str = Field(..., min_length=1, max_length=100000)
     conversation_id: str | None = Field(None, description="Optional conversation ID")
     history: list[ChatMessage] = Field(default_factory=list)
+    scope_id: str | None = Field(None, description="Optional scope ID for pre-filtering decisions")
 
 
 class Citation(BaseModel):
@@ -75,12 +77,22 @@ async def chat(
             for msg in request.history
         ] if request.history else None
 
+        # Resolve scope to decision IDs if provided
+        scope_ids = None
+        if request.scope_id:
+            scope_ids = await get_scope_decision_ids(request.scope_id, session)
+            if scope_ids is None:
+                raise HTTPException(status_code=404, detail="Scope not found")
+            logger.info("chat_scope_applied", scope_id=request.scope_id,
+                        decision_count=len(scope_ids))
+
         # Generate response using RAG pipeline
         response_text, citations, confidence, suggested = await rag.generate_response(
             query=request.message,
             session=session,
             conversation_history=history,
-            max_decisions=5
+            max_decisions=5,
+            scope_decision_ids=scope_ids,
         )
 
         # Generate or reuse conversation ID
@@ -134,10 +146,18 @@ async def chat_stream(
             for msg in request.history
         ] if request.history else None
 
+        # Resolve scope to decision IDs if provided
+        scope_ids = None
+        if request.scope_id:
+            scope_ids = await get_scope_decision_ids(request.scope_id, session)
+            if scope_ids is None:
+                raise HTTPException(status_code=404, detail="Scope not found")
+
         # Run RAG search to get context and citations
         query = request.message
         contexts, system_prompt, citations, confidence, suggested = await rag.prepare_context(
-            query=query, session=session, conversation_history=history, max_decisions=5
+            query=query, session=session, conversation_history=history, max_decisions=5,
+            scope_decision_ids=scope_ids,
         )
 
         if contexts is None:
