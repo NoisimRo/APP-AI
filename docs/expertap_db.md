@@ -9,7 +9,8 @@
  public | legislatie_fragmente | table | expertap | permanent   | heap          | 8192 bytes |
  public | llm_settings         | table | expertap | permanent   | heap          | 8192 bytes |
  public | nomenclator_cpv      | table | expertap | permanent   | heap          | 8192 bytes |
-(6 rows)
+ public | search_scopes        | table | expertap | permanent   | heap          | 8192 bytes |
+(7 rows)
 
 
 # \d decizii_cnsc
@@ -185,6 +186,24 @@ Indexes:
 (3 rows)
 
 
+
+# \d search_scopes
+                              Table "public.search_scopes"
+     Column      |            Type             | Collation | Nullable |      Default
+-----------------+-----------------------------+-----------+----------+--------------------
+ id              | uuid                        |           | not null | gen_random_uuid()
+ name            | character varying(100)      |           | not null |
+ description     | text                        |           |          |
+ filters         | jsonb                       |           | not null | '{}'::jsonb
+ decision_count  | integer                     |           |          | 0
+ created_at      | timestamp without time zone |           | not null | now()
+ updated_at      | timestamp without time zone |           | not null | now()
+Indexes:
+    "search_scopes_pkey" PRIMARY KEY, btree (id)
+    "ix_scopes_created" btree (created_at DESC)
+    "ix_scopes_name" btree (name)
+
+
 ---
 
 # Ultima sincronizare cu producția: 2026-03-09
@@ -202,3 +221,4 @@ Indexes:
 | 2026-03-08 | `CREATE TABLE llm_settings (id INTEGER PRIMARY KEY DEFAULT 1, active_provider VARCHAR(30) NOT NULL DEFAULT 'gemini', active_model VARCHAR(100), gemini_api_key_enc TEXT, anthropic_api_key_enc TEXT, openai_api_key_enc TEXT, updated_at TIMESTAMP NOT NULL DEFAULT now()); INSERT INTO llm_settings (id, active_provider) VALUES (1, 'gemini');` | Utilizator | DA |
 | 2026-03-09 | `ALTER TABLE llm_settings ADD COLUMN groq_api_key_enc TEXT;` | Utilizator | DA |
 | 2026-03-09 | `ALTER TABLE llm_settings ADD COLUMN openrouter_api_key_enc TEXT;` | Utilizator | DA |
+| 2026-03-09 | `CREATE TABLE search_scopes (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), name VARCHAR(100) NOT NULL, description TEXT, filters JSONB NOT NULL DEFAULT '{}'::jsonb, decision_count INTEGER DEFAULT 0, created_at TIMESTAMP NOT NULL DEFAULT now(), updated_at TIMESTAMP NOT NULL DEFAULT now()); CREATE INDEX ix_scopes_name ON search_scopes (name); CREATE INDEX ix_scopes_created ON search_scopes (created_at DESC);` | Utilizator | DA |

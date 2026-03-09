@@ -13,7 +13,7 @@ from uuid import uuid4
 from pgvector.sqlalchemy import Vector
 from sqlalchemy import (
     JSON, Date, DateTime, ForeignKey, Index, Integer, Numeric, String, Text,
-    func,
+    func, text,
 )
 from sqlalchemy.dialects.postgresql import UUID, ARRAY, TSVECTOR
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -453,6 +453,48 @@ class LLMSettings(Base):
 
     def __repr__(self) -> str:
         return f"<LLMSettings provider={self.active_provider} model={self.active_model}>"
+
+
+# =============================================================================
+# SEARCH SCOPES (saved filter combinations for Chat)
+# =============================================================================
+
+class SearchScope(Base):
+    """Saved search scope — a named set of filters for restricting RAG search.
+
+    Users can save filter combinations from Data Lake and use them
+    in Chat to restrict the search to a specific subset of decisions.
+    """
+
+    __tablename__ = "search_scopes"
+
+    id: Mapped[str] = mapped_column(
+        UUID(as_uuid=False),
+        primary_key=True,
+        default=lambda: str(uuid4())
+    )
+    name: Mapped[str] = mapped_column(String(100), nullable=False)
+    description: Mapped[Optional[str]] = mapped_column(Text)
+    filters: Mapped[dict] = mapped_column(
+        JSON, nullable=False, server_default=text("'{}'::jsonb")
+    )
+    decision_count: Mapped[int] = mapped_column(
+        Integer, server_default=text("0")
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+
+    __table_args__ = (
+        Index("ix_scopes_name", name),
+        Index("ix_scopes_created", created_at.desc()),
+    )
+
+    def __repr__(self) -> str:
+        return f"<SearchScope {self.name}>"
 
 
 # =============================================================================

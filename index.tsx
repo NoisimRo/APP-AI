@@ -33,7 +33,9 @@ import {
   ChevronUp,
   GraduationCap,
   Download,
-  Pencil
+  Pencil,
+  Save,
+  Bookmark
 } from "lucide-react";
 
 // --- Types ---
@@ -332,6 +334,12 @@ const App = () => {
   const [chatMessages, setChatMessages] = useState<Message[]>([]);
   const [chatInput, setChatInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [chatReranking, setChatReranking] = useState(false);
+  const [chatScopeId, setChatScopeId] = useState<string>("");
+  const [savedScopes, setSavedScopes] = useState<any[]>([]);
+  const [showScopeSaveModal, setShowScopeSaveModal] = useState(false);
+  const [scopeSaveName, setScopeSaveName] = useState("");
+  const [scopeSaveDesc, setScopeSaveDesc] = useState("");
   const [generatedContent, setGeneratedContent] = useState<string>("");
   const [generatedDecisionRefs, setGeneratedDecisionRefs] = useState<string[]>([]);
 
@@ -444,6 +452,62 @@ const App = () => {
     };
     fetchStats();
   }, []);
+
+  // Fetch saved scopes on mount
+  const fetchScopes = async () => {
+    try {
+      const response = await fetch('/api/v1/scopes');
+      if (response.ok) {
+        const data = await response.json();
+        setSavedScopes(data);
+      }
+    } catch (error) {
+      console.error('Failed to fetch scopes:', error);
+    }
+  };
+
+  useEffect(() => {
+    fetchScopes();
+  }, []);
+
+  // Save current Data Lake filters as a scope
+  const handleSaveScope = async () => {
+    if (!scopeSaveName.trim()) return;
+    const filters: any = {};
+    if (filterRuling) filters.ruling = filterRuling;
+    if (filterType) filters.tip_contestatie = filterType;
+    if (filterYear) filters.year = filterYear;
+    if (filterCritici.length > 0) filters.coduri_critici = filterCritici;
+    if (filterCpv.length > 0) filters.cpv_codes = filterCpv;
+    if (fileSearch) filters.search = fileSearch;
+
+    try {
+      const response = await fetch('/api/v1/scopes', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: scopeSaveName, description: scopeSaveDesc || null, filters }),
+      });
+      if (response.ok) {
+        setShowScopeSaveModal(false);
+        setScopeSaveName("");
+        setScopeSaveDesc("");
+        fetchScopes();
+      }
+    } catch (error) {
+      console.error('Failed to save scope:', error);
+    }
+  };
+
+  // Delete a scope
+  const handleDeleteScope = async (scopeId: string) => {
+    try {
+      await fetch(`/api/v1/scopes/${scopeId}`, { method: 'DELETE' });
+      fetchScopes();
+      if (chatScopeId === scopeId) setChatScopeId("");
+    } catch (error) {
+      console.error('Failed to delete scope:', error);
+    }
+  };
 
   // Fetch LLM settings on mount
   const fetchLLMSettings = async () => {
@@ -705,15 +769,21 @@ const App = () => {
 
     try {
       let accumulated = '';
+      const requestBody: any = {
+        message: userMsg,
+        history: chatMessages.map(m => ({
+          role: m.role === 'model' ? 'assistant' : m.role,
+          content: m.text
+        })),
+        rerank: chatReranking,
+      };
+      if (chatScopeId) {
+        requestBody.filters = { scope_id: chatScopeId };
+      }
+
       await fetchStream(
         '/api/v1/chat/stream',
-        {
-          message: userMsg,
-          history: chatMessages.map(m => ({
-            role: m.role === 'model' ? 'assistant' : m.role,
-            content: m.text
-          }))
-        },
+        requestBody,
         (chunk) => {
           accumulated += chunk;
           setChatMessages(prev => {
@@ -1220,7 +1290,7 @@ const App = () => {
       return <span className={`text-[11px] px-2.5 py-0.5 rounded-full font-semibold tracking-wide ${cls}`}>{label}</span>;
     };
 
-    return (
+    return (<>
       <div className="h-full flex flex-col bg-slate-50/80">
         {/* Header */}
         <div className="px-6 pt-5 pb-4 bg-white border-b border-slate-200 shrink-0">
@@ -1402,10 +1472,16 @@ const App = () => {
               </div>
             </div>
             {(filterRuling || filterType || filterYear || fileSearch || filterCritici.length > 0 || filterCpv.length > 0) && (
-              <button onClick={() => { setFilterRuling(""); setFilterType(""); setFilterYear(""); setFileSearch(""); setFilterCritici([]); setFilterCpv([]); }}
-                className="text-xs text-blue-600 hover:text-blue-800 font-medium whitespace-nowrap flex items-center gap-1 transition">
-                <X size={13} /> Resetează
-              </button>
+              <>
+                <button onClick={() => { setFilterRuling(""); setFilterType(""); setFilterYear(""); setFileSearch(""); setFilterCritici([]); setFilterCpv([]); }}
+                  className="text-xs text-blue-600 hover:text-blue-800 font-medium whitespace-nowrap flex items-center gap-1 transition">
+                  <X size={13} /> Resetează
+                </button>
+                <button onClick={() => setShowScopeSaveModal(true)}
+                  className="text-xs text-emerald-600 hover:text-emerald-800 font-medium whitespace-nowrap flex items-center gap-1 transition border border-emerald-300 rounded-lg px-2 py-1 bg-emerald-50 hover:bg-emerald-100">
+                  <Save size={13} /> Salvează ca Scope
+                </button>
+              </>
             )}
           </div>
           {/* Active filter pills */}
@@ -1602,7 +1678,51 @@ const App = () => {
           </div>
         </div>
       </div>
-    );
+
+      {/* Save Scope Modal */}
+      {showScopeSaveModal && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={() => setShowScopeSaveModal(false)}>
+          <div className="bg-white rounded-xl shadow-2xl p-6 w-96 max-w-[90vw]" onClick={(e) => e.stopPropagation()}>
+            <h3 className="font-bold text-slate-800 mb-4 flex items-center gap-2">
+              <Bookmark size={18} className="text-emerald-600" />
+              Salvează filtre ca Scope
+            </h3>
+            <div className="space-y-3">
+              <div>
+                <label className="text-xs text-slate-500 font-medium">Nume *</label>
+                <input type="text" value={scopeSaveName} onChange={(e) => setScopeSaveName(e.target.value)}
+                  className="w-full mt-1 border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500/40 outline-none"
+                  placeholder="ex: Catering ADMISE 2024" autoFocus />
+              </div>
+              <div>
+                <label className="text-xs text-slate-500 font-medium">Descriere (opțional)</label>
+                <input type="text" value={scopeSaveDesc} onChange={(e) => setScopeSaveDesc(e.target.value)}
+                  className="w-full mt-1 border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500/40 outline-none"
+                  placeholder="Filtre pentru..." />
+              </div>
+              <div className="text-xs text-slate-400 bg-slate-50 rounded-lg p-2">
+                Filtre active: {[
+                  filterRuling && `Soluție: ${filterRuling}`,
+                  filterType && `Tip: ${filterType}`,
+                  filterYear && `An: ${filterYear}`,
+                  filterCritici.length > 0 && `Critici: ${filterCritici.join(', ')}`,
+                  filterCpv.length > 0 && `CPV: ${filterCpv.length} coduri`,
+                  fileSearch && `Căutare: "${fileSearch}"`,
+                ].filter(Boolean).join(' | ') || 'Niciun filtru'}
+              </div>
+            </div>
+            <div className="flex justify-end gap-2 mt-4">
+              <button onClick={() => setShowScopeSaveModal(false)}
+                className="px-4 py-2 text-sm text-slate-600 hover:bg-slate-100 rounded-lg transition">Anulează</button>
+              <button onClick={handleSaveScope} disabled={!scopeSaveName.trim()}
+                className="px-4 py-2 text-sm bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 disabled:opacity-50 transition">
+                Salvează
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>);
   };
 
   const renderDrafter = () => (
@@ -2465,6 +2585,39 @@ const App = () => {
          </h2>
          <span className="text-xs text-slate-500 bg-slate-100 px-2 py-1 rounded">🗄️ Conectat la baza de date CNSC</span>
       </div>
+      {/* Scope selector + Reranking toggle */}
+      <div className="px-4 py-2 border-b border-slate-100 bg-slate-50/50 flex items-center gap-3 text-xs">
+        <div className="flex items-center gap-1.5 text-slate-500">
+          <Bookmark size={13} />
+          <span>Domeniu:</span>
+          <select value={chatScopeId} onChange={(e) => setChatScopeId(e.target.value)}
+            className="appearance-none border border-slate-300 rounded-md px-2 py-1 bg-white text-slate-700 focus:ring-2 focus:ring-blue-500/40 outline-none cursor-pointer min-w-[150px]">
+            <option value="">Toate deciziile</option>
+            {savedScopes.map((s: any) => (
+              <option key={s.id} value={s.id}>{s.name} ({s.decision_count} decizii)</option>
+            ))}
+          </select>
+        </div>
+        {chatScopeId && (
+          <button onClick={() => setChatScopeId("")} className="text-blue-500 hover:text-blue-700">
+            <X size={13} />
+          </button>
+        )}
+        <div className="ml-auto flex items-center gap-1.5 text-slate-400">
+          <label className="flex items-center gap-1.5 cursor-pointer select-none">
+            <input type="checkbox" checked={chatReranking} onChange={(e) => setChatReranking(e.target.checked)}
+              className="w-3.5 h-3.5 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer" />
+            Reranking
+          </label>
+        </div>
+      </div>
+      {chatScopeId && savedScopes.find((s: any) => s.id === chatScopeId) && (
+        <div className="px-4 py-1.5 bg-blue-50 border-b border-blue-100 text-xs text-blue-700 flex items-center gap-2">
+          <Search size={12} />
+          Căutare restricționată la: <strong>{savedScopes.find((s: any) => s.id === chatScopeId)?.name}</strong>
+          <button onClick={() => setChatScopeId("")} className="ml-1 text-blue-500 hover:text-blue-700"><X size={12} /></button>
+        </div>
+      )}
       <div className="flex-1 overflow-y-auto p-6 space-y-6 bg-slate-50/50">
         {chatMessages.length === 0 && (
            <div className="text-center text-slate-400 mt-20">
