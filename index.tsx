@@ -405,6 +405,17 @@ const App = () => {
   // Mobile Sidebar State
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
+  // Global click handler to close all dropdowns
+  useEffect(() => {
+    const handleGlobalClick = () => {
+      setShowYearDropdown(false);
+      setShowCriticiDropdown(false);
+      setShowCpvDropdown(false);
+    };
+    document.addEventListener('click', handleGlobalClick);
+    return () => document.removeEventListener('click', handleGlobalClick);
+  }, []);
+
   const chatEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -1199,11 +1210,11 @@ const App = () => {
     const isConnected = dbStats !== null && totalDecisions > 0;
 
     return (
-    <div className="p-8 max-w-6xl mx-auto animate-in fade-in duration-500">
-      <header className="mb-8 flex justify-between items-center">
+    <div className="p-4 md:p-8 max-w-6xl mx-auto animate-in fade-in duration-500">
+      <header className="mb-6 md:mb-8 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
         <div>
-           <h2 className="text-3xl font-bold text-slate-900">Dashboard</h2>
-           <p className="text-slate-500">Bine ai venit în centrul de comandă ExpertAP.</p>
+           <h2 className="text-2xl md:text-3xl font-bold text-slate-900">Dashboard</h2>
+           <p className="text-sm md:text-base text-slate-500">Bine ai venit în centrul de comandă ExpertAP.</p>
         </div>
         <div className="flex items-center gap-2 bg-white border border-slate-200 px-3 py-1.5 rounded-full shadow-sm">
            <div className={`w-2.5 h-2.5 rounded-full ${isConnected ? 'bg-green-500 animate-pulse' : dbStats === null ? 'bg-yellow-500 animate-pulse' : 'bg-slate-300'}`}></div>
@@ -1358,7 +1369,7 @@ const App = () => {
     return (
       <div className="h-full flex flex-col bg-slate-50/80">
         {/* Header */}
-        <div className="px-6 pt-5 pb-4 bg-white border-b border-slate-200 shrink-0">
+        <div className="px-4 md:px-6 pt-4 md:pt-5 pb-3 md:pb-4 bg-white border-b border-slate-200 shrink-0">
           <div className="flex justify-between items-center mb-4">
             <div>
               <h2 className="text-xl font-bold text-slate-800 flex items-center gap-2">
@@ -1398,11 +1409,11 @@ const App = () => {
         </div>
 
         {/* Search + Filters Bar */}
-        <div className="px-6 py-3 border-b border-slate-200 bg-white shrink-0">
+        <div className="px-4 md:px-6 py-3 border-b border-slate-200 bg-white shrink-0">
           {/* Row 1: Search + basic dropdowns */}
-          <div className="flex items-center gap-3 flex-wrap">
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 flex-wrap">
             {/* Search */}
-            <div className="relative flex-1">
+            <div className="relative flex-1 min-w-0">
               <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
               <input
                 type="text"
@@ -1413,7 +1424,7 @@ const App = () => {
               />
             </div>
             {/* Basic Dropdowns */}
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               <div className="relative">
                 <select value={filterRuling} onChange={(e) => setFilterRuling(e.target.value)} className="appearance-none text-xs border border-slate-300 rounded-lg pl-3 pr-7 py-2 bg-white text-slate-700 focus:ring-2 focus:ring-blue-500/40 focus:border-blue-400 outline-none transition min-w-[110px] cursor-pointer">
                   <option value="">Soluție: Toate</option>
@@ -1434,14 +1445,14 @@ const App = () => {
               {/* Year Multi-select Dropdown */}
               <div className="relative">
                 <button
-                  onClick={() => { setShowYearDropdown(!showYearDropdown); setShowCriticiDropdown(false); setShowCpvDropdown(false); }}
+                  onClick={(e) => { e.stopPropagation(); setShowYearDropdown(!showYearDropdown); setShowCriticiDropdown(false); setShowCpvDropdown(false); }}
                   className={`text-xs border rounded-lg px-3 py-2 bg-white text-slate-700 focus:ring-2 focus:ring-blue-500/40 outline-none transition min-w-[100px] cursor-pointer flex items-center gap-1.5 ${filterYears.length > 0 ? 'border-blue-400 bg-blue-50 text-blue-700' : 'border-slate-300'}`}
                 >
                   An{filterYears.length > 0 ? `: ${filterYears.join(', ')}` : ': Toate'}
                   <ChevronDown size={12} className="ml-auto" />
                 </button>
                 {showYearDropdown && (
-                  <div className="absolute top-full left-0 mt-1 bg-white border border-slate-200 rounded-lg shadow-lg z-50 w-40 py-1">
+                  <div className="absolute top-full left-0 mt-1 bg-white border border-slate-200 rounded-lg shadow-lg z-50 w-40 py-1" onClick={(e) => e.stopPropagation()}>
                     {Array.from({length: 7}, (_, i) => String(2026 - i)).map(y => {
                       const isSelected = filterYears.includes(y);
                       return (
@@ -1472,7 +1483,7 @@ const App = () => {
               {/* Critici Multi-select Dropdown */}
               <div className="relative">
                 <button
-                  onClick={() => { setShowCriticiDropdown(!showCriticiDropdown); setShowCpvDropdown(false); }}
+                  onClick={(e) => { e.stopPropagation(); setShowCriticiDropdown(!showCriticiDropdown); setShowYearDropdown(false); setShowCpvDropdown(false); }}
                   className={`text-xs border rounded-lg px-3 py-2 bg-white text-slate-700 focus:ring-2 focus:ring-blue-500/40 outline-none transition min-w-[110px] cursor-pointer flex items-center gap-1.5 ${filterCritici.length > 0 ? 'border-blue-400 bg-blue-50 text-blue-700' : 'border-slate-300'}`}
                 >
                   <Filter size={12} />
@@ -1480,7 +1491,7 @@ const App = () => {
                   <ChevronDown size={12} className="ml-auto" />
                 </button>
                 {showCriticiDropdown && (
-                  <div className="absolute top-full left-0 mt-1 bg-white border border-slate-200 rounded-lg shadow-lg z-50 w-64 max-h-72 overflow-y-auto py-1">
+                  <div className="absolute top-full left-0 mt-1 bg-white border border-slate-200 rounded-lg shadow-lg z-50 w-64 max-h-72 overflow-y-auto py-1" onClick={(e) => e.stopPropagation()}>
                     {criticiOptions.map(opt => {
                       const isSelected = filterCritici.includes(opt.code);
                       const legend = (CRITIQUE_LEGEND as any)[opt.code] || '';
@@ -1514,7 +1525,7 @@ const App = () => {
               {/* CPV Multi-select Dropdown with Search */}
               <div className="relative">
                 <button
-                  onClick={() => { setShowCpvDropdown(!showCpvDropdown); setShowCriticiDropdown(false); }}
+                  onClick={(e) => { e.stopPropagation(); setShowCpvDropdown(!showCpvDropdown); setShowYearDropdown(false); setShowCriticiDropdown(false); }}
                   className={`text-xs border rounded-lg px-3 py-2 bg-white text-slate-700 focus:ring-2 focus:ring-blue-500/40 outline-none transition min-w-[100px] cursor-pointer flex items-center gap-1.5 ${filterCpv.length > 0 ? 'border-blue-400 bg-blue-50 text-blue-700' : 'border-slate-300'}`}
                 >
                   <Filter size={12} />
@@ -1522,7 +1533,7 @@ const App = () => {
                   <ChevronDown size={12} className="ml-auto" />
                 </button>
                 {showCpvDropdown && (
-                  <div className="absolute top-full right-0 mt-1 bg-white border border-slate-200 rounded-lg shadow-lg z-50 w-80 max-h-80 flex flex-col">
+                  <div className="absolute top-full right-0 mt-1 bg-white border border-slate-200 rounded-lg shadow-lg z-50 w-80 max-h-80 flex flex-col" onClick={(e) => e.stopPropagation()}>
                     <div className="p-2 border-b border-slate-100 shrink-0">
                       <input
                         type="text"
@@ -1570,13 +1581,22 @@ const App = () => {
                 <X size={13} /> Resetează
               </button>
             )}
-            {/* Save as Scope button - appears when any filter is active */}
+            {/* Save scope button */}
             {(filterRuling || filterType || filterYears.length > 0 || filterCritici.length > 0 || filterCpv.length > 0 || fileSearch) && (
               <button
                 onClick={() => setShowScopeModal(true)}
                 className="text-xs bg-blue-600 text-white hover:bg-blue-700 font-medium whitespace-nowrap flex items-center gap-1.5 transition px-3 py-1.5 rounded-lg shadow-sm"
               >
-                <Bookmark size={13} /> Salvează Scope
+                <Bookmark size={13} /> Salvează
+              </button>
+            )}
+            {/* Edit scope filters / manage scopes */}
+            {scopes.length > 0 && (
+              <button
+                onClick={() => setShowScopeManager(true)}
+                className="text-xs border border-slate-300 text-slate-600 hover:border-blue-400 hover:text-blue-600 font-medium whitespace-nowrap flex items-center gap-1.5 transition px-3 py-1.5 rounded-lg"
+              >
+                <Pencil size={12} /> Editează filtre
               </button>
             )}
           </div>
@@ -1606,7 +1626,7 @@ const App = () => {
         </div>
 
         {/* Decision Cards */}
-        <div className="flex-1 overflow-y-auto px-6 py-4" onClick={() => { setShowCriticiDropdown(false); setShowCpvDropdown(false); setShowYearDropdown(false); }}>
+        <div className="flex-1 overflow-y-auto px-4 md:px-6 py-4">
           {isLoadingDecisions ? (
             <div className="flex flex-col items-center justify-center py-20">
               <Loader2 size={32} className="text-blue-500 animate-spin mb-3" />
@@ -1689,7 +1709,7 @@ const App = () => {
                         </span>
                       ))}
                       {critiqueDesc && (
-                        <span className="text-[10px] text-slate-400 truncate max-w-[400px]">
+                        <span className="text-[10px] text-slate-400 truncate max-w-[200px] sm:max-w-[400px]">
                           {critiqueDesc}
                         </span>
                       )}
@@ -1731,7 +1751,7 @@ const App = () => {
         </div>
 
         {/* Pagination */}
-        <div className="bg-white px-6 py-3 border-t border-slate-200 text-xs text-slate-500 flex justify-between items-center shrink-0">
+        <div className="bg-white px-4 md:px-6 py-3 border-t border-slate-200 text-xs text-slate-500 flex flex-col sm:flex-row justify-between items-center gap-2 shrink-0">
           <span className="font-medium">Pagina {apiDecisionsPage} din {totalPages || 1} <span className="text-slate-400">({apiDecisionsTotal.toLocaleString()} decizii)</span></span>
           <div className="flex items-center gap-1.5">
             <button
@@ -1774,7 +1794,7 @@ const App = () => {
               Următor
             </button>
           </div>
-          <div className="flex items-center gap-1.5 text-emerald-600 font-medium">
+          <div className="hidden sm:flex items-center gap-1.5 text-emerald-600 font-medium">
             <div className="w-1.5 h-1.5 rounded-full bg-emerald-500"></div>
             Connected
           </div>
@@ -1857,7 +1877,7 @@ const App = () => {
         </div>
       </div>
       
-      <div className="w-full md:w-2/3 p-10 overflow-y-auto bg-white">
+      <div className="w-full md:w-2/3 p-4 md:p-10 overflow-y-auto bg-white">
         {generatedContent ? (
           <div className="max-w-3xl mx-auto">
              <div className="flex justify-end mb-4">
@@ -2366,9 +2386,9 @@ const App = () => {
           {trainingResult ? (
             <>
               {/* Toolbar */}
-              <div className="border-b border-slate-200 px-6 py-3 flex items-center justify-between bg-slate-50/50">
+              <div className="border-b border-slate-200 px-3 md:px-6 py-3 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 bg-slate-50/50">
                 {/* Tabs */}
-                <div className="flex gap-1">
+                <div className="flex gap-1 flex-wrap">
                   {[
                     { key: 'material' as const, label: 'Enunț & Cerințe' },
                     { key: 'rezolvare' as const, label: 'Rezolvare' },
@@ -2377,7 +2397,7 @@ const App = () => {
                     <button
                       key={key}
                       onClick={() => setTrainingActiveTab(key)}
-                      className={`px-4 py-2 rounded-lg text-sm font-medium transition ${
+                      className={`px-3 md:px-4 py-1.5 md:py-2 rounded-lg text-xs md:text-sm font-medium transition ${
                         trainingActiveTab === key
                           ? 'bg-amber-600 text-white shadow-sm'
                           : 'text-slate-600 hover:bg-slate-200'
@@ -2500,17 +2520,17 @@ const App = () => {
     const keyFieldNames: Record<string, string> = { gemini: 'GEMINI_API_KEY', anthropic: 'ANTHROPIC_API_KEY', openai: 'OPENAI_API_KEY', groq: 'GROQ_API_KEY', openrouter: 'OPENROUTER_API_KEY' };
 
     return (
-      <div className="h-full overflow-y-auto bg-slate-50/50 p-8">
+      <div className="h-full overflow-y-auto bg-slate-50/50 p-4 md:p-8">
         <div className="max-w-2xl mx-auto">
-          <h2 className="text-2xl font-bold text-slate-800 mb-1 flex items-center gap-3">
+          <h2 className="text-xl md:text-2xl font-bold text-slate-800 mb-1 flex items-center gap-3">
             <Settings className="text-blue-500" size={24} /> Setări Model LLM
           </h2>
-          <p className="text-sm text-slate-500 mb-8">Configurează providerul și modelul de limbaj utilizat de ExpertAP.</p>
+          <p className="text-sm text-slate-500 mb-6 md:mb-8">Configurează providerul și modelul de limbaj utilizat de ExpertAP.</p>
 
           {/* Provider Selection */}
           <div className="bg-white rounded-xl border border-slate-200 p-6 mb-6 shadow-sm">
             <h3 className="text-sm font-bold text-slate-600 uppercase tracking-wider mb-4">Provider activ</h3>
-            <div className="grid grid-cols-5 gap-3">
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
               {Object.entries(providerLabels).map(([key, label]) => {
                 const isActive = settingsProvider === key;
                 const isConfigured = llmSettings?.providers?.[key]?.configured;
@@ -2829,7 +2849,7 @@ const App = () => {
             </div>
 
             {/* Right panel — results */}
-            <div className="w-full md:w-2/3 p-8 overflow-y-auto bg-white">
+            <div className="w-full md:w-2/3 p-4 md:p-8 overflow-y-auto bg-white">
               {redFlagsResults.length > 0 ? (
                 <div className="space-y-4">
                   <div className="bg-white p-4 rounded-lg border border-slate-200 flex items-center justify-between sticky top-0 z-10">
@@ -3014,7 +3034,7 @@ const App = () => {
               </div>
             </div>
             {/* Right panel — output */}
-            <div className="w-full md:w-2/3 p-10 overflow-y-auto bg-white">
+            <div className="w-full md:w-2/3 p-4 md:p-10 overflow-y-auto bg-white">
               {generatedContent ? (
                 <div>
                   <div className="prose prose-slate max-w-none" dangerouslySetInnerHTML={{ __html: formatMarkdown(generatedContent) }} />
@@ -3045,8 +3065,8 @@ const App = () => {
                  <h2 className="text-2xl font-bold text-slate-800 flex items-center gap-2"><BookOpen className="text-teal-600"/> Jurisprudență RAG</h2>
               </header>
               <ActiveScopeIndicator />
-              <div className="flex gap-6 h-full overflow-hidden">
-                 <div className="w-80 shrink-0 flex flex-col gap-4">
+              <div className="flex flex-col md:flex-row gap-4 md:gap-6 flex-1 overflow-hidden">
+                 <div className="w-full md:w-80 shrink-0 flex flex-col gap-4">
                     <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
                        <ScopeSelector compact />
                        <div className="bg-slate-50 p-3 rounded-lg border border-dashed border-slate-300 mb-3">
@@ -3088,7 +3108,7 @@ const App = () => {
                        <p className="text-xs text-slate-400 mt-3 text-center">Căutare semantică în {dbStats?.total_decisions || 0} decizii din baza de date.</p>
                     </div>
                  </div>
-                 <div className="flex-1 bg-white border border-slate-200 rounded-xl shadow-sm p-8 overflow-y-auto text-slate-800 leading-relaxed">
+                 <div className="flex-1 bg-white border border-slate-200 rounded-xl shadow-sm p-4 md:p-8 overflow-y-auto text-slate-800 leading-relaxed">
                     {generatedContent ? (
                        <div className="prose prose-slate max-w-none" dangerouslySetInnerHTML={{ __html: formatMarkdown(generatedContent) }} />
                     ) : (
@@ -3184,12 +3204,29 @@ const App = () => {
                           {s.filters.search && <span className="text-[10px] bg-slate-100 text-slate-600 border border-slate-200 rounded-full px-2 py-0.5">"{s.filters.search}"</span>}
                         </div>
                         {/* Actions */}
-                        <div className="flex items-center gap-2 mt-3 pt-2 border-t border-slate-100">
+                        <div className="flex items-center gap-2 mt-3 pt-2 border-t border-slate-100 flex-wrap">
                           <button
                             onClick={() => { setActiveScopeId(s.id); setShowScopeManager(false); }}
                             className={`text-xs font-medium transition ${activeScopeId === s.id ? 'text-blue-600' : 'text-slate-500 hover:text-blue-600'}`}
                           >
                             {activeScopeId === s.id ? 'Activ' : 'Activează'}
+                          </button>
+                          <span className="text-slate-200">|</span>
+                          <button
+                            onClick={() => {
+                              // Load scope filters into Data Lake
+                              setFilterRuling(s.filters.ruling || '');
+                              setFilterType(s.filters.tip_contestatie || '');
+                              setFilterYears(s.filters.years ? s.filters.years.map(String) : []);
+                              setFilterCritici(s.filters.coduri_critici || []);
+                              setFilterCpv(s.filters.cpv_codes || []);
+                              setFileSearch(s.filters.search || '');
+                              setShowScopeManager(false);
+                              setMode('datalake');
+                            }}
+                            className="text-xs text-slate-500 hover:text-teal-600 transition flex items-center gap-1"
+                          >
+                            <Filter size={11} /> Încarcă filtre
                           </button>
                           <span className="text-slate-200">|</span>
                           <button
@@ -3338,9 +3375,9 @@ const App = () => {
               return (
               <>
                 {/* Header */}
-                <div className="flex items-start justify-between gap-4 p-6 border-b border-slate-200 shrink-0">
+                <div className="flex flex-col sm:flex-row items-start justify-between gap-3 sm:gap-4 p-4 md:p-6 border-b border-slate-200 shrink-0">
                   <div className="min-w-0">
-                    <h2 className="text-xl font-bold text-slate-900 font-mono">{viewingDecision.metadata?.case_number || viewingDecision.title}</h2>
+                    <h2 className="text-lg md:text-xl font-bold text-slate-900 font-mono break-all">{viewingDecision.metadata?.case_number || viewingDecision.title}</h2>
                     <div className="flex gap-2 mt-2 flex-wrap">
                       {viewingDecision.metadata?.date && (
                         <span className="text-xs bg-slate-100 text-slate-600 px-2 py-1 rounded border border-slate-200">
@@ -3367,7 +3404,7 @@ const App = () => {
                           placeholder="Caută în decizie..."
                           value={decisionSearchTerm}
                           onChange={(e) => setDecisionSearchTerm(e.target.value)}
-                          className="pl-8 pr-2 py-1.5 text-sm w-44 focus:outline-none border-none"
+                          className="pl-8 pr-2 py-1.5 text-sm w-32 sm:w-44 focus:outline-none border-none"
                         />
                       </div>
                       {searchActive && (
