@@ -57,6 +57,9 @@ class DecisionSummary(BaseModel):
     autoritate_contractanta: str | None
     rezumat: str | None = None
     argumentatie_cnsc_snippet: str | None = None
+    # Status flags for semaphore indicator
+    has_analysis: bool = False
+    has_embeddings: bool = False
 
 
 class DecisionListResponse(BaseModel):
@@ -76,12 +79,15 @@ async def list_decisions(
     year: int | None = Query(None, ge=2000, le=2100),
     tip_contestatie: str | None = Query(None, description="Filter by type: documentatie or rezultat"),
     search: str | None = Query(None, description="Search by BO number, contestator, autoritate, CPV, or criticism codes"),
+    coduri_critici: str | None = Query(None, description="Comma-separated critique codes to filter by (e.g. D1,R2,R4)"),
+    cpv_codes: str | None = Query(None, description="Comma-separated CPV codes to filter by (e.g. 45000000-7,71000000-8)"),
     session: AsyncSession = Depends(get_session),
 ) -> DecisionListResponse:
     """
     List CNSC decisions with pagination, filters, and search.
     """
-    logger.info("list_decisions", page=page, ruling=ruling, year=year, search=search)
+    logger.info("list_decisions", page=page, ruling=ruling, year=year, search=search,
+                coduri_critici=coduri_critici, cpv_codes=cpv_codes)
 
     # Check if database is available
     if not is_db_available():
@@ -102,6 +108,21 @@ async def list_decisions(
         query = query.where(DecizieCNSC.an_bo == year)
     if tip_contestatie:
         query = query.where(DecizieCNSC.tip_contestatie == tip_contestatie)
+
+    # Filter by critique codes (array overlap: decision must contain at least one of the given codes)
+    if coduri_critici:
+        codes = [c.strip() for c in coduri_critici.split(",") if c.strip()]
+        if codes:
+            # PostgreSQL array overlap operator: && checks if arrays share any element
+            query = query.where(DecizieCNSC.coduri_critici.overlap(codes))
+
+    # Filter by CPV codes (exact prefix match)
+    if cpv_codes:
+        cpv_list = [c.strip() for c in cpv_codes.split(",") if c.strip()]
+        if cpv_list:
+            cpv_conditions = [DecizieCNSC.cod_cpv.ilike(f"{cpv}%") for cpv in cpv_list]
+            query = query.where(or_(*cpv_conditions))
+
     if search:
         search_term = f"%{search.strip()}%"
 
@@ -143,10 +164,14 @@ async def list_decisions(
     result = await session.execute(query)
     decisions_db = result.scalars().all()
 
-    # Fetch first argumentatie_cnsc snippet for each decision (batch)
+    # Fetch analysis and embedding status for each decision (batch)
     decision_ids = [d.id for d in decisions_db]
     arg_snippets: dict[str, str] = {}
+    analyzed_ids: set[str] = set()
+    embedded_ids: set[str] = set()
+
     if decision_ids:
+        # Get CNSC argumentation snippets + check analysis status
         arg_query = (
             select(
                 ArgumentareCritica.decizie_id,
@@ -162,6 +187,27 @@ async def list_decisions(
         for row in arg_result:
             text = row.snippet or ""
             arg_snippets[row.decizie_id] = (text[:250] + "...") if len(text) > 250 else text
+
+        # Check which decisions have ArgumentareCritica entries (= analyzed)
+        analyzed_query = (
+            select(ArgumentareCritica.decizie_id)
+            .where(ArgumentareCritica.decizie_id.in_(decision_ids))
+            .distinct()
+        )
+        analyzed_result = await session.execute(analyzed_query)
+        analyzed_ids = {row[0] for row in analyzed_result}
+
+        # Check which decisions have at least one embedded ArgumentareCritica
+        embedded_query = (
+            select(ArgumentareCritica.decizie_id)
+            .where(
+                ArgumentareCritica.decizie_id.in_(decision_ids),
+                ArgumentareCritica.embedding.isnot(None),
+            )
+            .distinct()
+        )
+        embedded_result = await session.execute(embedded_query)
+        embedded_ids = {row[0] for row in embedded_result}
 
     # Map to response model
     decisions = [
@@ -181,6 +227,8 @@ async def list_decisions(
             autoritate_contractanta=d.autoritate_contractanta,
             rezumat=(d.text_integral[:300] + "...") if d.text_integral and len(d.text_integral) > 300 else d.text_integral,
             argumentatie_cnsc_snippet=arg_snippets.get(d.id),
+            has_analysis=d.id in analyzed_ids,
+            has_embeddings=d.id in embedded_ids,
         )
         for d in decisions_db
     ]
@@ -191,6 +239,173 @@ async def list_decisions(
         page=page,
         page_size=page_size,
     )
+
+
+class AnalysisChunk(BaseModel):
+    """A single analysis chunk from ArgumentareCritica."""
+    cod_critica: str | None
+    argumente_contestator: str | None
+    argumente_ac: str | None
+    argumente_intervenienti: list | None = None
+    elemente_retinute_cnsc: str | None
+    argumentatie_cnsc: str | None
+    castigator_critica: str | None
+    jurisprudenta_contestator: list[str] | None = None
+    jurisprudenta_ac: list[str] | None = None
+    jurisprudenta_cnsc: list[str] | None = None
+
+
+class DecisionAnalysisResponse(BaseModel):
+    """Response with LLM analysis for a decision."""
+    decision_id: str
+    external_id: str
+    chunks: list[AnalysisChunk]
+
+
+# --- Static path endpoints MUST come before /{decision_id} ---
+
+
+@router.get("/filters/cpv-codes")
+async def get_cpv_filter_options(
+    search: str | None = Query(None, description="Search term to filter CPV codes"),
+    session: AsyncSession = Depends(get_session),
+):
+    """Get distinct CPV codes used in decisions, with optional search filtering."""
+    if not is_db_available():
+        return []
+
+    query = (
+        select(
+            DecizieCNSC.cod_cpv,
+            DecizieCNSC.cpv_descriere,
+            func.count().label("count"),
+        )
+        .where(DecizieCNSC.cod_cpv.isnot(None))
+        .group_by(DecizieCNSC.cod_cpv, DecizieCNSC.cpv_descriere)
+        .order_by(func.count().desc())
+    )
+
+    if search and search.strip():
+        term = f"%{search.strip()}%"
+        query = query.where(
+            or_(
+                DecizieCNSC.cod_cpv.ilike(term),
+                DecizieCNSC.cpv_descriere.ilike(term),
+            )
+        )
+        query = query.limit(50)
+    else:
+        query = query.limit(100)
+
+    result = await session.execute(query)
+    return [
+        {"code": row.cod_cpv, "description": row.cpv_descriere, "count": row.count}
+        for row in result
+    ]
+
+
+@router.get("/filters/critici-codes")
+async def get_critici_filter_options(
+    session: AsyncSession = Depends(get_session),
+):
+    """Get distinct critique codes used in decisions with counts."""
+    if not is_db_available():
+        return []
+
+    # Unnest the coduri_critici array and count occurrences
+    query = (
+        select(
+            func.unnest(DecizieCNSC.coduri_critici).label("cod"),
+            func.count().label("count"),
+        )
+        .where(DecizieCNSC.coduri_critici.isnot(None))
+        .group_by("cod")
+        .order_by("cod")
+    )
+
+    result = await session.execute(query)
+    return [
+        {"code": row.cod, "count": row.count}
+        for row in result
+    ]
+
+
+@router.get("/stats/overview")
+async def get_stats(
+    session: AsyncSession = Depends(get_session),
+):
+    """
+    Get statistics overview for the decision database.
+    """
+    if not is_db_available():
+        return {
+            "total_decisions": 0,
+            "by_ruling": {},
+            "by_type": {},
+            "last_updated": None,
+        }
+
+    # Total count
+    total_result = await session.execute(select(func.count()).select_from(DecizieCNSC))
+    total = total_result.scalar() or 0
+
+    # Count by ruling (solutie_contestatie)
+    ruling_result = await session.execute(
+        select(DecizieCNSC.solutie_contestatie, func.count())
+        .group_by(DecizieCNSC.solutie_contestatie)
+    )
+    by_ruling = {row[0] or "NECUNOSCUT": row[1] for row in ruling_result.all()}
+
+    # Count by type (tip_contestatie)
+    type_result = await session.execute(
+        select(DecizieCNSC.tip_contestatie, func.count())
+        .group_by(DecizieCNSC.tip_contestatie)
+    )
+    by_type = {row[0] or "necunoscut": row[1] for row in type_result.all()}
+
+    # Last updated
+    last_result = await session.execute(
+        select(func.max(DecizieCNSC.created_at))
+    )
+    last_updated = last_result.scalar()
+
+    return {
+        "total_decisions": total,
+        "by_ruling": by_ruling,
+        "by_type": by_type,
+        "last_updated": last_updated.isoformat() if last_updated else None,
+    }
+
+
+@router.post("/upload")
+async def upload_decision(
+    file: UploadFile = File(..., description="Decision file (.txt or .pdf)"),
+):
+    """
+    Upload a new CNSC decision for processing.
+
+    The decision will be parsed, metadata extracted, and indexed for search.
+    """
+    logger.info("upload_decision", filename=file.filename, content_type=file.content_type)
+
+    if not file.filename:
+        raise HTTPException(status_code=400, detail="Filename is required")
+
+    if not file.filename.endswith((".txt", ".pdf")):
+        raise HTTPException(
+            status_code=400,
+            detail="Only .txt and .pdf files are supported",
+        )
+
+    # TODO: Implement file processing
+    return {
+        "status": "accepted",
+        "filename": file.filename,
+        "message": "Decision uploaded for processing",
+    }
+
+
+# --- Dynamic path endpoints ---
 
 
 @router.get("/{decision_id}", response_model=Decision)
@@ -250,82 +465,58 @@ async def get_decision(
     )
 
 
-@router.post("/upload")
-async def upload_decision(
-    file: UploadFile = File(..., description="Decision file (.txt or .pdf)"),
-):
-    """
-    Upload a new CNSC decision for processing.
-
-    The decision will be parsed, metadata extracted, and indexed for search.
-    """
-    logger.info("upload_decision", filename=file.filename, content_type=file.content_type)
-
-    if not file.filename:
-        raise HTTPException(status_code=400, detail="Filename is required")
-
-    if not file.filename.endswith((".txt", ".pdf")):
-        raise HTTPException(
-            status_code=400,
-            detail="Only .txt and .pdf files are supported",
-        )
-
-    # TODO: Implement file processing
-    # 1. Save file to storage
-    # 2. Parse content
-    # 3. Extract metadata
-    # 4. Generate embeddings
-    # 5. Store in database
-
-    return {
-        "status": "accepted",
-        "filename": file.filename,
-        "message": "Decision uploaded for processing",
-    }
-
-
-@router.get("/stats/overview")
-async def get_stats(
+@router.get("/{decision_id}/analysis", response_model=DecisionAnalysisResponse)
+async def get_decision_analysis(
+    decision_id: str,
     session: AsyncSession = Depends(get_session),
-):
-    """
-    Get statistics overview for the decision database.
-    """
+) -> DecisionAnalysisResponse:
+    """Get the LLM analysis (ArgumentareCritica) for a decision."""
     if not is_db_available():
-        return {
-            "total_decisions": 0,
-            "by_ruling": {},
-            "by_type": {},
-            "last_updated": None,
-        }
+        raise HTTPException(status_code=503, detail="Database not available")
 
-    # Total count
-    total_result = await session.execute(select(func.count()).select_from(DecizieCNSC))
-    total = total_result.scalar() or 0
+    # Resolve decision by external ID or UUID
+    bo_match = re.match(r'^BO(\d{4})[_\-](\d+)$', decision_id, re.IGNORECASE)
+    if bo_match:
+        an_bo = int(bo_match.group(1))
+        numar_bo = int(bo_match.group(2))
+        dec_query = select(DecizieCNSC).where(
+            DecizieCNSC.an_bo == an_bo, DecizieCNSC.numar_bo == numar_bo
+        )
+    else:
+        dec_query = select(DecizieCNSC).where(DecizieCNSC.id == decision_id)
 
-    # Count by ruling (solutie_contestatie)
-    ruling_result = await session.execute(
-        select(DecizieCNSC.solutie_contestatie, func.count())
-        .group_by(DecizieCNSC.solutie_contestatie)
+    dec_result = await session.execute(dec_query)
+    decision = dec_result.scalar_one_or_none()
+    if not decision:
+        raise HTTPException(status_code=404, detail="Decision not found")
+
+    # Fetch all ArgumentareCritica for this decision
+    arg_query = (
+        select(ArgumentareCritica)
+        .where(ArgumentareCritica.decizie_id == decision.id)
+        .order_by(ArgumentareCritica.cod_critica)
     )
-    by_ruling = {row[0] or "NECUNOSCUT": row[1] for row in ruling_result.all()}
+    arg_result = await session.execute(arg_query)
+    args = arg_result.scalars().all()
 
-    # Count by type (tip_contestatie)
-    type_result = await session.execute(
-        select(DecizieCNSC.tip_contestatie, func.count())
-        .group_by(DecizieCNSC.tip_contestatie)
+    chunks = [
+        AnalysisChunk(
+            cod_critica=a.cod_critica,
+            argumente_contestator=a.argumente_contestator,
+            argumente_ac=a.argumente_ac,
+            argumente_intervenienti=a.argumente_intervenienti,
+            elemente_retinute_cnsc=a.elemente_retinute_cnsc,
+            argumentatie_cnsc=a.argumentatie_cnsc,
+            castigator_critica=a.castigator_critica,
+            jurisprudenta_contestator=a.jurisprudenta_contestator,
+            jurisprudenta_ac=a.jurisprudenta_ac,
+            jurisprudenta_cnsc=a.jurisprudenta_cnsc,
+        )
+        for a in args
+    ]
+
+    return DecisionAnalysisResponse(
+        decision_id=decision.id,
+        external_id=f"BO{decision.an_bo}_{decision.numar_bo}",
+        chunks=chunks,
     )
-    by_type = {row[0] or "necunoscut": row[1] for row in type_result.all()}
-
-    # Last updated
-    last_result = await session.execute(
-        select(func.max(DecizieCNSC.created_at))
-    )
-    last_updated = last_result.scalar()
-
-    return {
-        "total_decisions": total,
-        "by_ruling": by_ruling,
-        "by_type": by_type,
-        "last_updated": last_updated.isoformat() if last_updated else None,
-    }
