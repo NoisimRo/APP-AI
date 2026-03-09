@@ -440,12 +440,13 @@ class LLMSettings(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, default=1)
     active_provider: Mapped[str] = mapped_column(
         String(30), nullable=False, default="gemini"
-    )  # "gemini", "anthropic", "openai"
+    )  # "gemini", "anthropic", "openai", "groq", "openrouter"
     active_model: Mapped[Optional[str]] = mapped_column(String(100))
     gemini_api_key_enc: Mapped[Optional[str]] = mapped_column(Text)
     anthropic_api_key_enc: Mapped[Optional[str]] = mapped_column(Text)
     openai_api_key_enc: Mapped[Optional[str]] = mapped_column(Text)
     groq_api_key_enc: Mapped[Optional[str]] = mapped_column(Text)
+    openrouter_api_key_enc: Mapped[Optional[str]] = mapped_column(Text)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, server_default=func.now(), onupdate=func.now(), nullable=False
     )
