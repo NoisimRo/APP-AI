@@ -121,7 +121,7 @@ async def main():
     parser.add_argument(
         "--provider",
         type=str,
-        choices=["gemini", "anthropic", "openai", "groq"],
+        choices=["gemini", "anthropic", "openai", "groq", "openrouter"],
         help="LLM provider to use (default: auto-detect from env vars)",
     )
     parser.add_argument(

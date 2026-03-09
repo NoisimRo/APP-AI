@@ -25,7 +25,7 @@ DATABASE_URL="postgresql+asyncpg://..." python scripts/generate_embeddings.py
 
 - **Frontend:** Single `index.tsx` file (React 19 + Vite + TailwindCSS)
 - **Backend:** `backend/app/` - FastAPI with async SQLAlchemy
-- **LLM:** Multi-provider (Gemini + Claude + OpenAI + Groq) via factory pattern (`backend/app/services/llm/factory.py`). Groq = modele open-source gratuite (Llama, DeepSeek, Mixtral). Embeddings always on Gemini.
+- **LLM:** Multi-provider (Gemini + Claude + OpenAI + Groq + OpenRouter) via factory pattern (`backend/app/services/llm/factory.py`). Groq = modele open-source gratuite (Llama, DeepSeek, Qwen). OpenRouter = 400+ modele, multe gratuite (suffix `:free`). Embeddings always on Gemini.
 - **RAG Pipeline:** `backend/app/services/rag.py` - vector search on ArgumentareCritica → LLM generation
 - **Database Models:** `backend/app/models/decision.py` - DecizieCNSC, ArgumentareCritica, etc.
 
@@ -38,7 +38,8 @@ DATABASE_URL="postgresql+asyncpg://..." python scripts/generate_embeddings.py
 | `backend/app/services/llm/gemini.py` | Gemini LLM provider |
 | `backend/app/services/llm/anthropic.py` | Anthropic Claude LLM provider |
 | `backend/app/services/llm/openai.py` | OpenAI LLM provider (GPT-4.1, o3, etc.) |
-| `backend/app/services/llm/groq.py` | Groq provider — modele open-source gratuite (Llama, DeepSeek, Mixtral) |
+| `backend/app/services/llm/groq.py` | Groq provider — modele open-source gratuite (Llama, DeepSeek, Qwen) |
+| `backend/app/services/llm/openrouter.py` | OpenRouter provider — 400+ modele, multe gratuite (suffix `:free`) |
 | `backend/app/services/llm/factory.py` | LLM provider factory + `get_active_llm_provider()` |
 | `backend/app/core/encryption.py` | Fernet encryption for API keys |
 | `backend/app/api/v1/settings.py` | LLM Settings API (GET/PUT/test) |
@@ -105,7 +106,7 @@ DATABASE_URL="postgresql+asyncpg://..." python scripts/generate_embeddings.py
 | `nomenclator_cpv` | CPV codes nomenclator | No |
 | `acte_normative` | Master table acte legislative (Legea 98/2016, HG 395/2016, etc.) | No |
 | `legislatie_fragmente` | Fragmente legislație la granularitate maximă (articol/alineat/literă) | Yes (2000-dim) |
-| `llm_settings` | LLM provider config (single-row: active provider, model, encrypted API keys for Gemini/Anthropic/OpenAI/Groq) | No |
+| `llm_settings` | LLM provider config (single-row: active provider, model, encrypted API keys for Gemini/Anthropic/OpenAI/Groq/OpenRouter) | No |
 
 ### Tabele eliminate (2026-03-07)
 

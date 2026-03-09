@@ -58,9 +58,22 @@ PROVIDER_MODELS = {
         "llama-3.3-70b-versatile",
         "llama-3.1-8b-instant",
         "deepseek-r1-distill-llama-70b",
+        "deepseek-r1-distill-qwen-32b",
         "gemma2-9b-it",
-        "mixtral-8x7b-32768",
-        "llama-3-groq-70b-8192-tool-use-preview",
+        "qwen-qwq-32b",
+        "meta-llama/llama-4-scout-17b-16e-instruct",
+    ],
+    "openrouter": [
+        "deepseek/deepseek-chat-v3.1:free",
+        "deepseek/deepseek-r1:free",
+        "meta-llama/llama-4-maverick:free",
+        "meta-llama/llama-4-scout:free",
+        "meta-llama/llama-3.3-70b-instruct:free",
+        "qwen/qwen3-235b-a22b:free",
+        "google/gemma-3-27b-it:free",
+        "mistralai/mistral-small-3.1-24b-instruct:free",
+        "nvidia/llama-3.1-nemotron-ultra-253b-v1:free",
+        "openrouter/free",
     ],
 }
 
@@ -70,6 +83,7 @@ DEFAULT_MODELS = {
     "anthropic": "claude-sonnet-4-6",
     "openai": "gpt-5.4-2026-03-05",
     "groq": "llama-3.3-70b-versatile",
+    "openrouter": "deepseek/deepseek-chat-v3.1:free",
 }
 
 
@@ -88,7 +102,7 @@ class LLMSettingsResponse(BaseModel):
 
 class LLMSettingsUpdateRequest(BaseModel):
     """Request for PUT /settings/llm."""
-    active_provider: str = Field(..., pattern=r"^(gemini|anthropic|openai|groq)$")
+    active_provider: str = Field(..., pattern=r"^(gemini|anthropic|openai|groq|openrouter)$")
     active_model: str | None = None
     api_key: str | None = Field(None, description="API key for the provider (will be encrypted)")
 
@@ -121,6 +135,10 @@ def _is_provider_configured(provider: str, settings_row: LLMSettings | None) -> 
     elif provider == "groq":
         has_env = bool(app_settings.groq_api_key)
         has_db = bool(settings_row and settings_row.groq_api_key_enc)
+        return has_env or has_db
+    elif provider == "openrouter":
+        has_env = bool(app_settings.openrouter_api_key)
+        has_db = bool(settings_row and settings_row.openrouter_api_key_enc)
         return has_env or has_db
     return False
 
@@ -201,6 +219,8 @@ async def update_llm_settings(
             settings_row.openai_api_key_enc = encrypted
         elif request.active_provider == "groq":
             settings_row.groq_api_key_enc = encrypted
+        elif request.active_provider == "openrouter":
+            settings_row.openrouter_api_key_enc = encrypted
 
     await session.commit()
     await session.refresh(settings_row)
@@ -244,6 +264,8 @@ async def test_llm_connection(
             api_key = decrypt_value(settings_row.openai_api_key_enc)
         elif provider_type == "groq" and settings_row.groq_api_key_enc:
             api_key = decrypt_value(settings_row.groq_api_key_enc)
+        elif provider_type == "openrouter" and settings_row.openrouter_api_key_enc:
+            api_key = decrypt_value(settings_row.openrouter_api_key_enc)
 
     kwargs = {}
     if model:
