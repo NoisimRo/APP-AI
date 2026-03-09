@@ -40,9 +40,15 @@ import {
 
 type AppMode = 'dashboard' | 'datalake' | 'drafter' | 'redflags' | 'chat' | 'clarification' | 'rag' | 'training' | 'settings';
 
+interface LLMModelInfo {
+  id: string;
+  input_tokens: number;
+  output_tokens: number;
+}
+
 interface LLMProviderInfo {
   configured: boolean;
-  models: string[];
+  models: LLMModelInfo[];
 }
 
 interface LLMSettingsData {
@@ -2332,7 +2338,7 @@ const App = () => {
                     onClick={() => {
                       setSettingsProvider(key);
                       const providerModels = llmSettings?.providers?.[key]?.models || [];
-                      setSettingsModel(providerModels[0] || '');
+                      setSettingsModel(providerModels[0]?.id || '');
                       setSettingsTestResult(null);
                       setSettingsMessage(null);
                     }}
@@ -2361,12 +2367,16 @@ const App = () => {
             <select
               value={settingsModel}
               onChange={(e) => setSettingsModel(e.target.value)}
-              className="w-full border border-slate-300 rounded-lg px-4 py-3 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white"
+              className="w-full border border-slate-300 rounded-lg px-4 py-3 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white font-mono"
             >
-              <option value="">Implicit ({models[0] || 'auto'})</option>
-              {models.map((m: string) => (
-                <option key={m} value={m}>{m}</option>
-              ))}
+              <option value="">Implicit ({models[0]?.id || 'auto'})</option>
+              {models.map((m: LLMModelInfo) => {
+                const fmtTokens = (n: number) => n >= 1_000_000 ? `${(n/1_000_000).toFixed(1)}M` : n >= 1_000 ? `${(n/1_000).toFixed(0)}k` : `${n}`;
+                const label = m.input_tokens > 0
+                  ? `${m.id}  ⟨In: ${fmtTokens(m.input_tokens)} / Out: ${fmtTokens(m.output_tokens)}⟩`
+                  : m.id;
+                return <option key={m.id} value={m.id}>{label}</option>;
+              })}
             </select>
           </div>
 

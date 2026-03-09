@@ -77,6 +77,43 @@ DEFAULT_MODELS = {
     "openrouter": "openrouter/free",
 }
 
+# Token limits per model: (max_input_tokens, max_output_tokens)
+MODEL_TOKEN_LIMITS: dict[str, tuple[int, int]] = {
+    # Gemini
+    "gemini-3.1-pro-preview": (1_048_576, 65_536),
+    "gemini-3.1-pro-preview-customtools": (1_048_576, 65_536),
+    "gemini-3-flash-preview": (1_048_576, 65_536),
+    "gemini-3.1-flash-lite-preview": (1_048_576, 65_536),
+    "gemini-2.5-flash": (1_048_576, 65_536),
+    "gemini-2.5-pro": (1_048_576, 65_536),
+    "gemini-2.5-flash-lite": (1_048_576, 65_536),
+    # Anthropic
+    "claude-opus-4-6": (200_000, 32_000),
+    "claude-sonnet-4-6": (200_000, 16_000),
+    "claude-opus-4-5": (200_000, 32_000),
+    "claude-sonnet-4-5": (200_000, 16_000),
+    # OpenAI
+    "gpt-5.4-2026-03-05": (200_000, 100_000),
+    "gpt-5-2025-08-07": (128_000, 32_768),
+    "gpt-5-mini-2025-08-07": (128_000, 16_384),
+    "gpt-4.1": (1_047_576, 32_768),
+    "gpt-4.1-mini": (1_047_576, 32_768),
+    "gpt-4.1-nano": (1_047_576, 32_768),
+    "gpt-4o": (128_000, 16_384),
+    "gpt-4o-mini": (128_000, 16_384),
+    "o3": (200_000, 100_000),
+    "o3-mini": (200_000, 100_000),
+    "o4-mini": (200_000, 100_000),
+    # Groq (free tier TPM limits — much lower than model max)
+    "llama-3.3-70b-versatile": (8_000, 4_096),
+    "llama-3.1-8b-instant": (3_500, 4_096),
+    "openai/gpt-oss-120b": (5_000, 4_096),
+    "qwen/qwen3-32b": (3_500, 4_096),
+    "meta-llama/llama-4-scout-17b-16e-instruct": (5_000, 8_192),
+    # OpenRouter
+    "openrouter/free": (10_000, 4_096),
+}
+
 # Cache for dynamically fetched OpenRouter models
 _openrouter_models_cache: list[str] | None = None
 _openrouter_cache_time: float = 0
@@ -133,10 +170,17 @@ async def _fetch_openrouter_free_models() -> list[str]:
         return PROVIDER_MODELS["openrouter"]
 
 
+class ModelInfo(BaseModel):
+    """Info about a single model."""
+    id: str
+    input_tokens: int
+    output_tokens: int
+
+
 class ProviderInfo(BaseModel):
     """Info about a provider's configuration status."""
     configured: bool
-    models: list[str]
+    models: list[ModelInfo]
 
 
 class LLMSettingsResponse(BaseModel):
@@ -189,6 +233,16 @@ def _is_provider_configured(provider: str, settings_row: LLMSettings | None) -> 
     return False
 
 
+def _build_model_list(model_ids: list[str]) -> list[ModelInfo]:
+    """Build sorted ModelInfo list from model IDs (largest input first)."""
+    models = []
+    for mid in model_ids:
+        limits = MODEL_TOKEN_LIMITS.get(mid, (0, 0))
+        models.append(ModelInfo(id=mid, input_tokens=limits[0], output_tokens=limits[1]))
+    models.sort(key=lambda m: m.input_tokens, reverse=True)
+    return models
+
+
 async def _get_settings_row(session: AsyncSession) -> LLMSettings | None:
     """Get the single settings row from DB."""
     result = await session.execute(
@@ -211,11 +265,11 @@ async def get_llm_settings(
     openrouter_models = await _fetch_openrouter_free_models()
 
     providers = {}
-    for provider_name, models in PROVIDER_MODELS.items():
-        provider_models = openrouter_models if provider_name == "openrouter" else models
+    for provider_name, model_ids in PROVIDER_MODELS.items():
+        raw_ids = openrouter_models if provider_name == "openrouter" else model_ids
         providers[provider_name] = ProviderInfo(
             configured=_is_provider_configured(provider_name, settings_row),
-            models=provider_models,
+            models=_build_model_list(raw_ids),
         )
 
     return LLMSettingsResponse(
@@ -281,11 +335,11 @@ async def update_llm_settings(
     # Return updated settings (use cached OpenRouter models if available)
     openrouter_models = _openrouter_models_cache or PROVIDER_MODELS["openrouter"]
     providers = {}
-    for provider_name, models in PROVIDER_MODELS.items():
-        provider_models = openrouter_models if provider_name == "openrouter" else models
+    for provider_name, model_ids in PROVIDER_MODELS.items():
+        raw_ids = openrouter_models if provider_name == "openrouter" else model_ids
         providers[provider_name] = ProviderInfo(
             configured=_is_provider_configured(provider_name, settings_row),
-            models=provider_models,
+            models=_build_model_list(raw_ids),
         )
 
     return LLMSettingsResponse(
