@@ -86,46 +86,51 @@ class RAGService:
         Returns:
             List of (ArgumentareCritica, distance) tuples ordered by similarity.
         """
-        # Embed the query with retrieval_query task type (asymmetric search)
-        query_vector = await self.embedding_service.embed_query(query)
+        try:
+            # Embed the query with retrieval_query task type (asymmetric search)
+            query_vector = await self.embedding_service.embed_query(query)
 
-        # Cosine distance search on ArgumentareCritica embeddings
-        stmt = (
-            select(
-                ArgumentareCritica,
-                ArgumentareCritica.embedding.cosine_distance(query_vector).label("distance"),
+            # Cosine distance search on ArgumentareCritica embeddings
+            stmt = (
+                select(
+                    ArgumentareCritica,
+                    ArgumentareCritica.embedding.cosine_distance(query_vector).label("distance"),
+                )
+                .where(ArgumentareCritica.embedding.isnot(None))
             )
-            .where(ArgumentareCritica.embedding.isnot(None))
-        )
 
-        # Apply filters via JOIN to DecizieCNSC
-        if filters:
-            stmt = stmt.join(DecizieCNSC, DecizieCNSC.id == ArgumentareCritica.decizie_id)
-            if filters.get("ruling"):
-                stmt = stmt.where(DecizieCNSC.solutie_contestatie == filters["ruling"])
-            if filters.get("tip_contestatie"):
-                stmt = stmt.where(DecizieCNSC.tip_contestatie == filters["tip_contestatie"])
-            if filters.get("year"):
-                stmt = stmt.where(DecizieCNSC.an_bo == int(filters["year"]))
-            if filters.get("coduri_critici"):
-                stmt = stmt.where(DecizieCNSC.coduri_critici.overlap(filters["coduri_critici"]))
-            if filters.get("cpv_codes"):
-                cpv_conditions = [DecizieCNSC.cod_cpv.ilike(f"{c}%") for c in filters["cpv_codes"]]
-                stmt = stmt.where(or_(*cpv_conditions))
+            # Apply filters via JOIN to DecizieCNSC
+            if filters:
+                stmt = stmt.join(DecizieCNSC, DecizieCNSC.id == ArgumentareCritica.decizie_id)
+                if filters.get("ruling"):
+                    stmt = stmt.where(DecizieCNSC.solutie_contestatie == filters["ruling"])
+                if filters.get("tip_contestatie"):
+                    stmt = stmt.where(DecizieCNSC.tip_contestatie == filters["tip_contestatie"])
+                if filters.get("year"):
+                    stmt = stmt.where(DecizieCNSC.an_bo == int(filters["year"]))
+                if filters.get("coduri_critici"):
+                    stmt = stmt.where(DecizieCNSC.coduri_critici.overlap(filters["coduri_critici"]))
+                if filters.get("cpv_codes"):
+                    cpv_conditions = [DecizieCNSC.cod_cpv.ilike(f"{c}%") for c in filters["cpv_codes"]]
+                    stmt = stmt.where(or_(*cpv_conditions))
 
-        stmt = stmt.order_by("distance").limit(limit)
+            stmt = stmt.order_by("distance").limit(limit)
 
-        result = await session.execute(stmt)
-        rows = result.all()
+            result = await session.execute(stmt)
+            rows = result.all()
 
-        logger.info(
-            "vector_search_completed",
-            query=query[:80],
-            results=len(rows),
-            top_distance=rows[0].distance if rows else None,
-        )
+            logger.info(
+                "vector_search_completed",
+                query=query[:80],
+                results=len(rows),
+                top_distance=rows[0].distance if rows else None,
+            )
 
-        return [(row.ArgumentareCritica, row.distance) for row in rows]
+            return [(row.ArgumentareCritica, row.distance) for row in rows]
+
+        except Exception as e:
+            logger.warning("vector_search_failed", error=str(e), query=query[:80])
+            return []
 
     async def _trigram_search(
         self,
