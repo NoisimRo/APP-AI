@@ -51,12 +51,11 @@ async def generate_clarification(
     try:
         search_query = request.clause[:3000]
 
-        # Hybrid search: vector + trigram + RRF + query expansion
+        # Vector search for relevant jurisprudence
         matched_chunks = await rag.hybrid_search(
             query=search_query,
             session=session,
             limit=6,
-            expand=True,
         )
 
         # Filter by relevance

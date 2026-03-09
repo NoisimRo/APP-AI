@@ -383,7 +383,6 @@ Severitate:
             query=query_text,
             session=session,
             limit=limit,
-            expand=True,
         )
 
         if not matched_chunks:

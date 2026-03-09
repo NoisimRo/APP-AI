@@ -261,67 +261,25 @@ class RAGService:
         session: AsyncSession,
         limit: int = 10,
         filters: dict | None = None,
-        expand: bool = True,
+        expand: bool = False,
     ) -> list[tuple[ArgumentareCritica, float]]:
-        """Public hybrid search: vector + trigram + RRF + optional query expansion.
+        """Search for relevant ArgumentareCritica chunks via vector search.
 
-        Combines vector cosine search and pg_trgm trigram similarity,
-        merges results with Reciprocal Rank Fusion, and optionally
-        expands the query into multiple search variants for better recall.
-
-        IMPORTANT: Runs DB queries sequentially because AsyncSession is not
-        safe for concurrent use from multiple coroutines.
+        Uses single vector search for speed. Query expansion and trigram
+        search are available but disabled by default to keep latency low.
 
         Args:
             query: Search query.
             session: Database session.
             limit: Maximum results to return.
             filters: Optional filters dict for scoped search.
-            expand: Whether to expand query into multiple variants.
+            expand: Whether to expand query (adds LLM + extra embedding calls).
 
         Returns:
             List of (ArgumentareCritica, distance) tuples, sorted by relevance.
         """
-        # Check if embeddings exist
-        has_embeddings = await session.scalar(
-            select(func.count())
-            .select_from(ArgumentareCritica)
-            .where(ArgumentareCritica.embedding.isnot(None))
-        )
-
-        if not has_embeddings:
-            return []
-
-        # Query expansion
-        if expand:
-            expanded_queries = await self._expand_query(query)
-        else:
-            expanded_queries = [query]
-
-        # Run searches SEQUENTIALLY (AsyncSession not safe for concurrent use)
-        all_vector = []
-        all_trigram = []
-        for eq in expanded_queries:
-            vec_results = await self.search_by_vector(eq, session, limit=limit * 2, filters=filters)
-            all_vector.extend(vec_results)
-            tri_results = await self._trigram_search(eq, session, limit=limit * 2, filters=filters)
-            all_trigram.extend(tri_results)
-
-        # Deduplicate each list (keep best score)
-        def _dedup(results: list[tuple[ArgumentareCritica, float]]) -> list[tuple[ArgumentareCritica, float]]:
-            best: dict[str, tuple[ArgumentareCritica, float]] = {}
-            for arg, dist in results:
-                if arg.id not in best or dist < best[arg.id][1]:
-                    best[arg.id] = (arg, dist)
-            return sorted(best.values(), key=lambda x: x[1])
-
-        all_vector = _dedup(all_vector)
-        all_trigram = _dedup(all_trigram)
-
-        # RRF merge
-        merged = self._rrf_merge(all_vector, all_trigram)
-
-        return merged[:limit]
+        # Fast path: single vector search (one embedding call)
+        return await self.search_by_vector(query, session, limit=limit, filters=filters)
 
     async def extract_legislation_from_chunks(
         self,
@@ -1129,48 +1087,10 @@ class RAGService:
         )
 
         if has_embeddings and has_embeddings > 0:
-            # Query expansion: generate search variants in parallel with first search
-            expanded_queries = await self._expand_query(query)
-
-            # Hybrid search: vector + trigram for each expanded query
-            # SEQUENTIAL — AsyncSession is not safe for concurrent use
-            all_vector_results = []
-            all_trigram_results = []
-            for eq in expanded_queries:
-                vec_results = await self.search_by_vector(eq, session, limit=limit * 2, filters=filters)
-                all_vector_results.extend(vec_results)
-                tri_results = await self._trigram_search(eq, session, limit=limit * 2, filters=filters)
-                all_trigram_results.extend(tri_results)
-
-            # Deduplicate by chunk ID (keep best score)
-            def _dedup(results: list[tuple[ArgumentareCritica, float]]) -> list[tuple[ArgumentareCritica, float]]:
-                best: dict[str, tuple[ArgumentareCritica, float]] = {}
-                for arg, dist in results:
-                    if arg.id not in best or dist < best[arg.id][1]:
-                        best[arg.id] = (arg, dist)
-                return sorted(best.values(), key=lambda x: x[1])
-
-            vector_results = _dedup(all_vector_results)
-            trigram_results = _dedup(all_trigram_results)
-
-            if vector_results or trigram_results:
-                # Merge with Reciprocal Rank Fusion
-                if vector_results and trigram_results:
-                    matched_chunks = self._rrf_merge(vector_results, trigram_results)
-                elif vector_results:
-                    matched_chunks = vector_results
-                else:
-                    matched_chunks = trigram_results
-
-                logger.info(
-                    "hybrid_search_completed",
-                    expanded_queries=len(expanded_queries),
-                    vector_count=len(vector_results),
-                    trigram_count=len(trigram_results),
-                    merged_count=len(matched_chunks),
-                )
-            else:
-                matched_chunks = []
+            # Single vector search — fast path (one embedding call)
+            matched_chunks = await self.search_by_vector(
+                query, session, limit=limit * 3, filters=filters
+            )
 
             if matched_chunks:
                 # If we have CPV codes, boost chunks from decisions with matching CPV
