@@ -247,13 +247,14 @@ class NomenclatorCPV(Base):
 
     cod_cpv: Mapped[str] = mapped_column(String(20), primary_key=True)
     descriere: Mapped[str] = mapped_column(Text, nullable=False)
+    denumire_en: Mapped[Optional[str]] = mapped_column(String(200))
     categorie_achizitii: Mapped[Optional[str]] = mapped_column(String(50))
     # Furnizare, Servicii, Lucrări
     clasa_produse: Mapped[Optional[str]] = mapped_column(String(200))
 
     # CPV hierarchy
     cod_parinte: Mapped[Optional[str]] = mapped_column(String(20))
-    nivel: Mapped[Optional[int]] = mapped_column(Integer)  # 1-8 granularity
+    nivel: Mapped[Optional[int]] = mapped_column(Integer)  # 1-5: Diviziune, Grup, Clasă, Categorie, Subcategorie
 
     # Timestamps
     created_at: Mapped[datetime] = mapped_column(
