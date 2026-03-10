@@ -21,6 +21,8 @@ class ScopeFilters(BaseModel):
     years: list[int] | None = None
     coduri_critici: list[str] | None = None
     cpv_codes: list[str] | None = None
+    categorie: str | None = None  # Furnizare, Servicii, Lucrări
+    clasa: str | None = None  # Product class
     search: str | None = None
 
 
@@ -93,6 +95,12 @@ def _apply_scope_filters(query, filters: dict):
             DecizieCNSC.cod_cpv.ilike(f"{cpv}%") for cpv in filters["cpv_codes"]
         ]
         query = query.where(or_(*cpv_conditions))
+
+    if filters.get("categorie"):
+        query = query.where(DecizieCNSC.cpv_categorie == filters["categorie"])
+
+    if filters.get("clasa"):
+        query = query.where(DecizieCNSC.cpv_clasa == filters["clasa"])
 
     if filters.get("search"):
         search_term = f"%{filters['search'].strip()}%"

@@ -2,7 +2,7 @@
 
 from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel, Field
-from sqlalchemy import select, func, extract
+from sqlalchemy import select, func, extract, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.logging import get_logger
@@ -20,7 +20,9 @@ logger = get_logger(__name__)
 class SearchFilters(BaseModel):
     """Search filters for decisions."""
 
-    cpv_codes: list[str] | None = Field(None, description="Filter by CPV codes")
+    cpv_codes: list[str] | None = Field(None, description="Filter by CPV codes (prefix match for hierarchy)")
+    categorie_achizitii: str | None = Field(None, description="Filter by category: Furnizare, Servicii, Lucrări")
+    clasa_produse: str | None = Field(None, description="Filter by product class")
     criticism_codes: list[str] | None = Field(
         None, description="Filter by criticism codes (D1-D8, R1-R8)"
     )
@@ -89,7 +91,12 @@ async def semantic_search(
     # Apply filters
     if filters:
         if filters.cpv_codes:
-            stmt = stmt.where(DecizieCNSC.cod_cpv.in_(filters.cpv_codes))
+            cpv_conditions = [DecizieCNSC.cod_cpv.ilike(f"{cpv}%") for cpv in filters.cpv_codes]
+            stmt = stmt.where(or_(*cpv_conditions))
+        if filters.categorie_achizitii:
+            stmt = stmt.where(DecizieCNSC.cpv_categorie == filters.categorie_achizitii)
+        if filters.clasa_produse:
+            stmt = stmt.where(DecizieCNSC.cpv_clasa == filters.clasa_produse)
         if filters.criticism_codes:
             stmt = stmt.where(
                 DecizieCNSC.coduri_critici.overlap(filters.criticism_codes)
