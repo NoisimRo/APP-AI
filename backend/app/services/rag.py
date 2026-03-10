@@ -861,6 +861,74 @@ class RAGService:
 
         return decisions, matched_chunks
 
+    async def _rerank_chunks(
+        self,
+        query: str,
+        chunks: list[tuple[ArgumentareCritica, float]],
+        top_k: int = 10,
+    ) -> list[tuple[ArgumentareCritica, float]]:
+        """LLM-based reranking of retrieved chunks.
+
+        Asks the LLM to reorder chunks by relevance to the query.
+        Falls back to original order on any error.
+
+        Args:
+            query: Original user query.
+            chunks: Retrieved chunks with distances.
+            top_k: Number of top chunks to return.
+
+        Returns:
+            Reranked list of (ArgumentareCritica, distance) tuples.
+        """
+        if len(chunks) <= top_k:
+            return chunks
+
+        # Build compact prompt with top 15 chunks
+        candidates = chunks[:15]
+        numbered_parts = []
+        for i, (arg, dist) in enumerate(candidates):
+            text = (arg.argumentatie_cnsc or arg.argumente_contestator or "")[:200]
+            numbered_parts.append(f"[{i + 1}] {arg.cod_critica}: {text}")
+
+        rerank_prompt = (
+            "Ordonează următoarele fragmente juridice după relevanță pentru întrebarea:\n"
+            f'"{query}"\n\n'
+            + "\n".join(numbered_parts)
+            + "\n\nRăspunde DOAR cu numerele în ordinea relevanței, separate prin virgulă.\n"
+            "Exemplu: 3,1,5,2,4"
+        )
+
+        try:
+            response = await self.llm.complete(
+                prompt=rerank_prompt,
+                temperature=0.0,
+                max_tokens=50,
+            )
+            # Parse the comma-separated numbers
+            order = [
+                int(x.strip()) - 1
+                for x in response.strip().split(",")
+                if x.strip().isdigit()
+            ]
+            reranked = [candidates[i] for i in order if 0 <= i < len(candidates)]
+
+            # Append any chunks not mentioned in the LLM response
+            seen = {i for i in order if 0 <= i < len(candidates)}
+            for i, chunk in enumerate(candidates):
+                if i not in seen:
+                    reranked.append(chunk)
+
+            logger.info(
+                "rerank_completed",
+                query=query[:80],
+                candidates=len(candidates),
+                reranked=len(reranked),
+            )
+            return reranked[:top_k]
+        except Exception as e:
+            logger.warning("rerank_failed", error=str(e))
+            return chunks[:top_k]
+
     async def _expand_query(self, query: str) -> list[str]:
         """Generate query reformulations using LLM for better retrieval.
 
@@ -917,6 +985,7 @@ class RAGService:
         limit: int = 5,
         scope_decision_ids: list[str] | None = None,
         enable_expansion: bool = True,
+        enable_rerank: bool = False,
     ) -> tuple[list[DecizieCNSC], list[tuple[ArgumentareCritica, float]]]:
         """Search for relevant decisions based on query.
 
@@ -934,6 +1003,7 @@ class RAGService:
             scope_decision_ids: If provided, restrict search to these decision IDs only.
             enable_expansion: If True, use LLM to generate query reformulations
                 for better retrieval coverage.
+            enable_rerank: If True, use LLM to rerank retrieved chunks by relevance.
 
         Returns:
             Tuple of (decisions, matched_chunks). matched_chunks is a list of
@@ -941,7 +1011,7 @@ class RAGService:
         """
         logger.info("searching_decisions", query=query, limit=limit,
                      scoped=scope_decision_ids is not None,
-                     expansion=enable_expansion)
+                     expansion=enable_expansion, rerank=enable_rerank)
 
         # 1. Check for direct BO references first
         bo_refs = self._extract_bo_references(query)
@@ -1038,6 +1108,12 @@ class RAGService:
                         else:
                             boosted_chunks.append((arg, dist))
                     matched_chunks = sorted(boosted_chunks, key=lambda x: x[1])
+
+                # Optional LLM reranking
+                if enable_rerank:
+                    matched_chunks = await self._rerank_chunks(
+                        query, matched_chunks, top_k=limit * 3
+                    )
 
                 # Get unique decision IDs from matched chunks
                 seen_ids = set()
@@ -1434,12 +1510,14 @@ class RAGService:
         max_decisions: int = 5,
         scope_decision_ids: list[str] | None = None,
         enable_expansion: bool = True,
+        enable_rerank: bool = False,
     ) -> tuple[list[str], str, list[Citation], float, list[str]]:
         """Prepare RAG context without generating the LLM response.
 
         Args:
             scope_decision_ids: If provided, restrict search to these decision IDs only.
             enable_expansion: If True, use LLM query expansion for better retrieval.
+            enable_rerank: If True, use LLM reranking of retrieved chunks.
 
         Returns:
             Tuple of (contexts, system_prompt, citations, confidence, suggested_questions).
@@ -1452,6 +1530,7 @@ class RAGService:
             query, session, limit=max_decisions,
             scope_decision_ids=scope_decision_ids,
             enable_expansion=enable_expansion,
+            enable_rerank=enable_rerank,
         )
 
         # Legislation Linking: find legal provisions referenced by matched chunks
@@ -1555,6 +1634,7 @@ Răspunde în limba română, profesional și precis."""
         conversation_history: list[dict] | None = None,
         max_decisions: int = 5,
         scope_decision_ids: list[str] | None = None,
+        enable_rerank: bool = False,
     ) -> tuple[str, list[Citation], float, list[str]]:
         """Generate a response to user query using RAG.
 
@@ -1564,6 +1644,7 @@ Răspunde în limba română, profesional și precis."""
             conversation_history: Optional previous conversation messages.
             max_decisions: Maximum number of decisions to retrieve.
             scope_decision_ids: If provided, restrict search to these decision IDs only.
+            enable_rerank: If True, use LLM reranking of retrieved chunks.
 
         Returns:
             Tuple of (response_text, citations, confidence, suggested_questions).
@@ -1574,6 +1655,7 @@ Răspunde în limba română, profesional și precis."""
         contexts, system_prompt, citations, confidence, suggested_questions = await self.prepare_context(
             query, session, conversation_history, max_decisions,
             scope_decision_ids=scope_decision_ids,
+            enable_rerank=enable_rerank,
         )
 
         if contexts is None:

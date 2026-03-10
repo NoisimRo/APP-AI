@@ -395,6 +395,7 @@ const App = () => {
   // Search Scopes State
   const [scopes, setScopes] = useState<{id: string, name: string, description: string | null, filters: any, decision_count: number}[]>([]);
   const [activeScopeId, setActiveScopeId] = useState<string | null>(null);
+  const [enableReranking, setEnableReranking] = useState(false);
   const [showScopeModal, setShowScopeModal] = useState(false);
   const [showScopeManager, setShowScopeManager] = useState(false);
   const [editingScope, setEditingScope] = useState<{id: string, name: string, description: string | null} | null>(null);
@@ -813,6 +814,7 @@ const App = () => {
             content: m.text
           })),
           scope_id: activeScopeId || undefined,
+          rerank: enableReranking || undefined,
         },
         (chunk) => {
           accumulated += chunk;
@@ -2709,8 +2711,19 @@ const App = () => {
       </div>
       <div className="p-4 bg-white border-t border-slate-200">
         <div className="max-w-4xl mx-auto">
-          {/* Scope selector */}
-          <ScopeSelector />
+          {/* Scope selector + reranking toggle */}
+          <div className="flex items-center gap-4 mb-3">
+            <div className="flex-1"><ScopeSelector compact /></div>
+            <label className="flex items-center gap-1.5 text-xs text-slate-400 cursor-pointer select-none whitespace-nowrap">
+              <input
+                type="checkbox"
+                checked={enableReranking}
+                onChange={(e) => setEnableReranking(e.target.checked)}
+                className="rounded border-slate-300 text-blue-600 focus:ring-blue-500/40 h-3.5 w-3.5"
+              />
+              Reranking
+            </label>
+          </div>
           <div className="flex gap-2 relative">
             <input
               type="text"
