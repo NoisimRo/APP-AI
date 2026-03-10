@@ -102,6 +102,133 @@ class RAGService:
 
         return [(row.ArgumentareCritica, row.distance) for row in rows]
 
+    async def _trigram_search(
+        self,
+        query: str,
+        session: AsyncSession,
+        limit: int = 15,
+        scope_decision_ids: list[str] | None = None,
+    ) -> list[tuple[ArgumentareCritica, float]]:
+        """Search ArgumentareCritica via pg_trgm word similarity on parent decision text.
+
+        Complements vector search by catching exact term matches that
+        semantic search might miss (legal terminology, entity names, numbers).
+        Uses word_similarity() which handles short query vs long text well.
+
+        Args:
+            query: User's search query.
+            session: Database session.
+            limit: Maximum number of chunk results.
+            scope_decision_ids: If provided, restrict search to these decision IDs only.
+
+        Returns:
+            List of (ArgumentareCritica, distance) tuples.
+        """
+        try:
+            wsim = func.word_similarity(query, DecizieCNSC.text_integral)
+
+            stmt = (
+                select(DecizieCNSC.id, wsim.label("wsim"))
+                .where(wsim > 0.3)
+                .order_by(wsim.desc())
+                .limit(limit)
+            )
+
+            if scope_decision_ids is not None:
+                stmt = stmt.where(DecizieCNSC.id.in_(scope_decision_ids))
+
+            result = await session.execute(stmt)
+            dec_rows = result.all()
+
+            if not dec_rows:
+                logger.info("trigram_search_no_results", query=query[:80])
+                return []
+
+            # Load ArgumentareCritica for matched decisions
+            dec_ids = [row[0] for row in dec_rows]
+            dec_scores = {str(row[0]): float(row[1]) for row in dec_rows}
+
+            chunk_stmt = (
+                select(ArgumentareCritica)
+                .where(ArgumentareCritica.decizie_id.in_(dec_ids))
+                .order_by(ArgumentareCritica.ordine_in_decizie)
+            )
+            chunk_result = await session.execute(chunk_stmt)
+            chunks = list(chunk_result.scalars().all())
+
+            # Convert word_similarity (0-1, higher=better) to distance (0-1, lower=better)
+            results = [
+                (chunk, 1.0 - dec_scores.get(str(chunk.decizie_id), 0.0))
+                for chunk in chunks
+            ]
+
+            logger.info(
+                "trigram_search_completed",
+                query=query[:80],
+                decisions=len(dec_rows),
+                chunks=len(results),
+                top_wsim=float(dec_rows[0][1]) if dec_rows else None,
+            )
+
+            return results
+        except Exception as e:
+            logger.warning("trigram_search_failed", error=str(e))
+            return []
+
+    def _rrf_merge(
+        self,
+        vector_results: list[tuple[ArgumentareCritica, float]],
+        trigram_results: list[tuple[ArgumentareCritica, float]],
+        k_vector: int = 60,
+        k_trigram: int = 70,
+    ) -> list[tuple[ArgumentareCritica, float]]:
+        """Merge vector and trigram search results using Reciprocal Rank Fusion.
+
+        RRF normalizes scores from different search methods without
+        requiring calibration. k_vector < k_trigram gives slight preference
+        to vector (semantic) results.
+
+        Args:
+            vector_results: Results from vector cosine search.
+            trigram_results: Results from trigram word similarity search.
+            k_vector: RRF constant for vector results (lower = more weight).
+            k_trigram: RRF constant for trigram results.
+
+        Returns:
+            Merged list of (ArgumentareCritica, distance) tuples ordered by RRF score.
+        """
+        rrf_scores: dict[str, float] = {}
+        chunk_map: dict[str, ArgumentareCritica] = {}
+        best_dist: dict[str, float] = {}
+
+        for rank, (chunk, dist) in enumerate(vector_results):
+            cid = str(chunk.id)
+            rrf_scores[cid] = rrf_scores.get(cid, 0) + 1.0 / (k_vector + rank + 1)
+            chunk_map[cid] = chunk
+            best_dist[cid] = dist
+
+        for rank, (chunk, dist) in enumerate(trigram_results):
+            cid = str(chunk.id)
+            rrf_scores[cid] = rrf_scores.get(cid, 0) + 1.0 / (k_trigram + rank + 1)
+            if cid not in chunk_map:
+                chunk_map[cid] = chunk
+            best_dist[cid] = min(best_dist.get(cid, 1.0), dist)
+
+        sorted_ids = sorted(rrf_scores.keys(), key=lambda c: rrf_scores[c], reverse=True)
+
+        vector_ids = {str(c.id) for c, _ in vector_results}
+        trigram_ids = {str(c.id) for c, _ in trigram_results}
+
+        logger.info(
+            "rrf_merge",
+            vector_count=len(vector_results),
+            trigram_count=len(trigram_results),
+            merged_count=len(sorted_ids),
+            overlap=len(vector_ids & trigram_ids),
+        )
+
+        return [(chunk_map[cid], best_dist[cid]) for cid in sorted_ids]
+
     def _extract_bo_references(self, query: str) -> list[tuple[int, int]]:
         """Extract BO year/number references from query.
 
@@ -807,11 +934,23 @@ class RAGService:
         )
 
         if has_embeddings and has_embeddings > 0:
-            # Vector search path
-            matched_chunks = await self.search_by_vector(
+            # Hybrid search: vector + trigram
+            vector_results = await self.search_by_vector(
                 query, session, limit=limit * 3,
                 scope_decision_ids=scope_decision_ids,
             )
+            trigram_results = await self._trigram_search(
+                query, session, limit=limit * 3,
+                scope_decision_ids=scope_decision_ids,
+            )
+
+            # Merge with Reciprocal Rank Fusion
+            if vector_results and trigram_results:
+                matched_chunks = self._rrf_merge(vector_results, trigram_results)
+            elif vector_results:
+                matched_chunks = vector_results
+            else:
+                matched_chunks = trigram_results
 
             if matched_chunks:
                 # If we have CPV codes, boost chunks from decisions with matching CPV
