@@ -10,10 +10,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.logging import get_logger
 from app.db.session import get_session
-from app.models.decision import ArgumentareCritica, DecizieCNSC
+from app.models.decision import ArgumentareCritica, DecizieCNSC, LegislatieFragment, ActNormativ
 from app.services.embedding import EmbeddingService
 from app.services.llm.factory import get_active_llm_provider, get_embedding_provider
 from app.services.llm.streaming import create_sse_response
+from app.services.rag import RAGService
 from app.api.v1.scopes import get_scope_decision_ids
 
 router = APIRouter()
@@ -50,6 +51,7 @@ async def _build_drafter_context(
 
     jurisprudence_context = ""
     decision_refs: list[str] = []
+    relevant_chunks: list[tuple] = []
 
     try:
         has_embeddings = await session.scalar(
@@ -125,7 +127,22 @@ async def _build_drafter_context(
     except Exception as e:
         logger.warning("drafter_jurisprudence_search_failed", error=str(e))
 
-    # Build prompt with jurisprudence context
+    # Legislation Linking: find actual legal text referenced by matched chunks
+    legislation_context = ""
+    if relevant_chunks:
+        try:
+            rag_service = RAGService()
+            leg_fragments = await rag_service._find_legislation_for_chunks(
+                relevant_chunks, session, limit=6,
+            )
+            if leg_fragments:
+                leg_contexts = rag_service._build_legislation_context(leg_fragments)
+                legislation_context = "\n\n".join(leg_contexts)
+                logger.info("drafter_legislation_linked", fragments=len(leg_fragments))
+        except Exception as e:
+            logger.warning("drafter_legislation_linking_failed", error=str(e))
+
+    # Build prompt with jurisprudence + legislation context
     jurisprudence_section = ""
     if jurisprudence_context:
         jurisprudence_section = f"""
@@ -142,6 +159,17 @@ Poți cita DOAR deciziile furnizate mai sus. NU inventa alte numere de decizii."
 
 Notă: Nu s-a găsit jurisprudență CNSC specifică în baza de date. NU cita și NU inventa numere de decizii CNSC."""
 
+    legislation_section = ""
+    if legislation_context:
+        legislation_section = f"""
+
+=== LEGISLAȚIE RELEVANTĂ (din baza de date) ===
+{legislation_context}
+=== SFÂRȘIT LEGISLAȚIE ===
+
+Folosește textul exact al articolelor de lege de mai sus în argumentarea contestației.
+Citează articolele cu formularea completă (ex: "conform art. 2 alin. (2) lit. e) din Legea nr. 98/2016")."""
+
     prompt = f"""Ești un avocat expert în achiziții publice din România. Redactează o contestație către CNSC (Consiliul Național de Soluționare a Contestațiilor).
 
 Detalii faptice: {request.facts}
@@ -150,7 +178,7 @@ Argumente Autoritate Contractantă: {request.authority_args or 'Nu au fost furni
 
 Temei legal: {request.legal_grounds or 'Nu a fost specificat.'}
 {jurisprudence_section}
-
+{legislation_section}
 Structura obligatorie a contestației:
 1. **Părțile** - Identificarea contestatorului și a autorității contractante
 2. **Situația de fapt** - Descrierea cronologică a evenimentelor
