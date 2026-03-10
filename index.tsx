@@ -669,12 +669,14 @@ const App = () => {
     return () => clearTimeout(timer);
   }, [fileSearch, filterRuling, filterType, filterYears, filterCritici, filterCpv]);
 
-  // Debounced CPV search for dropdown filtering
+  // Debounced CPV search for dropdown filtering (refetch default when cleared)
   useEffect(() => {
-    if (!cpvSearchTerm.trim()) return;
     const timer = setTimeout(async () => {
       try {
-        const res = await fetch(`/api/v1/decisions/filters/cpv-codes?search=${encodeURIComponent(cpvSearchTerm)}`);
+        const url = cpvSearchTerm.trim()
+          ? `/api/v1/decisions/filters/cpv-codes?search=${encodeURIComponent(cpvSearchTerm)}`
+          : `/api/v1/decisions/filters/cpv-codes`;
+        const res = await fetch(url);
         if (res.ok) setCpvOptions(await res.json());
       } catch (e) { /* ignore */ }
     }, 300);
