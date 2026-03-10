@@ -58,7 +58,20 @@ def _apply_scope_filters(query, filters: dict):
     Shared between scope count computation and RAG pre-filtering.
     """
     if filters.get("ruling"):
-        query = query.where(DecizieCNSC.solutie_contestatie == filters["ruling"])
+        ruling_str = filters["ruling"]
+        ruling_values = [r.strip() for r in ruling_str.split(",") if r.strip()]
+        has_null = "__NULL__" in ruling_values
+        non_null_values = [r for r in ruling_values if r != "__NULL__"]
+        conditions = []
+        if non_null_values:
+            if len(non_null_values) == 1:
+                conditions.append(DecizieCNSC.solutie_contestatie == non_null_values[0])
+            else:
+                conditions.append(DecizieCNSC.solutie_contestatie.in_(non_null_values))
+        if has_null:
+            conditions.append(DecizieCNSC.solutie_contestatie.is_(None))
+        if conditions:
+            query = query.where(or_(*conditions))
 
     if filters.get("tip_contestatie"):
         query = query.where(DecizieCNSC.tip_contestatie == filters["tip_contestatie"])
