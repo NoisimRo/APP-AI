@@ -82,13 +82,16 @@ async def list_decisions(
     search: str | None = Query(None, description="Search by BO number, contestator, autoritate, CPV, or criticism codes"),
     coduri_critici: str | None = Query(None, description="Comma-separated critique codes to filter by (e.g. D1,R2,R4)"),
     cpv_codes: str | None = Query(None, description="Comma-separated CPV codes to filter by (e.g. 45000000-7,71000000-8)"),
+    categorie: str | None = Query(None, description="Filter by CPV category: Furnizare, Servicii, Lucrări"),
+    clasa: str | None = Query(None, description="Filter by CPV product class"),
     session: AsyncSession = Depends(get_session),
 ) -> DecisionListResponse:
     """
     List CNSC decisions with pagination, filters, and search.
     """
     logger.info("list_decisions", page=page, ruling=ruling, year=year, years=years,
-                search=search, coduri_critici=coduri_critici, cpv_codes=cpv_codes)
+                search=search, coduri_critici=coduri_critici, cpv_codes=cpv_codes,
+                categorie=categorie, clasa=clasa)
 
     # Check if database is available
     if not is_db_available():
@@ -138,12 +141,20 @@ async def list_decisions(
             # PostgreSQL array overlap operator: && checks if arrays share any element
             query = query.where(DecizieCNSC.coduri_critici.overlap(codes))
 
-    # Filter by CPV codes (exact prefix match)
+    # Filter by CPV codes (prefix match for hierarchy)
     if cpv_codes:
         cpv_list = [c.strip() for c in cpv_codes.split(",") if c.strip()]
         if cpv_list:
             cpv_conditions = [DecizieCNSC.cod_cpv.ilike(f"{cpv}%") for cpv in cpv_list]
             query = query.where(or_(*cpv_conditions))
+
+    # Filter by CPV category (Furnizare, Servicii, Lucrări)
+    if categorie:
+        query = query.where(DecizieCNSC.cpv_categorie == categorie)
+
+    # Filter by CPV product class
+    if clasa:
+        query = query.where(DecizieCNSC.cpv_clasa == clasa)
 
     if search:
         search_term = f"%{search.strip()}%"
@@ -333,6 +344,197 @@ async def get_cpv_filter_options(
     result = await session.execute(query)
     return [
         {"code": row.cod_cpv, "description": row.description, "count": row.count}
+        for row in result
+    ]
+
+
+@router.get("/filters/categorii")
+async def get_categorii_filter_options(
+    session: AsyncSession = Depends(get_session),
+):
+    """Get distinct CPV categories (Furnizare/Servicii/Lucrări) with counts."""
+    if not is_db_available():
+        return []
+
+    query = (
+        select(
+            DecizieCNSC.cpv_categorie,
+            func.count().label("count"),
+        )
+        .where(DecizieCNSC.cpv_categorie.isnot(None))
+        .group_by(DecizieCNSC.cpv_categorie)
+        .order_by(func.count().desc())
+    )
+    result = await session.execute(query)
+    return [
+        {"name": row.cpv_categorie, "count": row.count}
+        for row in result
+    ]
+
+
+@router.get("/filters/clase")
+async def get_clase_filter_options(
+    categorie: str | None = Query(None, description="Filter classes by category"),
+    session: AsyncSession = Depends(get_session),
+):
+    """Get distinct product classes with counts, optionally filtered by category."""
+    if not is_db_available():
+        return []
+
+    query = (
+        select(
+            DecizieCNSC.cpv_clasa,
+            func.count().label("count"),
+        )
+        .where(DecizieCNSC.cpv_clasa.isnot(None))
+    )
+    if categorie:
+        query = query.where(DecizieCNSC.cpv_categorie == categorie)
+
+    query = query.group_by(DecizieCNSC.cpv_clasa).order_by(func.count().desc()).limit(50)
+    result = await session.execute(query)
+    return [
+        {"name": row.cpv_clasa, "count": row.count}
+        for row in result
+    ]
+
+
+@router.get("/filters/cpv-tree")
+async def get_cpv_tree(
+    categorie: str | None = Query(None, description="Filter by category"),
+    session: AsyncSession = Depends(get_session),
+):
+    """Get CPV codes as a hierarchical tree with decision counts.
+
+    Returns divisions (level 1-2) with their children grouped,
+    showing how many decisions each node covers.
+    """
+    if not is_db_available():
+        return []
+
+    # Get all CPV codes used in decisions with their counts
+    query = (
+        select(
+            DecizieCNSC.cod_cpv,
+            func.coalesce(DecizieCNSC.cpv_descriere, NomenclatorCPV.descriere).label("descriere"),
+            DecizieCNSC.cpv_categorie,
+            func.count().label("count"),
+        )
+        .outerjoin(NomenclatorCPV, DecizieCNSC.cod_cpv == NomenclatorCPV.cod_cpv)
+        .where(DecizieCNSC.cod_cpv.isnot(None))
+    )
+    if categorie:
+        query = query.where(DecizieCNSC.cpv_categorie == categorie)
+
+    query = query.group_by(DecizieCNSC.cod_cpv, DecizieCNSC.cpv_descriere, DecizieCNSC.cpv_categorie, NomenclatorCPV.descriere)
+    result = await session.execute(query)
+    cpv_rows = result.all()
+
+    # Get division-level descriptions from nomenclator
+    div_codes = set()
+    for row in cpv_rows:
+        if row.cod_cpv and len(row.cod_cpv) >= 2:
+            div_codes.add(row.cod_cpv[:2] + "000000-" + row.cod_cpv[-1:] if len(row.cod_cpv) > 3 else row.cod_cpv)
+
+    # Build tree: group by first 2 digits (division)
+    divisions: dict = {}
+    for row in cpv_rows:
+        cod = row.cod_cpv
+        if not cod or len(cod) < 3:
+            continue
+        div_key = cod[:2]  # First 2 digits = division
+
+        if div_key not in divisions:
+            divisions[div_key] = {
+                "code": div_key,
+                "description": None,
+                "categorie": row.cpv_categorie,
+                "count": 0,
+                "children": [],
+            }
+        divisions[div_key]["count"] += row.count
+        divisions[div_key]["children"].append({
+            "code": cod,
+            "description": row.descriere,
+            "count": row.count,
+        })
+
+    # Fetch division-level descriptions from nomenclator
+    if divisions:
+        div_patterns = [f"{d}000000%" for d in divisions.keys()]
+        div_query = (
+            select(NomenclatorCPV.cod_cpv, NomenclatorCPV.descriere)
+            .where(or_(*[NomenclatorCPV.cod_cpv.ilike(p) for p in div_patterns]))
+            .where(NomenclatorCPV.nivel == 1)
+        )
+        div_result = await session.execute(div_query)
+        for drow in div_result:
+            dk = drow.cod_cpv[:2]
+            if dk in divisions:
+                divisions[dk]["description"] = drow.descriere
+
+    # Sort divisions by count desc, children by count desc
+    tree = sorted(divisions.values(), key=lambda x: x["count"], reverse=True)
+    for div in tree:
+        div["children"] = sorted(div["children"], key=lambda x: x["count"], reverse=True)
+
+    return tree
+
+
+@router.get("/stats/cpv-top")
+async def get_cpv_top_stats(
+    limit: int = Query(10, ge=1, le=50),
+    session: AsyncSession = Depends(get_session),
+):
+    """Get top CPV codes by number of decisions — for Dashboard chart."""
+    if not is_db_available():
+        return []
+
+    query = (
+        select(
+            DecizieCNSC.cod_cpv,
+            func.coalesce(DecizieCNSC.cpv_descriere, NomenclatorCPV.descriere).label("descriere"),
+            DecizieCNSC.cpv_categorie,
+            func.count().label("count"),
+        )
+        .outerjoin(NomenclatorCPV, DecizieCNSC.cod_cpv == NomenclatorCPV.cod_cpv)
+        .where(DecizieCNSC.cod_cpv.isnot(None))
+        .group_by(DecizieCNSC.cod_cpv, DecizieCNSC.cpv_descriere, DecizieCNSC.cpv_categorie, NomenclatorCPV.descriere)
+        .order_by(func.count().desc())
+        .limit(limit)
+    )
+    result = await session.execute(query)
+    return [
+        {
+            "code": row.cod_cpv,
+            "description": row.descriere,
+            "categorie": row.cpv_categorie,
+            "count": row.count,
+        }
+        for row in result
+    ]
+
+
+@router.get("/stats/categorii")
+async def get_categorii_stats(
+    session: AsyncSession = Depends(get_session),
+):
+    """Get decision counts by CPV category — for Dashboard pie chart."""
+    if not is_db_available():
+        return []
+
+    query = (
+        select(
+            DecizieCNSC.cpv_categorie,
+            func.count().label("count"),
+        )
+        .where(DecizieCNSC.cpv_categorie.isnot(None))
+        .group_by(DecizieCNSC.cpv_categorie)
+        .order_by(func.count().desc())
+    )
+    result = await session.execute(query)
+    return [
+        {"name": row.cpv_categorie, "count": row.count}
         for row in result
     ]
 

@@ -769,9 +769,9 @@ class RAGService:
     ) -> list[str]:
         """Find CPV codes matching domain keywords in the query.
 
-        Searches nomenclator_cpv.descriere for keywords from the query
-        to identify relevant CPV codes. This enables domain-based filtering
-        (e.g., "catering" → CPV 55520000, "lucrări de instalații" → CPV 45300000).
+        Searches nomenclator_cpv across descriere, categorie_achizitii,
+        and clasa_produse for keywords from the query. Returns higher-level
+        (shorter) CPV codes first so prefix matching catches more decisions.
 
         Args:
             query: User's search query.
@@ -784,20 +784,40 @@ class RAGService:
         if not keywords:
             return []
 
-        # Build search conditions for nomenclator
+        # Search across all text fields in nomenclator
         conditions = []
         for keyword in keywords:
-            conditions.append(NomenclatorCPV.descriere.ilike(f"%{keyword}%"))
+            conditions.append(or_(
+                NomenclatorCPV.descriere.ilike(f"%{keyword}%"),
+                NomenclatorCPV.categorie_achizitii.ilike(f"%{keyword}%"),
+                NomenclatorCPV.clasa_produse.ilike(f"%{keyword}%"),
+            ))
 
         if not conditions:
             return []
 
+        # Prefer higher-level codes (nivel 1-3) for broader matching
         stmt = (
-            select(NomenclatorCPV.cod_cpv)
+            select(NomenclatorCPV.cod_cpv, NomenclatorCPV.nivel)
             .where(or_(*conditions))
+            .order_by(NomenclatorCPV.nivel.asc().nulls_last())
+            .limit(50)
         )
         result = await session.execute(stmt)
-        cpv_codes = [row[0] for row in result.all()]
+        rows = result.all()
+
+        # Deduplicate: if we have a parent code, skip its children
+        cpv_codes = []
+        seen_prefixes: set[str] = set()
+        for row in rows:
+            cod = row[0]
+            # Extract numeric prefix (before the dash)
+            prefix = cod.split("-")[0] if cod else cod
+            # Check if any already-added code is a prefix of this one
+            is_child = any(prefix.startswith(sp) for sp in seen_prefixes)
+            if not is_child:
+                cpv_codes.append(cod)
+                seen_prefixes.add(prefix.rstrip("0") if prefix else "")
 
         if cpv_codes:
             logger.info(
@@ -828,10 +848,11 @@ class RAGService:
         if not cpv_codes:
             return [], []
 
-        # Find decisions with matching CPV codes
+        # Find decisions with matching CPV codes (prefix match for hierarchy)
+        cpv_conditions = [DecizieCNSC.cod_cpv.ilike(f"{cpv}%") for cpv in cpv_codes]
         stmt = (
             select(DecizieCNSC)
-            .where(DecizieCNSC.cod_cpv.in_(cpv_codes))
+            .where(or_(*cpv_conditions))
             .order_by(DecizieCNSC.data_decizie.desc().nulls_last())
             .limit(limit)
         )

@@ -36,6 +36,10 @@ import {
   Pencil,
   Save,
   Bookmark,
+  BarChart3,
+  ChevronRight,
+  Package,
+  Layers,
 } from "lucide-react";
 
 // --- Types ---
@@ -324,9 +328,19 @@ const App = () => {
   const [criticiOptions, setCriticiOptions] = useState<{code: string, count: number}[]>([]);
   const [cpvOptions, setCpvOptions] = useState<{code: string, description: string | null, count: number}[]>([]);
   const [cpvSearchTerm, setCpvSearchTerm] = useState("");
+  const [filterCategorie, setFilterCategorie] = useState("");
+  const [filterClasa, setFilterClasa] = useState("");
+  const [categoriiOptions, setCategoriiOptions] = useState<{name: string, count: number}[]>([]);
+  const [claseOptions, setClaseOptions] = useState<{name: string, count: number}[]>([]);
+  const [cpvTree, setCpvTree] = useState<any[]>([]);
+  const [cpvTreeExpanded, setCpvTreeExpanded] = useState<Set<string>>(new Set());
+  const [cpvTopStats, setCpvTopStats] = useState<{code: string, description: string | null, categorie: string | null, count: number}[]>([]);
+  const [categoriiStats, setCategoriiStats] = useState<{name: string, count: number}[]>([]);
   const [showRulingDropdown, setShowRulingDropdown] = useState(false);
   const [showCriticiDropdown, setShowCriticiDropdown] = useState(false);
   const [showCpvDropdown, setShowCpvDropdown] = useState(false);
+  const [showCategorieDropdown, setShowCategorieDropdown] = useState(false);
+  const [showClasaDropdown, setShowClasaDropdown] = useState(false);
   const [decisionViewTab, setDecisionViewTab] = useState<'raw' | 'analysis'>('raw');
   const [decisionAnalysis, setDecisionAnalysis] = useState<any>(null);
   const [isLoadingAnalysis, setIsLoadingAnalysis] = useState(false);
@@ -630,6 +644,8 @@ const App = () => {
       if (filterYears.length > 0) params.set('years', filterYears.join(','));
       if (filterCritici.length > 0) params.set('coduri_critici', filterCritici.join(','));
       if (filterCpv.length > 0) params.set('cpv_codes', filterCpv.join(','));
+      if (filterCategorie) params.set('categorie', filterCategorie);
+      if (filterClasa) params.set('clasa', filterClasa);
       const response = await fetch(`/api/v1/decisions/?${params}`);
       if (response.ok) {
         const data = await response.json();
@@ -644,15 +660,17 @@ const App = () => {
     }
   };
 
-  // Fetch filter options (critique codes + CPV codes)
+  // Fetch filter options (critique codes + CPV codes + categories)
   const fetchFilterOptions = async () => {
     try {
-      const [critRes, cpvRes] = await Promise.all([
+      const [critRes, cpvRes, catRes] = await Promise.all([
         fetch('/api/v1/decisions/filters/critici-codes'),
         fetch('/api/v1/decisions/filters/cpv-codes'),
+        fetch('/api/v1/decisions/filters/categorii'),
       ]);
       if (critRes.ok) setCriticiOptions(await critRes.json());
       if (cpvRes.ok) setCpvOptions(await cpvRes.json());
+      if (catRes.ok) setCategoriiOptions(await catRes.json());
     } catch (e) { console.error('Failed to fetch filter options:', e); }
   };
 
@@ -667,7 +685,50 @@ const App = () => {
       fetchDecisions(1, fileSearch);
     }, 300);
     return () => clearTimeout(timer);
-  }, [fileSearch, filterRuling, filterType, filterYears, filterCritici, filterCpv]);
+  }, [fileSearch, filterRuling, filterType, filterYears, filterCritici, filterCpv, filterCategorie, filterClasa]);
+
+  // Fetch product classes when category changes
+  useEffect(() => {
+    const fetchClase = async () => {
+      try {
+        const url = filterCategorie
+          ? `/api/v1/decisions/filters/clase?categorie=${encodeURIComponent(filterCategorie)}`
+          : '/api/v1/decisions/filters/clase';
+        const res = await fetch(url);
+        if (res.ok) setClaseOptions(await res.json());
+      } catch (e) { /* ignore */ }
+    };
+    fetchClase();
+  }, [filterCategorie]);
+
+  // Fetch CPV tree data
+  useEffect(() => {
+    const fetchTree = async () => {
+      try {
+        const url = filterCategorie
+          ? `/api/v1/decisions/filters/cpv-tree?categorie=${encodeURIComponent(filterCategorie)}`
+          : '/api/v1/decisions/filters/cpv-tree';
+        const res = await fetch(url);
+        if (res.ok) setCpvTree(await res.json());
+      } catch (e) { /* ignore */ }
+    };
+    fetchTree();
+  }, [filterCategorie]);
+
+  // Fetch dashboard CPV stats
+  useEffect(() => {
+    const fetchCpvStats = async () => {
+      try {
+        const [topRes, catRes] = await Promise.all([
+          fetch('/api/v1/decisions/stats/cpv-top?limit=10'),
+          fetch('/api/v1/decisions/stats/categorii'),
+        ]);
+        if (topRes.ok) setCpvTopStats(await topRes.json());
+        if (catRes.ok) setCategoriiStats(await catRes.json());
+      } catch (e) { /* ignore */ }
+    };
+    fetchCpvStats();
+  }, []);
 
   // Debounced CPV search for dropdown filtering (refetch default when cleared)
   useEffect(() => {
@@ -1347,6 +1408,78 @@ const App = () => {
            </div>
         </div>
       </div>
+
+      {/* CPV Statistics Section */}
+      {(cpvTopStats.length > 0 || categoriiStats.length > 0) && (
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mt-8">
+        {/* Category Distribution */}
+        {categoriiStats.length > 0 && (
+        <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
+          <h3 className="font-bold text-slate-800 mb-4 flex items-center gap-2">
+            <Package size={18} className="text-orange-500" />
+            Distribuție pe Categorii CPV
+          </h3>
+          <div className="space-y-3">
+            {categoriiStats.map((cat, idx) => {
+              const totalCat = categoriiStats.reduce((s, c) => s + c.count, 0);
+              const pct = totalCat > 0 ? Math.round((cat.count / totalCat) * 100) : 0;
+              const colors = ['bg-blue-500', 'bg-orange-500', 'bg-green-500', 'bg-purple-500'];
+              const textColors = ['text-blue-700', 'text-orange-700', 'text-green-700', 'text-purple-700'];
+              const bgColors = ['bg-blue-50', 'bg-orange-50', 'bg-green-50', 'bg-purple-50'];
+              return (
+                <div key={cat.name}>
+                  <div className="flex justify-between items-center mb-1">
+                    <button
+                      onClick={() => { setFilterCategorie(cat.name); setMode('datalake'); }}
+                      className={`text-sm font-semibold ${textColors[idx % 4]} hover:underline cursor-pointer`}
+                    >
+                      {cat.name}
+                    </button>
+                    <span className="text-xs text-slate-500">{cat.count} ({pct}%)</span>
+                  </div>
+                  <div className={`w-full ${bgColors[idx % 4]} rounded-full h-2.5`}>
+                    <div className={`${colors[idx % 4]} h-2.5 rounded-full transition-all duration-500`} style={{ width: `${pct}%` }}></div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+        )}
+
+        {/* Top CPV Codes */}
+        {cpvTopStats.length > 0 && (
+        <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
+          <h3 className="font-bold text-slate-800 mb-4 flex items-center gap-2">
+            <BarChart3 size={18} className="text-purple-500" />
+            Top 10 Coduri CPV
+          </h3>
+          <div className="space-y-2">
+            {cpvTopStats.map((cpv, idx) => {
+              const maxCount = cpvTopStats[0]?.count || 1;
+              const pct = Math.round((cpv.count / maxCount) * 100);
+              return (
+                <button
+                  key={cpv.code}
+                  onClick={() => { setFilterCpv([cpv.code]); setMode('datalake'); }}
+                  className="w-full text-left group hover:bg-slate-50 rounded-lg px-2 py-1.5 transition"
+                >
+                  <div className="flex items-center gap-2 mb-0.5">
+                    <span className="text-xs font-mono font-bold text-slate-600 w-24 shrink-0">{cpv.code}</span>
+                    <span className="text-xs text-slate-400 truncate flex-1">{cpv.description || ''}</span>
+                    <span className="text-xs font-semibold text-slate-600 tabular-nums shrink-0">{cpv.count}</span>
+                  </div>
+                  <div className="w-full bg-slate-100 rounded-full h-1.5">
+                    <div className="bg-purple-500 h-1.5 rounded-full transition-all duration-500" style={{ width: `${pct}%` }}></div>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+        )}
+      </div>
+      )}
     </div>
     );
   };
@@ -1437,7 +1570,7 @@ const App = () => {
               {/* Soluție Multi-select Dropdown */}
               <div className="relative">
                 <button
-                  onClick={(e) => { e.stopPropagation(); setShowRulingDropdown(!showRulingDropdown); setShowYearDropdown(false); setShowCriticiDropdown(false); setShowCpvDropdown(false); }}
+                  onClick={(e) => { e.stopPropagation(); setShowRulingDropdown(!showRulingDropdown); setShowYearDropdown(false); setShowCriticiDropdown(false); setShowCpvDropdown(false); setShowCategorieDropdown(false); setShowClasaDropdown(false); }}
                   className={`text-xs border rounded-lg px-3 py-2 bg-white text-slate-700 focus:ring-2 focus:ring-blue-500/40 outline-none transition min-w-[110px] cursor-pointer flex items-center gap-1.5 ${filterRuling.length > 0 ? 'border-green-400 bg-green-50 text-green-700' : 'border-slate-300'}`}
                 >
                   Soluție{filterRuling.length > 0 ? ` (${filterRuling.length})` : ': Toate'}
@@ -1484,10 +1617,76 @@ const App = () => {
                 </select>
                 <ChevronDown size={13} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
               </div>
+              {/* Categorie Dropdown (Furnizare/Servicii/Lucrări) */}
+              <div className="relative">
+                <button
+                  onClick={(e) => { e.stopPropagation(); setShowCategorieDropdown(!showCategorieDropdown); setShowRulingDropdown(false); setShowYearDropdown(false); setShowCriticiDropdown(false); setShowCpvDropdown(false); setShowClasaDropdown(false); }}
+                  className={`text-xs border rounded-lg px-3 py-2 bg-white text-slate-700 focus:ring-2 focus:ring-blue-500/40 outline-none transition min-w-[110px] cursor-pointer flex items-center gap-1.5 ${filterCategorie ? 'border-orange-400 bg-orange-50 text-orange-700' : 'border-slate-300'}`}
+                >
+                  <Package size={12} />
+                  {filterCategorie || 'Categorie'}
+                  <ChevronDown size={12} className="ml-auto" />
+                </button>
+                {showCategorieDropdown && (
+                  <div className="absolute top-full left-0 mt-1 bg-white border border-slate-200 rounded-lg shadow-lg z-50 w-56 py-1" onClick={(e) => e.stopPropagation()}>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); setFilterCategorie(""); setFilterClasa(""); setShowCategorieDropdown(false); }}
+                      className="w-full text-left px-3 py-1.5 text-xs hover:bg-slate-50 text-slate-500"
+                    >
+                      Toate categoriile
+                    </button>
+                    {categoriiOptions.map(opt => (
+                      <button
+                        key={opt.name}
+                        onClick={(e) => { e.stopPropagation(); setFilterCategorie(opt.name); setFilterClasa(""); setShowCategorieDropdown(false); }}
+                        className={`w-full text-left px-3 py-1.5 text-xs hover:bg-slate-50 flex items-center justify-between ${filterCategorie === opt.name ? 'bg-orange-50 text-orange-700 font-semibold' : ''}`}
+                      >
+                        <span>{opt.name}</span>
+                        <span className="text-slate-300 tabular-nums">{opt.count}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Clasă Produse Dropdown (depends on Categorie) */}
+              {(filterCategorie || claseOptions.length > 0) && (
+              <div className="relative">
+                <button
+                  onClick={(e) => { e.stopPropagation(); setShowClasaDropdown(!showClasaDropdown); setShowRulingDropdown(false); setShowYearDropdown(false); setShowCriticiDropdown(false); setShowCpvDropdown(false); setShowCategorieDropdown(false); }}
+                  className={`text-xs border rounded-lg px-3 py-2 bg-white text-slate-700 focus:ring-2 focus:ring-blue-500/40 outline-none transition min-w-[100px] max-w-[200px] cursor-pointer flex items-center gap-1.5 ${filterClasa ? 'border-teal-400 bg-teal-50 text-teal-700' : 'border-slate-300'}`}
+                >
+                  <Layers size={12} />
+                  <span className="truncate">{filterClasa || 'Clasă'}</span>
+                  <ChevronDown size={12} className="ml-auto shrink-0" />
+                </button>
+                {showClasaDropdown && (
+                  <div className="absolute top-full left-0 mt-1 bg-white border border-slate-200 rounded-lg shadow-lg z-50 w-72 max-h-72 overflow-y-auto py-1" onClick={(e) => e.stopPropagation()}>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); setFilterClasa(""); setShowClasaDropdown(false); }}
+                      className="w-full text-left px-3 py-1.5 text-xs hover:bg-slate-50 text-slate-500"
+                    >
+                      Toate clasele
+                    </button>
+                    {claseOptions.map(opt => (
+                      <button
+                        key={opt.name}
+                        onClick={(e) => { e.stopPropagation(); setFilterClasa(opt.name); setShowClasaDropdown(false); }}
+                        className={`w-full text-left px-3 py-1.5 text-xs hover:bg-slate-50 flex items-center justify-between gap-2 ${filterClasa === opt.name ? 'bg-teal-50 text-teal-700 font-semibold' : ''}`}
+                      >
+                        <span className="truncate">{opt.name}</span>
+                        <span className="text-slate-300 tabular-nums shrink-0">{opt.count}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+              )}
+
               {/* Year Multi-select Dropdown */}
               <div className="relative">
                 <button
-                  onClick={(e) => { e.stopPropagation(); setShowYearDropdown(!showYearDropdown); setShowRulingDropdown(false); setShowCriticiDropdown(false); setShowCpvDropdown(false); }}
+                  onClick={(e) => { e.stopPropagation(); setShowYearDropdown(!showYearDropdown); setShowRulingDropdown(false); setShowCriticiDropdown(false); setShowCpvDropdown(false); setShowCategorieDropdown(false); setShowClasaDropdown(false); }}
                   className={`text-xs border rounded-lg px-3 py-2 bg-white text-slate-700 focus:ring-2 focus:ring-blue-500/40 outline-none transition min-w-[100px] cursor-pointer flex items-center gap-1.5 ${filterYears.length > 0 ? 'border-blue-400 bg-blue-50 text-blue-700' : 'border-slate-300'}`}
                 >
                   An{filterYears.length > 0 ? `: ${filterYears.join(', ')}` : ': Toate'}
@@ -1525,7 +1724,7 @@ const App = () => {
               {/* Critici Multi-select Dropdown */}
               <div className="relative">
                 <button
-                  onClick={(e) => { e.stopPropagation(); setShowCriticiDropdown(!showCriticiDropdown); setShowRulingDropdown(false); setShowYearDropdown(false); setShowCpvDropdown(false); }}
+                  onClick={(e) => { e.stopPropagation(); setShowCriticiDropdown(!showCriticiDropdown); setShowRulingDropdown(false); setShowYearDropdown(false); setShowCpvDropdown(false); setShowCategorieDropdown(false); setShowClasaDropdown(false); }}
                   className={`text-xs border rounded-lg px-3 py-2 bg-white text-slate-700 focus:ring-2 focus:ring-blue-500/40 outline-none transition min-w-[110px] cursor-pointer flex items-center gap-1.5 ${filterCritici.length > 0 ? 'border-blue-400 bg-blue-50 text-blue-700' : 'border-slate-300'}`}
                 >
                   <Filter size={12} />
@@ -1567,7 +1766,7 @@ const App = () => {
               {/* CPV Multi-select Dropdown with Search */}
               <div className="relative">
                 <button
-                  onClick={(e) => { e.stopPropagation(); setShowCpvDropdown(!showCpvDropdown); setShowRulingDropdown(false); setShowYearDropdown(false); setShowCriticiDropdown(false); }}
+                  onClick={(e) => { e.stopPropagation(); setShowCpvDropdown(!showCpvDropdown); setShowRulingDropdown(false); setShowYearDropdown(false); setShowCriticiDropdown(false); setShowCategorieDropdown(false); setShowClasaDropdown(false); }}
                   className={`text-xs border rounded-lg px-3 py-2 bg-white text-slate-700 focus:ring-2 focus:ring-blue-500/40 outline-none transition min-w-[100px] cursor-pointer flex items-center gap-1.5 ${filterCpv.length > 0 ? 'border-blue-400 bg-blue-50 text-blue-700' : 'border-slate-300'}`}
                 >
                   <Filter size={12} />
@@ -1575,7 +1774,7 @@ const App = () => {
                   <ChevronDown size={12} className="ml-auto" />
                 </button>
                 {showCpvDropdown && (
-                  <div className="absolute top-full right-0 mt-1 bg-white border border-slate-200 rounded-lg shadow-lg z-50 w-80 max-h-80 flex flex-col" onClick={(e) => e.stopPropagation()}>
+                  <div className="absolute top-full right-0 mt-1 bg-white border border-slate-200 rounded-lg shadow-lg z-50 w-96 max-h-96 flex flex-col" onClick={(e) => e.stopPropagation()}>
                     <div className="p-2 border-b border-slate-100 shrink-0">
                       <div className="relative">
                         <input
@@ -1597,44 +1796,93 @@ const App = () => {
                       </div>
                     </div>
                     <div className="overflow-y-auto flex-1 py-1">
-                      {cpvOptions.map(opt => {
-                        const isSelected = filterCpv.includes(opt.code);
-                        return (
-                          <button
-                            key={opt.code}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setFilterCpv(prev => isSelected ? prev.filter(c => c !== opt.code) : [...prev, opt.code]);
-                            }}
-                            className="w-full text-left px-3 py-1.5 text-xs hover:bg-slate-50 flex items-center gap-2"
-                          >
-                            <span className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 ${isSelected ? 'bg-blue-600 border-blue-600 text-white' : 'border-slate-300'}`}>
-                              {isSelected && <CheckSquare size={11} />}
-                            </span>
-                            <span className="font-mono font-semibold text-slate-700 shrink-0">{opt.code}</span>
-                            <span className="text-slate-400 truncate flex-1">{opt.description || ''}</span>
-                            <span className="text-slate-300 tabular-nums shrink-0">{opt.count}</span>
-                          </button>
-                        );
-                      })}
+                      {/* Tree view when no search, flat list when searching */}
+                      {!cpvSearchTerm.trim() && cpvTree.length > 0 ? (
+                        cpvTree.map((div: any) => {
+                          const isExpanded = cpvTreeExpanded.has(div.code);
+                          const divSelected = div.children?.some((c: any) => filterCpv.includes(c.code));
+                          return (
+                            <div key={div.code}>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setCpvTreeExpanded(prev => {
+                                    const next = new Set(prev);
+                                    if (next.has(div.code)) next.delete(div.code);
+                                    else next.add(div.code);
+                                    return next;
+                                  });
+                                }}
+                                className={`w-full text-left px-3 py-2 text-xs hover:bg-slate-50 flex items-center gap-2 ${divSelected ? 'bg-purple-50' : ''}`}
+                              >
+                                {isExpanded ? <ChevronDown size={12} className="shrink-0 text-slate-400" /> : <ChevronRight size={12} className="shrink-0 text-slate-400" />}
+                                <span className="font-mono font-bold text-slate-600 shrink-0">{div.code}</span>
+                                <span className="text-slate-500 truncate flex-1">{div.description || div.categorie || ''}</span>
+                                <span className="text-slate-300 tabular-nums shrink-0 font-medium">{div.count}</span>
+                              </button>
+                              {isExpanded && div.children?.map((child: any) => {
+                                const isSelected = filterCpv.includes(child.code);
+                                return (
+                                  <button
+                                    key={child.code}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setFilterCpv(prev => isSelected ? prev.filter(c => c !== child.code) : [...prev, child.code]);
+                                    }}
+                                    className="w-full text-left pl-8 pr-3 py-1.5 text-xs hover:bg-slate-50 flex items-center gap-2"
+                                  >
+                                    <span className={`w-3.5 h-3.5 rounded border flex items-center justify-center shrink-0 ${isSelected ? 'bg-purple-600 border-purple-600 text-white' : 'border-slate-300'}`}>
+                                      {isSelected && <CheckSquare size={9} />}
+                                    </span>
+                                    <span className="font-mono text-slate-600 shrink-0">{child.code}</span>
+                                    <span className="text-slate-400 truncate flex-1">{child.description || ''}</span>
+                                    <span className="text-slate-300 tabular-nums shrink-0">{child.count}</span>
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          );
+                        })
+                      ) : (
+                        cpvOptions.map(opt => {
+                          const isSelected = filterCpv.includes(opt.code);
+                          return (
+                            <button
+                              key={opt.code}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setFilterCpv(prev => isSelected ? prev.filter(c => c !== opt.code) : [...prev, opt.code]);
+                              }}
+                              className="w-full text-left px-3 py-1.5 text-xs hover:bg-slate-50 flex items-center gap-2"
+                            >
+                              <span className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 ${isSelected ? 'bg-purple-600 border-purple-600 text-white' : 'border-slate-300'}`}>
+                                {isSelected && <CheckSquare size={11} />}
+                              </span>
+                              <span className="font-mono font-semibold text-slate-700 shrink-0">{opt.code}</span>
+                              <span className="text-slate-400 truncate flex-1">{opt.description || ''}</span>
+                              <span className="text-slate-300 tabular-nums shrink-0">{opt.count}</span>
+                            </button>
+                          );
+                        })
+                      )}
                     </div>
                     {filterCpv.length > 0 && (
                       <div className="border-t border-slate-100 px-3 py-1.5 shrink-0">
-                        <button onClick={() => setFilterCpv([])} className="text-xs text-blue-600 hover:text-blue-800">Șterge selecția</button>
+                        <button onClick={() => setFilterCpv([])} className="text-xs text-purple-600 hover:text-purple-800">Șterge selecția</button>
                       </div>
                     )}
                   </div>
                 )}
               </div>
             </div>
-            {(filterRuling.length > 0 || filterType || filterYears.length > 0 || fileSearch || filterCritici.length > 0 || filterCpv.length > 0) && (
-              <button onClick={() => { setFilterRuling([]); setFilterType(""); setFilterYears([]); setFileSearch(""); setFilterCritici([]); setFilterCpv([]); setEditingScopeFilters(null); }}
+            {(filterRuling.length > 0 || filterType || filterYears.length > 0 || fileSearch || filterCritici.length > 0 || filterCpv.length > 0 || filterCategorie || filterClasa) && (
+              <button onClick={() => { setFilterRuling([]); setFilterType(""); setFilterYears([]); setFileSearch(""); setFilterCritici([]); setFilterCpv([]); setFilterCategorie(""); setFilterClasa(""); setEditingScopeFilters(null); }}
                 className="text-xs text-blue-600 hover:text-blue-800 font-medium whitespace-nowrap flex items-center gap-1 transition">
                 <X size={13} /> Resetează
               </button>
             )}
             {/* Save scope button */}
-            {(filterRuling.length > 0 || filterType || filterYears.length > 0 || filterCritici.length > 0 || filterCpv.length > 0 || fileSearch) && (
+            {(filterRuling.length > 0 || filterType || filterYears.length > 0 || filterCritici.length > 0 || filterCpv.length > 0 || filterCategorie || filterClasa || fileSearch) && (
               <button
                 onClick={() => setShowScopeModal(true)}
                 className="text-xs bg-blue-600 text-white hover:bg-blue-700 font-medium whitespace-nowrap flex items-center gap-1.5 transition px-3 py-1.5 rounded-lg shadow-sm"
@@ -1653,8 +1901,20 @@ const App = () => {
             )}
           </div>
           {/* Active filter pills */}
-          {(filterCritici.length > 0 || filterCpv.length > 0 || filterYears.length > 0) && (
+          {(filterCritici.length > 0 || filterCpv.length > 0 || filterYears.length > 0 || filterCategorie || filterClasa) && (
             <div className="flex items-center gap-1.5 mt-2 flex-wrap">
+              {filterCategorie && (
+                <span className="text-[10px] bg-orange-50 text-orange-700 border border-orange-200 rounded-full px-2 py-0.5 flex items-center gap-1 font-semibold">
+                  {filterCategorie}
+                  <button onClick={() => { setFilterCategorie(""); setFilterClasa(""); }} className="hover:text-red-500"><X size={10} /></button>
+                </span>
+              )}
+              {filterClasa && (
+                <span className="text-[10px] bg-teal-50 text-teal-700 border border-teal-200 rounded-full px-2 py-0.5 flex items-center gap-1 truncate max-w-[200px]">
+                  {filterClasa}
+                  <button onClick={() => setFilterClasa("")} className="hover:text-red-500 shrink-0"><X size={10} /></button>
+                </span>
+              )}
               {filterYears.map(y => (
                 <span key={y} className="text-[10px] bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-full px-2 py-0.5 flex items-center gap-1 font-semibold">
                   {y}
@@ -1691,6 +1951,8 @@ const App = () => {
                   if (filterYears.length > 0) filters.years = filterYears.map(Number);
                   if (filterCritici.length > 0) filters.coduri_critici = filterCritici;
                   if (filterCpv.length > 0) filters.cpv_codes = filterCpv;
+                  if (filterCategorie) filters.categorie = filterCategorie;
+                  if (filterClasa) filters.clasa = filterClasa;
                   if (fileSearch.trim()) filters.search = fileSearch.trim();
                   const scope = scopes.find(s => s.id === editingScopeFilters);
                   if (scope) {
@@ -3318,6 +3580,8 @@ const App = () => {
                               setFilterYears(s.filters.years ? s.filters.years.map(String) : []);
                               setFilterCritici(s.filters.coduri_critici || []);
                               setFilterCpv(s.filters.cpv_codes || []);
+                              setFilterCategorie(s.filters.categorie || '');
+                              setFilterClasa(s.filters.clasa || '');
                               setFileSearch(s.filters.search || '');
                               setShowScopeManager(false);
                               setMode('datalake');
@@ -3343,6 +3607,8 @@ const App = () => {
                               setFilterYears(s.filters.years ? s.filters.years.map(String) : []);
                               setFilterCritici(s.filters.coduri_critici || []);
                               setFilterCpv(s.filters.cpv_codes || []);
+                              setFilterCategorie(s.filters.categorie || '');
+                              setFilterClasa(s.filters.clasa || '');
                               setFileSearch(s.filters.search || '');
                               setEditingScopeFilters(s.id);
                               setShowScopeManager(false);
@@ -3418,6 +3684,8 @@ const App = () => {
                   {filterYears.map(y => <span key={y} className="text-[10px] bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-full px-2 py-0.5">An: {y}</span>)}
                   {filterCritici.map(c => <span key={c} className="text-[10px] bg-blue-50 text-blue-700 border border-blue-200 rounded-full px-2 py-0.5 font-mono">{c}</span>)}
                   {filterCpv.map(c => <span key={c} className="text-[10px] bg-purple-50 text-purple-700 border border-purple-200 rounded-full px-2 py-0.5 font-mono">{c}</span>)}
+                  {filterCategorie && <span className="text-[10px] bg-orange-50 text-orange-700 border border-orange-200 rounded-full px-2 py-0.5">{filterCategorie}</span>}
+                  {filterClasa && <span className="text-[10px] bg-teal-50 text-teal-700 border border-teal-200 rounded-full px-2 py-0.5">{filterClasa}</span>}
                   {fileSearch && <span className="text-[10px] bg-slate-100 text-slate-600 border border-slate-200 rounded-full px-2 py-0.5">"{fileSearch}"</span>}
                 </div>
                 <div className="text-xs text-slate-500 mt-2">{apiDecisionsTotal} decizii corespund filtrelor</div>
@@ -3441,6 +3709,8 @@ const App = () => {
                     if (filterYears.length > 0) filters.years = filterYears.map(Number);
                     if (filterCritici.length > 0) filters.coduri_critici = filterCritici;
                     if (filterCpv.length > 0) filters.cpv_codes = filterCpv;
+                    if (filterCategorie) filters.categorie = filterCategorie;
+                    if (filterClasa) filters.clasa = filterClasa;
                     if (fileSearch.trim()) filters.search = fileSearch.trim();
 
                     const res = await fetch('/api/v1/scopes/', {
