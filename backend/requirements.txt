@@ -23,7 +23,6 @@ openai>=1.50.0
 cryptography>=43.0.0
 
 # Document Processing
-openpyxl>=3.1.0,<4.0.0
 python-docx>=1.1.0,<2.0.0
 pypdf2>=3.0.0,<4.0.0
 fpdf2>=2.8.0,<3.0.0
