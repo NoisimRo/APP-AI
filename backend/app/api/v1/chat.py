@@ -29,6 +29,7 @@ class ChatRequest(BaseModel):
     conversation_id: str | None = Field(None, description="Optional conversation ID")
     history: list[ChatMessage] = Field(default_factory=list)
     scope_id: str | None = Field(None, description="Optional scope ID for pre-filtering decisions")
+    rerank: bool = Field(False, description="Enable LLM reranking of retrieved chunks")
 
 
 class Citation(BaseModel):
@@ -93,6 +94,7 @@ async def chat(
             conversation_history=history,
             max_decisions=5,
             scope_decision_ids=scope_ids,
+            enable_rerank=request.rerank,
         )
 
         # Generate or reuse conversation ID
@@ -158,6 +160,7 @@ async def chat_stream(
         contexts, system_prompt, citations, confidence, suggested = await rag.prepare_context(
             query=query, session=session, conversation_history=history, max_decisions=5,
             scope_decision_ids=scope_ids,
+            enable_rerank=request.rerank,
         )
 
         if contexts is None:

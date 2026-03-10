@@ -102,6 +102,133 @@ class RAGService:
 
         return [(row.ArgumentareCritica, row.distance) for row in rows]
 
+    async def _trigram_search(
+        self,
+        query: str,
+        session: AsyncSession,
+        limit: int = 15,
+        scope_decision_ids: list[str] | None = None,
+    ) -> list[tuple[ArgumentareCritica, float]]:
+        """Search ArgumentareCritica via pg_trgm word similarity on parent decision text.
+
+        Complements vector search by catching exact term matches that
+        semantic search might miss (legal terminology, entity names, numbers).
+        Uses word_similarity() which handles short query vs long text well.
+
+        Args:
+            query: User's search query.
+            session: Database session.
+            limit: Maximum number of chunk results.
+            scope_decision_ids: If provided, restrict search to these decision IDs only.
+
+        Returns:
+            List of (ArgumentareCritica, distance) tuples.
+        """
+        try:
+            wsim = func.word_similarity(query, DecizieCNSC.text_integral)
+
+            stmt = (
+                select(DecizieCNSC.id, wsim.label("wsim"))
+                .where(wsim > 0.3)
+                .order_by(wsim.desc())
+                .limit(limit)
+            )
+
+            if scope_decision_ids is not None:
+                stmt = stmt.where(DecizieCNSC.id.in_(scope_decision_ids))
+
+            result = await session.execute(stmt)
+            dec_rows = result.all()
+
+            if not dec_rows:
+                logger.info("trigram_search_no_results", query=query[:80])
+                return []
+
+            # Load ArgumentareCritica for matched decisions
+            dec_ids = [row[0] for row in dec_rows]
+            dec_scores = {str(row[0]): float(row[1]) for row in dec_rows}
+
+            chunk_stmt = (
+                select(ArgumentareCritica)
+                .where(ArgumentareCritica.decizie_id.in_(dec_ids))
+                .order_by(ArgumentareCritica.ordine_in_decizie)
+            )
+            chunk_result = await session.execute(chunk_stmt)
+            chunks = list(chunk_result.scalars().all())
+
+            # Convert word_similarity (0-1, higher=better) to distance (0-1, lower=better)
+            results = [
+                (chunk, 1.0 - dec_scores.get(str(chunk.decizie_id), 0.0))
+                for chunk in chunks
+            ]
+
+            logger.info(
+                "trigram_search_completed",
+                query=query[:80],
+                decisions=len(dec_rows),
+                chunks=len(results),
+                top_wsim=float(dec_rows[0][1]) if dec_rows else None,
+            )
+
+            return results
+        except Exception as e:
+            logger.warning("trigram_search_failed", error=str(e))
+            return []
+
+    def _rrf_merge(
+        self,
+        vector_results: list[tuple[ArgumentareCritica, float]],
+        trigram_results: list[tuple[ArgumentareCritica, float]],
+        k_vector: int = 60,
+        k_trigram: int = 70,
+    ) -> list[tuple[ArgumentareCritica, float]]:
+        """Merge vector and trigram search results using Reciprocal Rank Fusion.
+
+        RRF normalizes scores from different search methods without
+        requiring calibration. k_vector < k_trigram gives slight preference
+        to vector (semantic) results.
+
+        Args:
+            vector_results: Results from vector cosine search.
+            trigram_results: Results from trigram word similarity search.
+            k_vector: RRF constant for vector results (lower = more weight).
+            k_trigram: RRF constant for trigram results.
+
+        Returns:
+            Merged list of (ArgumentareCritica, distance) tuples ordered by RRF score.
+        """
+        rrf_scores: dict[str, float] = {}
+        chunk_map: dict[str, ArgumentareCritica] = {}
+        best_dist: dict[str, float] = {}
+
+        for rank, (chunk, dist) in enumerate(vector_results):
+            cid = str(chunk.id)
+            rrf_scores[cid] = rrf_scores.get(cid, 0) + 1.0 / (k_vector + rank + 1)
+            chunk_map[cid] = chunk
+            best_dist[cid] = dist
+
+        for rank, (chunk, dist) in enumerate(trigram_results):
+            cid = str(chunk.id)
+            rrf_scores[cid] = rrf_scores.get(cid, 0) + 1.0 / (k_trigram + rank + 1)
+            if cid not in chunk_map:
+                chunk_map[cid] = chunk
+            best_dist[cid] = min(best_dist.get(cid, 1.0), dist)
+
+        sorted_ids = sorted(rrf_scores.keys(), key=lambda c: rrf_scores[c], reverse=True)
+
+        vector_ids = {str(c.id) for c, _ in vector_results}
+        trigram_ids = {str(c.id) for c, _ in trigram_results}
+
+        logger.info(
+            "rrf_merge",
+            vector_count=len(vector_results),
+            trigram_count=len(trigram_results),
+            merged_count=len(sorted_ids),
+            overlap=len(vector_ids & trigram_ids),
+        )
+
+        return [(chunk_map[cid], best_dist[cid]) for cid in sorted_ids]
+
     def _extract_bo_references(self, query: str) -> list[tuple[int, int]]:
         """Extract BO year/number references from query.
 
@@ -734,12 +861,131 @@ class RAGService:
 
         return decisions, matched_chunks
 
+    async def _rerank_chunks(
+        self,
+        query: str,
+        chunks: list[tuple[ArgumentareCritica, float]],
+        top_k: int = 10,
+    ) -> list[tuple[ArgumentareCritica, float]]:
+        """LLM-based reranking of retrieved chunks.
+
+        Asks the LLM to reorder chunks by relevance to the query.
+        Falls back to original order on any error.
+
+        Args:
+            query: Original user query.
+            chunks: Retrieved chunks with distances.
+            top_k: Number of top chunks to return.
+
+        Returns:
+            Reranked list of (ArgumentareCritica, distance) tuples.
+        """
+        if len(chunks) <= top_k:
+            return chunks
+
+        # Build compact prompt with top 15 chunks
+        candidates = chunks[:15]
+        numbered_parts = []
+        for i, (arg, dist) in enumerate(candidates):
+            text = (arg.argumentatie_cnsc or arg.argumente_contestator or "")[:200]
+            numbered_parts.append(f"[{i + 1}] {arg.cod_critica}: {text}")
+
+        rerank_prompt = (
+            "Ordonează următoarele fragmente juridice după relevanță pentru întrebarea:\n"
+            f'"{query}"\n\n'
+            + "\n".join(numbered_parts)
+            + "\n\nRăspunde DOAR cu numerele în ordinea relevanței, separate prin virgulă.\n"
+            "Exemplu: 3,1,5,2,4"
+        )
+
+        try:
+            response = await self.llm.complete(
+                prompt=rerank_prompt,
+                temperature=0.0,
+                max_tokens=50,
+            )
+            # Parse the comma-separated numbers
+            order = [
+                int(x.strip()) - 1
+                for x in response.strip().split(",")
+                if x.strip().isdigit()
+            ]
+            reranked = [candidates[i] for i in order if 0 <= i < len(candidates)]
+
+            # Append any chunks not mentioned in the LLM response
+            seen = {i for i in order if 0 <= i < len(candidates)}
+            for i, chunk in enumerate(candidates):
+                if i not in seen:
+                    reranked.append(chunk)
+
+            logger.info(
+                "rerank_completed",
+                query=query[:80],
+                candidates=len(candidates),
+                reranked=len(reranked),
+            )
+            return reranked[:top_k]
+        except Exception as e:
+            logger.warning("rerank_failed", error=str(e))
+            return chunks[:top_k]
+
+    async def _expand_query(self, query: str) -> list[str]:
+        """Generate query reformulations using LLM for better retrieval.
+
+        Produces 2-3 variants with equivalent legal terminology so that
+        vector search can match documents using different phrasing
+        (e.g., "99% materie primă" → "preț aparent neobișnuit de scăzut").
+
+        Skips expansion for simple queries or direct BO references.
+
+        Args:
+            query: Original user query.
+
+        Returns:
+            List of query strings: [original] + up to 3 expansions.
+        """
+        # Skip expansion for short queries or BO references
+        if len(query.split()) < 4 or self._extract_bo_references(query):
+            return [query]
+
+        expansion_prompt = (
+            "Reformulează următoarea întrebare în 3 variante scurte pentru căutare "
+            "în jurisprudența CNSC. Folosește termeni juridici din achizițiile publice "
+            "din România. Răspunde DOAR cu cele 3 variante, una per linie.\n\n"
+            f"Întrebare: {query}"
+        )
+
+        try:
+            response = await self.llm.complete(
+                prompt=expansion_prompt,
+                temperature=0.3,
+                max_tokens=200,
+            )
+            variants = [
+                line.strip().lstrip("0123456789.-) ")
+                for line in response.strip().split("\n")
+                if line.strip() and len(line.strip()) > 5
+            ]
+            result = [query] + variants[:3]
+            logger.info(
+                "query_expansion",
+                original=query[:80],
+                variants=len(result) - 1,
+                expanded=[v[:60] for v in result[1:]],
+            )
+            return result
+        except Exception as e:
+            logger.warning("query_expansion_failed", error=str(e))
+            return [query]
+
     async def search_decisions(
         self,
         query: str,
         session: AsyncSession,
         limit: int = 5,
         scope_decision_ids: list[str] | None = None,
+        enable_expansion: bool = True,
+        enable_rerank: bool = False,
     ) -> tuple[list[DecizieCNSC], list[tuple[ArgumentareCritica, float]]]:
         """Search for relevant decisions based on query.
 
@@ -747,7 +993,7 @@ class RAGService:
         1. Direct BO references (e.g. BO2025_1011)
         2. Legal article/reference search (e.g. art. 57 din Legea 98/2016)
         3. CPV domain search (e.g. "catering" → find CPV codes → filter decisions)
-        4. Vector search on ArgumentareCritica embeddings (boosted by CPV if available)
+        4. Hybrid search: vector + trigram with RRF merge, optionally with query expansion
         5. Keyword ILIKE fallback
 
         Args:
@@ -755,13 +1001,17 @@ class RAGService:
             session: Database session.
             limit: Maximum number of decisions to return.
             scope_decision_ids: If provided, restrict search to these decision IDs only.
+            enable_expansion: If True, use LLM to generate query reformulations
+                for better retrieval coverage.
+            enable_rerank: If True, use LLM to rerank retrieved chunks by relevance.
 
         Returns:
             Tuple of (decisions, matched_chunks). matched_chunks is a list of
             (ArgumentareCritica, distance) tuples; empty if using fallback.
         """
         logger.info("searching_decisions", query=query, limit=limit,
-                     scoped=scope_decision_ids is not None)
+                     scoped=scope_decision_ids is not None,
+                     expansion=enable_expansion, rerank=enable_rerank)
 
         # 1. Check for direct BO references first
         bo_refs = self._extract_bo_references(query)
@@ -807,11 +1057,34 @@ class RAGService:
         )
 
         if has_embeddings and has_embeddings > 0:
-            # Vector search path
-            matched_chunks = await self.search_by_vector(
-                query, session, limit=limit * 3,
-                scope_decision_ids=scope_decision_ids,
-            )
+            # Query expansion: generate reformulations for better coverage
+            queries = [query]
+            if enable_expansion:
+                queries = await self._expand_query(query)
+
+            # Hybrid search: vector + trigram for each query variant
+            all_vector: list[tuple[ArgumentareCritica, float]] = []
+            all_trigram: list[tuple[ArgumentareCritica, float]] = []
+
+            for q in queries:
+                v_results = await self.search_by_vector(
+                    q, session, limit=limit * 3,
+                    scope_decision_ids=scope_decision_ids,
+                )
+                t_results = await self._trigram_search(
+                    q, session, limit=limit * 3,
+                    scope_decision_ids=scope_decision_ids,
+                )
+                all_vector.extend(v_results)
+                all_trigram.extend(t_results)
+
+            # Merge with Reciprocal Rank Fusion
+            if all_vector and all_trigram:
+                matched_chunks = self._rrf_merge(all_vector, all_trigram)
+            elif all_vector:
+                matched_chunks = all_vector
+            else:
+                matched_chunks = all_trigram
 
             if matched_chunks:
                 # If we have CPV codes, boost chunks from decisions with matching CPV
@@ -835,6 +1108,12 @@ class RAGService:
                         else:
                             boosted_chunks.append((arg, dist))
                     matched_chunks = sorted(boosted_chunks, key=lambda x: x[1])
+
+                # Optional LLM reranking
+                if enable_rerank:
+                    matched_chunks = await self._rerank_chunks(
+                        query, matched_chunks, top_k=limit * 3
+                    )
 
                 # Get unique decision IDs from matched chunks
                 seen_ids = set()
@@ -1230,11 +1509,15 @@ class RAGService:
         conversation_history: list[dict] | None = None,
         max_decisions: int = 5,
         scope_decision_ids: list[str] | None = None,
+        enable_expansion: bool = True,
+        enable_rerank: bool = False,
     ) -> tuple[list[str], str, list[Citation], float, list[str]]:
         """Prepare RAG context without generating the LLM response.
 
         Args:
             scope_decision_ids: If provided, restrict search to these decision IDs only.
+            enable_expansion: If True, use LLM query expansion for better retrieval.
+            enable_rerank: If True, use LLM reranking of retrieved chunks.
 
         Returns:
             Tuple of (contexts, system_prompt, citations, confidence, suggested_questions).
@@ -1246,6 +1529,8 @@ class RAGService:
         decisions, matched_chunks = await self.search_decisions(
             query, session, limit=max_decisions,
             scope_decision_ids=scope_decision_ids,
+            enable_expansion=enable_expansion,
+            enable_rerank=enable_rerank,
         )
 
         # Legislation Linking: find legal provisions referenced by matched chunks
@@ -1349,6 +1634,7 @@ Răspunde în limba română, profesional și precis."""
         conversation_history: list[dict] | None = None,
         max_decisions: int = 5,
         scope_decision_ids: list[str] | None = None,
+        enable_rerank: bool = False,
     ) -> tuple[str, list[Citation], float, list[str]]:
         """Generate a response to user query using RAG.
 
@@ -1358,6 +1644,7 @@ Răspunde în limba română, profesional și precis."""
             conversation_history: Optional previous conversation messages.
             max_decisions: Maximum number of decisions to retrieve.
             scope_decision_ids: If provided, restrict search to these decision IDs only.
+            enable_rerank: If True, use LLM reranking of retrieved chunks.
 
         Returns:
             Tuple of (response_text, citations, confidence, suggested_questions).
@@ -1368,6 +1655,7 @@ Răspunde în limba română, profesional și precis."""
         contexts, system_prompt, citations, confidence, suggested_questions = await self.prepare_context(
             query, session, conversation_history, max_decisions,
             scope_decision_ids=scope_decision_ids,
+            enable_rerank=enable_rerank,
         )
 
         if contexts is None:
