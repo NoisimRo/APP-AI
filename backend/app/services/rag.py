@@ -545,7 +545,7 @@ class RAGService:
         for ref in unique_refs:
             cache_key = (ref["tip_act"].upper(), ref["numar_act"], ref.get("an_act"))
             if cache_key not in act_cache:
-                act_stmt = select(ActNormativ.id, ActNormativ.denumire).where(
+                act_stmt = select(ActNormativ).where(
                     and_(
                         func.upper(ActNormativ.tip_act) == cache_key[0],
                         ActNormativ.numar == cache_key[1],
@@ -554,7 +554,7 @@ class RAGService:
                 if cache_key[2]:
                     act_stmt = act_stmt.where(ActNormativ.an == cache_key[2])
                 result = await session.execute(act_stmt)
-                act_cache[cache_key] = {str(row[0]): row[1] for row in result.all()}
+                act_cache[cache_key] = {str(act.id): act.denumire for act in result.scalars().all()}
 
         # Look up fragments for each qualified reference
         for ref in unique_refs[:20]:
@@ -614,11 +614,11 @@ class RAGService:
                         act_name = "N/A"
                         if frag.act_id:
                             act_result = await session.execute(
-                                select(ActNormativ.denumire).where(ActNormativ.id == frag.act_id)
+                                select(ActNormativ).where(ActNormativ.id == frag.act_id)
                             )
-                            name = act_result.scalar_one_or_none()
-                            if name:
-                                act_name = name
+                            act = act_result.scalar_one_or_none()
+                            if act:
+                                act_name = act.denumire
                         fragments.append((frag, act_name))
                         if len(fragments) >= limit:
                             break

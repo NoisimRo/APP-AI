@@ -9,7 +9,8 @@
  public | legislatie_fragmente | table | expertap | permanent   | heap          | 8192 bytes |
  public | llm_settings         | table | expertap | permanent   | heap          | 8192 bytes |
  public | nomenclator_cpv      | table | expertap | permanent   | heap          | 8192 bytes |
-(6 rows)
+ public | search_scopes        | table | expertap | permanent   | heap          | 8192 bytes |
+(7 rows)
 
 
 # \d decizii_cnsc
@@ -148,7 +149,7 @@ Referenced by:
  created_at       | timestamp without time zone |           | not null | now()
 Indexes:
     "legislatie_fragmente_pkey" PRIMARY KEY, btree (id)
-    "ix_frag_unique" UNIQUE, btree (act_id, numar_articol, COALESCE(alineat, 0), COALESCE(litera::text, ''::text))
+    "ix_frag_unique" UNIQUE, btree (act_id, numar_articol, COALESCE(alineat, 0), COALESCE(litera, ''::character varying))
     "ix_frag_act" btree (act_id)
     "ix_frag_citare" btree (act_id, citare)
     "ix_frag_embedding_hnsw" hnsw (embedding vector_cosine_ops) WITH (m='16', ef_construction='64')
@@ -203,7 +204,7 @@ Indexes:
 
 ---
 
-# Ultima sincronizare cu producția: 2026-03-09
+# Ultima sincronizare cu producția: 2026-03-10
 
 # Changelog Schema Producție
 
