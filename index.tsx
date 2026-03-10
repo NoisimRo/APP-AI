@@ -316,7 +316,7 @@ const App = () => {
   const [apiDecisionsPage, setApiDecisionsPage] = useState(1);
   const [isLoadingDecisions, setIsLoadingDecisions] = useState(false);
   const [dbStats, setDbStats] = useState<any>(null);
-  const [filterRuling, setFilterRuling] = useState("");
+  const [filterRuling, setFilterRuling] = useState<string[]>([]);
   const [filterType, setFilterType] = useState("");
   const [filterYears, setFilterYears] = useState<string[]>([]);
   const [filterCritici, setFilterCritici] = useState<string[]>([]);
@@ -324,6 +324,7 @@ const App = () => {
   const [criticiOptions, setCriticiOptions] = useState<{code: string, count: number}[]>([]);
   const [cpvOptions, setCpvOptions] = useState<{code: string, description: string | null, count: number}[]>([]);
   const [cpvSearchTerm, setCpvSearchTerm] = useState("");
+  const [showRulingDropdown, setShowRulingDropdown] = useState(false);
   const [showCriticiDropdown, setShowCriticiDropdown] = useState(false);
   const [showCpvDropdown, setShowCpvDropdown] = useState(false);
   const [decisionViewTab, setDecisionViewTab] = useState<'raw' | 'analysis'>('raw');
@@ -399,6 +400,7 @@ const App = () => {
   const [showScopeModal, setShowScopeModal] = useState(false);
   const [showScopeManager, setShowScopeManager] = useState(false);
   const [editingScope, setEditingScope] = useState<{id: string, name: string, description: string | null} | null>(null);
+  const [editingScopeFilters, setEditingScopeFilters] = useState<string | null>(null);
   const [scopeName, setScopeName] = useState("");
   const [scopeDescription, setScopeDescription] = useState("");
   const [showYearDropdown, setShowYearDropdown] = useState(false);
@@ -409,6 +411,7 @@ const App = () => {
   // Global click handler to close all dropdowns
   useEffect(() => {
     const handleGlobalClick = () => {
+      setShowRulingDropdown(false);
       setShowYearDropdown(false);
       setShowCriticiDropdown(false);
       setShowCpvDropdown(false);
@@ -513,12 +516,14 @@ const App = () => {
     } catch (e) { console.error('Failed to delete scope:', e); }
   };
 
-  const updateScope = async (id: string, name: string, description: string | null) => {
+  const updateScope = async (id: string, name: string, description: string | null, filters?: any) => {
     try {
+      const body: any = { name, description };
+      if (filters) body.filters = filters;
       const res = await fetch(`/api/v1/scopes/${id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, description }),
+        body: JSON.stringify(body),
       });
       if (res.ok) {
         setEditingScope(null);
@@ -620,7 +625,7 @@ const App = () => {
       if (search && search.trim()) {
         params.set('search', search.trim());
       }
-      if (filterRuling) params.set('ruling', filterRuling);
+      if (filterRuling.length > 0) params.set('ruling', filterRuling.join(','));
       if (filterType) params.set('tip_contestatie', filterType);
       if (filterYears.length > 0) params.set('years', filterYears.join(','));
       if (filterCritici.length > 0) params.set('coduri_critici', filterCritici.join(','));
@@ -1427,14 +1432,47 @@ const App = () => {
             </div>
             {/* Basic Dropdowns */}
             <div className="flex items-center gap-2 flex-wrap">
+              {/* Soluție Multi-select Dropdown */}
               <div className="relative">
-                <select value={filterRuling} onChange={(e) => setFilterRuling(e.target.value)} className="appearance-none text-xs border border-slate-300 rounded-lg pl-3 pr-7 py-2 bg-white text-slate-700 focus:ring-2 focus:ring-blue-500/40 focus:border-blue-400 outline-none transition min-w-[110px] cursor-pointer">
-                  <option value="">Soluție: Toate</option>
-                  <option value="ADMIS">Admis</option>
-                  <option value="ADMIS_PARTIAL">Admis Parțial</option>
-                  <option value="RESPINS">Respins</option>
-                </select>
-                <ChevronDown size={13} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                <button
+                  onClick={(e) => { e.stopPropagation(); setShowRulingDropdown(!showRulingDropdown); setShowYearDropdown(false); setShowCriticiDropdown(false); setShowCpvDropdown(false); }}
+                  className={`text-xs border rounded-lg px-3 py-2 bg-white text-slate-700 focus:ring-2 focus:ring-blue-500/40 outline-none transition min-w-[110px] cursor-pointer flex items-center gap-1.5 ${filterRuling.length > 0 ? 'border-green-400 bg-green-50 text-green-700' : 'border-slate-300'}`}
+                >
+                  Soluție{filterRuling.length > 0 ? ` (${filterRuling.length})` : ': Toate'}
+                  <ChevronDown size={12} className="ml-auto" />
+                </button>
+                {showRulingDropdown && (
+                  <div className="absolute top-full left-0 mt-1 bg-white border border-slate-200 rounded-lg shadow-lg z-50 w-56 max-h-72 overflow-y-auto py-1" onClick={(e) => e.stopPropagation()}>
+                    {[
+                      { code: "ADMIS", label: "Admis" },
+                      { code: "ADMIS_PARTIAL", label: "Admis Parțial" },
+                      { code: "RESPINS", label: "Respins" },
+                      { code: "__NULL__", label: "Fără soluție" },
+                    ].map(opt => {
+                      const isSelected = filterRuling.includes(opt.code);
+                      return (
+                        <button
+                          key={opt.code}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setFilterRuling(prev => isSelected ? prev.filter(c => c !== opt.code) : [...prev, opt.code]);
+                          }}
+                          className="w-full text-left px-3 py-1.5 text-xs hover:bg-slate-50 flex items-center gap-2"
+                        >
+                          <span className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 ${isSelected ? 'bg-green-600 border-green-600 text-white' : 'border-slate-300'}`}>
+                            {isSelected && <CheckSquare size={11} />}
+                          </span>
+                          <span className="text-slate-700">{opt.label}</span>
+                        </button>
+                      );
+                    })}
+                    {filterRuling.length > 0 && (
+                      <div className="border-t border-slate-100 mt-1 pt-1 px-3 pb-1">
+                        <button onClick={() => setFilterRuling([])} className="text-xs text-green-600 hover:text-green-800">Șterge selecția</button>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
               <div className="relative">
                 <select value={filterType} onChange={(e) => setFilterType(e.target.value)} className="appearance-none text-xs border border-slate-300 rounded-lg pl-3 pr-7 py-2 bg-white text-slate-700 focus:ring-2 focus:ring-blue-500/40 focus:border-blue-400 outline-none transition min-w-[110px] cursor-pointer">
@@ -1447,7 +1485,7 @@ const App = () => {
               {/* Year Multi-select Dropdown */}
               <div className="relative">
                 <button
-                  onClick={(e) => { e.stopPropagation(); setShowYearDropdown(!showYearDropdown); setShowCriticiDropdown(false); setShowCpvDropdown(false); }}
+                  onClick={(e) => { e.stopPropagation(); setShowYearDropdown(!showYearDropdown); setShowRulingDropdown(false); setShowCriticiDropdown(false); setShowCpvDropdown(false); }}
                   className={`text-xs border rounded-lg px-3 py-2 bg-white text-slate-700 focus:ring-2 focus:ring-blue-500/40 outline-none transition min-w-[100px] cursor-pointer flex items-center gap-1.5 ${filterYears.length > 0 ? 'border-blue-400 bg-blue-50 text-blue-700' : 'border-slate-300'}`}
                 >
                   An{filterYears.length > 0 ? `: ${filterYears.join(', ')}` : ': Toate'}
@@ -1485,7 +1523,7 @@ const App = () => {
               {/* Critici Multi-select Dropdown */}
               <div className="relative">
                 <button
-                  onClick={(e) => { e.stopPropagation(); setShowCriticiDropdown(!showCriticiDropdown); setShowYearDropdown(false); setShowCpvDropdown(false); }}
+                  onClick={(e) => { e.stopPropagation(); setShowCriticiDropdown(!showCriticiDropdown); setShowRulingDropdown(false); setShowYearDropdown(false); setShowCpvDropdown(false); }}
                   className={`text-xs border rounded-lg px-3 py-2 bg-white text-slate-700 focus:ring-2 focus:ring-blue-500/40 outline-none transition min-w-[110px] cursor-pointer flex items-center gap-1.5 ${filterCritici.length > 0 ? 'border-blue-400 bg-blue-50 text-blue-700' : 'border-slate-300'}`}
                 >
                   <Filter size={12} />
@@ -1527,7 +1565,7 @@ const App = () => {
               {/* CPV Multi-select Dropdown with Search */}
               <div className="relative">
                 <button
-                  onClick={(e) => { e.stopPropagation(); setShowCpvDropdown(!showCpvDropdown); setShowYearDropdown(false); setShowCriticiDropdown(false); }}
+                  onClick={(e) => { e.stopPropagation(); setShowCpvDropdown(!showCpvDropdown); setShowRulingDropdown(false); setShowYearDropdown(false); setShowCriticiDropdown(false); }}
                   className={`text-xs border rounded-lg px-3 py-2 bg-white text-slate-700 focus:ring-2 focus:ring-blue-500/40 outline-none transition min-w-[100px] cursor-pointer flex items-center gap-1.5 ${filterCpv.length > 0 ? 'border-blue-400 bg-blue-50 text-blue-700' : 'border-slate-300'}`}
                 >
                   <Filter size={12} />
@@ -1537,14 +1575,24 @@ const App = () => {
                 {showCpvDropdown && (
                   <div className="absolute top-full right-0 mt-1 bg-white border border-slate-200 rounded-lg shadow-lg z-50 w-80 max-h-80 flex flex-col" onClick={(e) => e.stopPropagation()}>
                     <div className="p-2 border-b border-slate-100 shrink-0">
-                      <input
-                        type="text"
-                        placeholder="Caută cod CPV sau descriere..."
-                        value={cpvSearchTerm}
-                        onChange={(e) => setCpvSearchTerm(e.target.value)}
-                        onClick={(e) => e.stopPropagation()}
-                        className="w-full text-xs border border-slate-200 rounded px-2.5 py-1.5 focus:ring-2 focus:ring-blue-500/40 outline-none"
-                      />
+                      <div className="relative">
+                        <input
+                          type="text"
+                          placeholder="Caută cod CPV sau descriere..."
+                          value={cpvSearchTerm}
+                          onChange={(e) => setCpvSearchTerm(e.target.value)}
+                          onClick={(e) => e.stopPropagation()}
+                          className="w-full text-xs border border-slate-200 rounded px-2.5 py-1.5 pr-7 focus:ring-2 focus:ring-blue-500/40 outline-none"
+                        />
+                        {cpvSearchTerm && (
+                          <button
+                            onClick={(e) => { e.stopPropagation(); setCpvSearchTerm(""); }}
+                            className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                          >
+                            <X size={12} />
+                          </button>
+                        )}
+                      </div>
                     </div>
                     <div className="overflow-y-auto flex-1 py-1">
                       {cpvOptions.map(opt => {
@@ -1577,14 +1625,14 @@ const App = () => {
                 )}
               </div>
             </div>
-            {(filterRuling || filterType || filterYears.length > 0 || fileSearch || filterCritici.length > 0 || filterCpv.length > 0) && (
-              <button onClick={() => { setFilterRuling(""); setFilterType(""); setFilterYears([]); setFileSearch(""); setFilterCritici([]); setFilterCpv([]); }}
+            {(filterRuling.length > 0 || filterType || filterYears.length > 0 || fileSearch || filterCritici.length > 0 || filterCpv.length > 0) && (
+              <button onClick={() => { setFilterRuling([]); setFilterType(""); setFilterYears([]); setFileSearch(""); setFilterCritici([]); setFilterCpv([]); setEditingScopeFilters(null); }}
                 className="text-xs text-blue-600 hover:text-blue-800 font-medium whitespace-nowrap flex items-center gap-1 transition">
                 <X size={13} /> Resetează
               </button>
             )}
             {/* Save scope button */}
-            {(filterRuling || filterType || filterYears.length > 0 || filterCritici.length > 0 || filterCpv.length > 0 || fileSearch) && (
+            {(filterRuling.length > 0 || filterType || filterYears.length > 0 || filterCritici.length > 0 || filterCpv.length > 0 || fileSearch) && (
               <button
                 onClick={() => setShowScopeModal(true)}
                 className="text-xs bg-blue-600 text-white hover:bg-blue-700 font-medium whitespace-nowrap flex items-center gap-1.5 transition px-3 py-1.5 rounded-lg shadow-sm"
@@ -1626,6 +1674,41 @@ const App = () => {
             </div>
           )}
         </div>
+
+        {/* Scope filter editing banner */}
+        {editingScopeFilters && (
+          <div className="mx-4 md:mx-6 mt-3 flex items-center gap-2 bg-amber-50 border border-amber-200 rounded-lg px-4 py-2.5 text-xs text-amber-800">
+            <Pencil size={13} className="shrink-0" />
+            <span>Editezi filtrele scope-ului <strong>{scopes.find(s => s.id === editingScopeFilters)?.name}</strong>. Modifică filtrele de mai sus, apoi salvează.</span>
+            <div className="ml-auto flex items-center gap-2 shrink-0">
+              <button
+                onClick={async () => {
+                  const filters: any = {};
+                  if (filterRuling.length > 0) filters.ruling = filterRuling.join(',');
+                  if (filterType) filters.tip_contestatie = filterType;
+                  if (filterYears.length > 0) filters.years = filterYears.map(Number);
+                  if (filterCritici.length > 0) filters.coduri_critici = filterCritici;
+                  if (filterCpv.length > 0) filters.cpv_codes = filterCpv;
+                  if (fileSearch.trim()) filters.search = fileSearch.trim();
+                  const scope = scopes.find(s => s.id === editingScopeFilters);
+                  if (scope) {
+                    await updateScope(scope.id, scope.name, scope.description, filters);
+                  }
+                  setEditingScopeFilters(null);
+                }}
+                className="bg-amber-600 text-white px-3 py-1.5 rounded-lg hover:bg-amber-700 font-medium flex items-center gap-1"
+              >
+                <Save size={12} /> Salvează filtrele
+              </button>
+              <button
+                onClick={() => setEditingScopeFilters(null)}
+                className="text-amber-500 hover:text-amber-700"
+              >
+                <X size={14} />
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* Decision Cards */}
         <div className="flex-1 overflow-y-auto px-4 md:px-6 py-4">
@@ -3209,7 +3292,7 @@ const App = () => {
                         </div>
                         {/* Filter pills */}
                         <div className="flex flex-wrap gap-1 mt-2">
-                          {s.filters.ruling && <span className="text-[10px] bg-green-50 text-green-700 border border-green-200 rounded-full px-2 py-0.5">{s.filters.ruling}</span>}
+                          {s.filters.ruling && s.filters.ruling.split(',').map((r: string) => <span key={r} className="text-[10px] bg-green-50 text-green-700 border border-green-200 rounded-full px-2 py-0.5">{r === '__NULL__' ? 'Fără soluție' : r}</span>)}
                           {s.filters.tip_contestatie && <span className="text-[10px] bg-purple-50 text-purple-700 border border-purple-200 rounded-full px-2 py-0.5">{s.filters.tip_contestatie}</span>}
                           {s.filters.years?.map((y: number) => <span key={y} className="text-[10px] bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-full px-2 py-0.5">{y}</span>)}
                           {s.filters.coduri_critici?.map((c: string) => <span key={c} className="text-[10px] bg-blue-50 text-blue-700 border border-blue-200 rounded-full px-2 py-0.5 font-mono">{c}</span>)}
@@ -3228,7 +3311,7 @@ const App = () => {
                           <button
                             onClick={() => {
                               // Load scope filters into Data Lake
-                              setFilterRuling(s.filters.ruling || '');
+                              setFilterRuling(s.filters.ruling ? s.filters.ruling.split(',') : []);
                               setFilterType(s.filters.tip_contestatie || '');
                               setFilterYears(s.filters.years ? s.filters.years.map(String) : []);
                               setFilterCritici(s.filters.coduri_critici || []);
@@ -3245,8 +3328,28 @@ const App = () => {
                           <button
                             onClick={() => setEditingScope({ id: s.id, name: s.name, description: s.description })}
                             className="text-xs text-slate-500 hover:text-amber-600 transition flex items-center gap-1"
+                            title="Editează numele și descrierea"
                           >
                             <Pencil size={11} /> Editează
+                          </button>
+                          <span className="text-slate-200">|</span>
+                          <button
+                            onClick={() => {
+                              // Load scope filters into Data Lake + enable filter editing mode
+                              setFilterRuling(s.filters.ruling ? s.filters.ruling.split(',') : []);
+                              setFilterType(s.filters.tip_contestatie || '');
+                              setFilterYears(s.filters.years ? s.filters.years.map(String) : []);
+                              setFilterCritici(s.filters.coduri_critici || []);
+                              setFilterCpv(s.filters.cpv_codes || []);
+                              setFileSearch(s.filters.search || '');
+                              setEditingScopeFilters(s.id);
+                              setShowScopeManager(false);
+                              setMode('datalake');
+                            }}
+                            className="text-xs text-slate-500 hover:text-orange-600 transition flex items-center gap-1"
+                            title="Modifică filtrele și re-salvează"
+                          >
+                            <Filter size={11} /> Modifică filtre
                           </button>
                           <span className="text-slate-200">|</span>
                           <button
@@ -3308,7 +3411,7 @@ const App = () => {
               <div className="bg-slate-50 rounded-lg p-3 border border-slate-200">
                 <div className="text-xs font-bold text-slate-500 uppercase mb-2">Filtre active</div>
                 <div className="flex flex-wrap gap-1.5">
-                  {filterRuling && <span className="text-[10px] bg-green-50 text-green-700 border border-green-200 rounded-full px-2 py-0.5">Soluție: {filterRuling}</span>}
+                  {filterRuling.map(r => <span key={r} className="text-[10px] bg-green-50 text-green-700 border border-green-200 rounded-full px-2 py-0.5">Soluție: {r === '__NULL__' ? 'Fără soluție' : r}</span>)}
                   {filterType && <span className="text-[10px] bg-purple-50 text-purple-700 border border-purple-200 rounded-full px-2 py-0.5">Tip: {filterType}</span>}
                   {filterYears.map(y => <span key={y} className="text-[10px] bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-full px-2 py-0.5">An: {y}</span>)}
                   {filterCritici.map(c => <span key={c} className="text-[10px] bg-blue-50 text-blue-700 border border-blue-200 rounded-full px-2 py-0.5 font-mono">{c}</span>)}
@@ -3331,7 +3434,7 @@ const App = () => {
                   if (!scopeName.trim()) return;
                   try {
                     const filters: any = {};
-                    if (filterRuling) filters.ruling = filterRuling;
+                    if (filterRuling.length > 0) filters.ruling = filterRuling.join(',');
                     if (filterType) filters.tip_contestatie = filterType;
                     if (filterYears.length > 0) filters.years = filterYears.map(Number);
                     if (filterCritici.length > 0) filters.coduri_critici = filterCritici;

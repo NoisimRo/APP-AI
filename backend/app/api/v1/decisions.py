@@ -102,9 +102,21 @@ async def list_decisions(
     # Build query
     query = select(DecizieCNSC)
 
-    # Apply filters
+    # Apply filters (ruling supports comma-separated values and __NULL__)
     if ruling:
-        query = query.where(DecizieCNSC.solutie_contestatie == ruling)
+        ruling_values = [r.strip() for r in ruling.split(",") if r.strip()]
+        has_null = "__NULL__" in ruling_values
+        non_null_values = [r for r in ruling_values if r != "__NULL__"]
+        conditions = []
+        if non_null_values:
+            if len(non_null_values) == 1:
+                conditions.append(DecizieCNSC.solutie_contestatie == non_null_values[0])
+            else:
+                conditions.append(DecizieCNSC.solutie_contestatie.in_(non_null_values))
+        if has_null:
+            conditions.append(DecizieCNSC.solutie_contestatie.is_(None))
+        if conditions:
+            query = query.where(or_(*conditions))
 
     # Multi-year support: 'years' param takes precedence over 'year'
     if years:
@@ -284,23 +296,34 @@ async def get_cpv_filter_options(
     if not is_db_available():
         return []
 
+    # Use COALESCE to prefer decision's cpv_descriere, fall back to nomenclator
+    description_col = func.coalesce(
+        func.max(DecizieCNSC.cpv_descriere),
+        func.max(NomenclatorCPV.descriere),
+    ).label("description")
+
     query = (
         select(
             DecizieCNSC.cod_cpv,
-            DecizieCNSC.cpv_descriere,
+            description_col,
             func.count().label("count"),
         )
+        .outerjoin(
+            NomenclatorCPV,
+            DecizieCNSC.cod_cpv == NomenclatorCPV.cod_cpv,
+        )
         .where(DecizieCNSC.cod_cpv.isnot(None))
-        .group_by(DecizieCNSC.cod_cpv, DecizieCNSC.cpv_descriere)
+        .group_by(DecizieCNSC.cod_cpv)
         .order_by(func.count().desc())
     )
 
     if search and search.strip():
         term = f"%{search.strip()}%"
-        query = query.where(
+        query = query.having(
             or_(
                 DecizieCNSC.cod_cpv.ilike(term),
-                DecizieCNSC.cpv_descriere.ilike(term),
+                func.max(DecizieCNSC.cpv_descriere).ilike(term),
+                func.max(NomenclatorCPV.descriere).ilike(term),
             )
         )
         query = query.limit(50)
@@ -309,7 +332,7 @@ async def get_cpv_filter_options(
 
     result = await session.execute(query)
     return [
-        {"code": row.cod_cpv, "description": row.cpv_descriere, "count": row.count}
+        {"code": row.cod_cpv, "description": row.description, "count": row.count}
         for row in result
     ]
 
