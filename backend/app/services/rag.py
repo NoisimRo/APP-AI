@@ -463,6 +463,178 @@ class RAGService:
 
         return decisions, matched_chunks
 
+    async def _find_legislation_for_chunks(
+        self,
+        matched_chunks: list[tuple[ArgumentareCritica, float]],
+        session: AsyncSession,
+        already_found_ids: set[str] | None = None,
+        limit: int = 8,
+    ) -> list[tuple[LegislatieFragment, str]]:
+        """Find legislation fragments referenced by or semantically related to matched chunks.
+
+        Enriches RAG context by providing the actual legal text when a decision
+        references "art. 2 alin. (2) lit. e) din Legea 98" without explaining
+        what it says, or when it paraphrases a provision without citing
+        the specific article (e.g., anonymized references like "art. ... alin. (xx)").
+
+        Two strategies:
+        1. Explicit: Parse legal references from chunk text → exact DB lookup
+        2. Semantic: Vector search using CNSC argumentation text → find paraphrased provisions
+
+        Args:
+            matched_chunks: ArgumentareCritica chunks found by vector search.
+            session: Database session.
+            already_found_ids: Fragment IDs already in context (to avoid duplicates).
+            limit: Maximum fragments to return.
+
+        Returns:
+            List of (LegislatieFragment, act_name) tuples.
+        """
+        if not matched_chunks:
+            return []
+
+        already_found_ids = already_found_ids or set()
+        fragments: list[tuple[LegislatieFragment, str]] = []
+        found_ids: set[str] = set(already_found_ids)
+
+        # Collect text from chunks for reference extraction
+        all_chunk_texts: list[str] = []
+        semantic_parts: list[str] = []
+
+        for arg, dist in matched_chunks[:10]:
+            for text in [
+                arg.argumentatie_cnsc,
+                arg.argumente_contestator,
+                arg.argumente_ac,
+                arg.elemente_retinute_cnsc,
+            ]:
+                if text:
+                    all_chunk_texts.append(text)
+            # For semantic search, use CNSC argumentation from high-relevance chunks
+            if arg.argumentatie_cnsc and dist < 0.5:
+                semantic_parts.append(arg.argumentatie_cnsc[:500])
+
+        combined_text = "\n".join(all_chunk_texts)
+
+        # --- Strategy 1: Explicit references WITH act specification ---
+        # Only process refs that include the law name (e.g., "art. 57 din Legea 98/2016")
+        # Standalone "art. 57" is too ambiguous from chunk text
+        parsed_refs = self._parse_article_query(combined_text)
+        qualified_refs = [
+            r for r in parsed_refs
+            if r.get("tip_act") and r.get("numar_act")
+        ]
+
+        # Deduplicate parsed references
+        seen_refs: set[tuple] = set()
+        unique_refs: list[dict] = []
+        for ref in qualified_refs:
+            key = (
+                ref["numar_articol"],
+                ref.get("alineat"),
+                ref.get("litera"),
+                ref.get("numar_act"),
+                ref.get("an_act"),
+            )
+            if key not in seen_refs:
+                seen_refs.add(key)
+                unique_refs.append(ref)
+
+        # Pre-load act IDs in batch (avoid N+1)
+        act_cache: dict[tuple, dict[str, str]] = {}  # cache_key -> {act_id: act_name}
+        for ref in unique_refs:
+            cache_key = (ref["tip_act"].upper(), ref["numar_act"], ref.get("an_act"))
+            if cache_key not in act_cache:
+                act_stmt = select(ActNormativ.id, ActNormativ.denumire).where(
+                    and_(
+                        func.upper(ActNormativ.tip_act) == cache_key[0],
+                        ActNormativ.numar == cache_key[1],
+                    )
+                )
+                if cache_key[2]:
+                    act_stmt = act_stmt.where(ActNormativ.an == cache_key[2])
+                result = await session.execute(act_stmt)
+                act_cache[cache_key] = {str(row[0]): row[1] for row in result.all()}
+
+        # Look up fragments for each qualified reference
+        for ref in unique_refs[:20]:
+            if len(fragments) >= limit:
+                break
+
+            cache_key = (ref["tip_act"].upper(), ref["numar_act"], ref.get("an_act"))
+            act_map = act_cache.get(cache_key, {})
+            if not act_map:
+                continue
+
+            conditions = [
+                LegislatieFragment.numar_articol == ref["numar_articol"],
+                LegislatieFragment.act_id.in_(list(act_map.keys())),
+            ]
+            if ref.get("alineat") is not None:
+                conditions.append(LegislatieFragment.alineat == ref["alineat"])
+            if ref.get("litera") is not None:
+                conditions.append(LegislatieFragment.litera == ref["litera"])
+
+            stmt = select(LegislatieFragment).where(and_(*conditions)).limit(3)
+            result = await session.execute(stmt)
+            for frag in result.scalars().all():
+                if frag.id not in found_ids:
+                    found_ids.add(frag.id)
+                    act_name = act_map.get(str(frag.act_id), "N/A")
+                    fragments.append((frag, act_name))
+
+        explicit_count = len(fragments)
+
+        # --- Strategy 2: Semantic matching for paraphrased/anonymized provisions ---
+        # Uses CNSC argumentation text to find semantically related legal provisions
+        # (catches cases like "art. ... alin. (xx) lit. b din HG xxx" or
+        #  "comisia trebuie să respingă ofertele cu preț neobișnuit de scăzut" → art. 210)
+        if semantic_parts and len(fragments) < limit:
+            try:
+                semantic_query = "\n".join(semantic_parts)[:2000]
+                query_vector = await self.embedding_service.embed_query(semantic_query)
+
+                remaining = limit - len(fragments)
+                stmt = (
+                    select(
+                        LegislatieFragment,
+                        LegislatieFragment.embedding.cosine_distance(query_vector).label("distance"),
+                    )
+                    .where(LegislatieFragment.embedding.isnot(None))
+                    .order_by("distance")
+                    .limit(remaining + len(found_ids) + 5)
+                )
+                result = await session.execute(stmt)
+
+                for row in result.all():
+                    if row.distance < 0.45 and row[0].id not in found_ids:
+                        frag = row[0]
+                        found_ids.add(frag.id)
+                        # Load act name
+                        act_name = "N/A"
+                        if frag.act_id:
+                            act_result = await session.execute(
+                                select(ActNormativ.denumire).where(ActNormativ.id == frag.act_id)
+                            )
+                            name = act_result.scalar_one_or_none()
+                            if name:
+                                act_name = name
+                        fragments.append((frag, act_name))
+                        if len(fragments) >= limit:
+                            break
+            except Exception as e:
+                logger.warning("legislation_semantic_linking_failed", error=str(e))
+
+        if fragments:
+            logger.info(
+                "legislation_linking_complete",
+                explicit=explicit_count,
+                semantic=len(fragments) - explicit_count,
+                total=len(fragments),
+            )
+
+        return fragments
+
     async def _find_cpv_codes_for_query(
         self,
         query: str,
@@ -1075,6 +1247,24 @@ class RAGService:
             query, session, limit=max_decisions,
             scope_decision_ids=scope_decision_ids,
         )
+
+        # Legislation Linking: find legal provisions referenced by matched chunks
+        # (provides actual legal text when a decision cites "art. X din Legea Y"
+        # without explaining the article, or paraphrases a provision without citing it)
+        if matched_chunks:
+            already_found = {frag.id for frag, _ in legislation_fragments}
+            chunk_legislation = await self._find_legislation_for_chunks(
+                matched_chunks, session,
+                already_found_ids=already_found,
+                limit=8,
+            )
+            if chunk_legislation:
+                legislation_fragments.extend(chunk_legislation)
+                logger.info(
+                    "legislation_linking_enriched_context",
+                    from_query=len(legislation_fragments) - len(chunk_legislation),
+                    from_chunks=len(chunk_legislation),
+                )
 
         if not decisions and not legislation_fragments:
             return None, None, [], 0.0, ["Ce decizii CNSC sunt disponibile?", "Arată-mi toate deciziile"]

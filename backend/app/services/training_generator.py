@@ -17,6 +17,7 @@ from app.models.decision import (
 from app.services.embedding import EmbeddingService
 from app.services.llm.base import LLMProvider
 from app.services.llm.factory import get_llm_provider, get_embedding_provider
+from app.services.rag import RAGService
 
 logger = get_logger(__name__)
 
@@ -437,6 +438,9 @@ class TrainingGenerator:
                     jurisprudence_context = "\n---\n".join(parts)
 
                 # Search legislation
+                leg_parts: list[str] = []
+                leg_found_ids: set[str] = set()
+
                 has_leg_embeddings = await session.scalar(
                     select(func.count())
                     .select_from(LegislatieFragment)
@@ -457,7 +461,6 @@ class TrainingGenerator:
                     leg_result = await session.execute(leg_stmt)
                     leg_rows = leg_result.all()
 
-                    leg_parts = []
                     act_ids = list({row.LegislatieFragment.act_id for row in leg_rows if row.distance < 0.6})
 
                     acts = {}
@@ -471,6 +474,7 @@ class TrainingGenerator:
                         frag = row.LegislatieFragment
                         if row.distance >= 0.6:
                             continue
+                        leg_found_ids.add(frag.id)
                         act = acts.get(frag.act_id)
                         act_name = act.denumire if act else "Act necunoscut"
                         citation = f"{frag.citare} din {act_name}" if frag.citare else act_name
@@ -478,6 +482,32 @@ class TrainingGenerator:
                         leg_parts.append(f"{citation}:\n{frag.text_fragment}")
 
                     legislation_context = "\n---\n".join(leg_parts)
+
+                # Legislation Linking: find legal provisions referenced by jurisprudence chunks
+                # (provides actual article text when a decision cites "art. X din Legea Y"
+                # without explaining it, or paraphrases a provision without citing it)
+                # Runs regardless of whether legislation embeddings exist (explicit refs
+                # don't need embeddings, only the semantic fallback does)
+                if relevant:
+                    try:
+                        rag_service = RAGService()
+                        linked_frags = await rag_service._find_legislation_for_chunks(
+                            relevant, session,
+                            already_found_ids=leg_found_ids,
+                            limit=6,
+                        )
+                        if linked_frags:
+                            for frag, act_name in linked_frags:
+                                citation = f"{frag.citare} din {act_name}" if frag.citare else act_name
+                                legislation_refs.append(citation)
+                                leg_parts.append(f"{citation}:\n{frag.text_fragment}")
+                            legislation_context = "\n---\n".join(leg_parts)
+                            logger.info(
+                                "training_legislation_linked",
+                                linked_fragments=len(linked_frags),
+                            )
+                    except Exception as e:
+                        logger.warning("training_legislation_linking_failed", error=str(e))
 
             logger.info(
                 "training_context_search",
