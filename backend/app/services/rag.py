@@ -861,12 +861,62 @@ class RAGService:
 
         return decisions, matched_chunks
 
+    async def _expand_query(self, query: str) -> list[str]:
+        """Generate query reformulations using LLM for better retrieval.
+
+        Produces 2-3 variants with equivalent legal terminology so that
+        vector search can match documents using different phrasing
+        (e.g., "99% materie primă" → "preț aparent neobișnuit de scăzut").
+
+        Skips expansion for simple queries or direct BO references.
+
+        Args:
+            query: Original user query.
+
+        Returns:
+            List of query strings: [original] + up to 3 expansions.
+        """
+        # Skip expansion for short queries or BO references
+        if len(query.split()) < 4 or self._extract_bo_references(query):
+            return [query]
+
+        expansion_prompt = (
+            "Reformulează următoarea întrebare în 3 variante scurte pentru căutare "
+            "în jurisprudența CNSC. Folosește termeni juridici din achizițiile publice "
+            "din România. Răspunde DOAR cu cele 3 variante, una per linie.\n\n"
+            f"Întrebare: {query}"
+        )
+
+        try:
+            response = await self.llm.complete(
+                prompt=expansion_prompt,
+                temperature=0.3,
+                max_tokens=200,
+            )
+            variants = [
+                line.strip().lstrip("0123456789.-) ")
+                for line in response.strip().split("\n")
+                if line.strip() and len(line.strip()) > 5
+            ]
+            result = [query] + variants[:3]
+            logger.info(
+                "query_expansion",
+                original=query[:80],
+                variants=len(result) - 1,
+                expanded=[v[:60] for v in result[1:]],
+            )
+            return result
+        except Exception as e:
+            logger.warning("query_expansion_failed", error=str(e))
+            return [query]
+
     async def search_decisions(
         self,
         query: str,
         session: AsyncSession,
         limit: int = 5,
         scope_decision_ids: list[str] | None = None,
+        enable_expansion: bool = True,
     ) -> tuple[list[DecizieCNSC], list[tuple[ArgumentareCritica, float]]]:
         """Search for relevant decisions based on query.
 
@@ -874,7 +924,7 @@ class RAGService:
         1. Direct BO references (e.g. BO2025_1011)
         2. Legal article/reference search (e.g. art. 57 din Legea 98/2016)
         3. CPV domain search (e.g. "catering" → find CPV codes → filter decisions)
-        4. Vector search on ArgumentareCritica embeddings (boosted by CPV if available)
+        4. Hybrid search: vector + trigram with RRF merge, optionally with query expansion
         5. Keyword ILIKE fallback
 
         Args:
@@ -882,13 +932,16 @@ class RAGService:
             session: Database session.
             limit: Maximum number of decisions to return.
             scope_decision_ids: If provided, restrict search to these decision IDs only.
+            enable_expansion: If True, use LLM to generate query reformulations
+                for better retrieval coverage.
 
         Returns:
             Tuple of (decisions, matched_chunks). matched_chunks is a list of
             (ArgumentareCritica, distance) tuples; empty if using fallback.
         """
         logger.info("searching_decisions", query=query, limit=limit,
-                     scoped=scope_decision_ids is not None)
+                     scoped=scope_decision_ids is not None,
+                     expansion=enable_expansion)
 
         # 1. Check for direct BO references first
         bo_refs = self._extract_bo_references(query)
@@ -934,23 +987,34 @@ class RAGService:
         )
 
         if has_embeddings and has_embeddings > 0:
-            # Hybrid search: vector + trigram
-            vector_results = await self.search_by_vector(
-                query, session, limit=limit * 3,
-                scope_decision_ids=scope_decision_ids,
-            )
-            trigram_results = await self._trigram_search(
-                query, session, limit=limit * 3,
-                scope_decision_ids=scope_decision_ids,
-            )
+            # Query expansion: generate reformulations for better coverage
+            queries = [query]
+            if enable_expansion:
+                queries = await self._expand_query(query)
+
+            # Hybrid search: vector + trigram for each query variant
+            all_vector: list[tuple[ArgumentareCritica, float]] = []
+            all_trigram: list[tuple[ArgumentareCritica, float]] = []
+
+            for q in queries:
+                v_results = await self.search_by_vector(
+                    q, session, limit=limit * 3,
+                    scope_decision_ids=scope_decision_ids,
+                )
+                t_results = await self._trigram_search(
+                    q, session, limit=limit * 3,
+                    scope_decision_ids=scope_decision_ids,
+                )
+                all_vector.extend(v_results)
+                all_trigram.extend(t_results)
 
             # Merge with Reciprocal Rank Fusion
-            if vector_results and trigram_results:
-                matched_chunks = self._rrf_merge(vector_results, trigram_results)
-            elif vector_results:
-                matched_chunks = vector_results
+            if all_vector and all_trigram:
+                matched_chunks = self._rrf_merge(all_vector, all_trigram)
+            elif all_vector:
+                matched_chunks = all_vector
             else:
-                matched_chunks = trigram_results
+                matched_chunks = all_trigram
 
             if matched_chunks:
                 # If we have CPV codes, boost chunks from decisions with matching CPV
@@ -1369,11 +1433,13 @@ class RAGService:
         conversation_history: list[dict] | None = None,
         max_decisions: int = 5,
         scope_decision_ids: list[str] | None = None,
+        enable_expansion: bool = True,
     ) -> tuple[list[str], str, list[Citation], float, list[str]]:
         """Prepare RAG context without generating the LLM response.
 
         Args:
             scope_decision_ids: If provided, restrict search to these decision IDs only.
+            enable_expansion: If True, use LLM query expansion for better retrieval.
 
         Returns:
             Tuple of (contexts, system_prompt, citations, confidence, suggested_questions).
@@ -1385,6 +1451,7 @@ class RAGService:
         decisions, matched_chunks = await self.search_decisions(
             query, session, limit=max_decisions,
             scope_decision_ids=scope_decision_ids,
+            enable_expansion=enable_expansion,
         )
 
         # Legislation Linking: find legal provisions referenced by matched chunks
