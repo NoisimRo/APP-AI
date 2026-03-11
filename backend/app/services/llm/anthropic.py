@@ -5,7 +5,7 @@ from typing import AsyncIterator
 import anthropic
 
 from app.core.logging import get_logger
-from app.services.llm.base import LLMProvider
+from app.services.llm.base import LLMProvider, ResourceExhaustedError
 
 logger = get_logger(__name__)
 
@@ -80,6 +80,8 @@ class AnthropicProvider(LLMProvider):
 
             return response.content[0].text
 
+        except anthropic.RateLimitError as e:
+            raise ResourceExhaustedError("anthropic", str(e)) from e
         except Exception as e:
             logger.error("anthropic_completion_error", error=str(e))
             raise
@@ -109,6 +111,8 @@ class AnthropicProvider(LLMProvider):
                 async for text in stream.text_stream:
                     yield text
 
+        except anthropic.RateLimitError as e:
+            raise ResourceExhaustedError("anthropic", str(e)) from e
         except Exception as e:
             logger.error("anthropic_stream_error", error=str(e))
             raise

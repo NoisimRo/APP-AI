@@ -11,7 +11,7 @@ import openai
 
 from app.core.config import get_settings
 from app.core.logging import get_logger
-from app.services.llm.base import LLMProvider
+from app.services.llm.base import LLMProvider, ResourceExhaustedError
 
 logger = get_logger(__name__)
 
@@ -172,6 +172,8 @@ class OpenRouterProvider(LLMProvider):
                 )
             return content
 
+        except openai.RateLimitError as e:
+            raise ResourceExhaustedError("openrouter", str(e)) from e
         except Exception as e:
             logger.error("openrouter_completion_error", error=str(e))
             raise
@@ -203,6 +205,8 @@ class OpenRouterProvider(LLMProvider):
                 if delta.content:
                     yield delta.content
 
+        except openai.RateLimitError as e:
+            raise ResourceExhaustedError("openrouter", str(e)) from e
         except Exception as e:
             logger.error("openrouter_stream_error", error=str(e))
             raise

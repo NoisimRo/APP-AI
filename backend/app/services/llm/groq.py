@@ -11,7 +11,7 @@ import openai
 
 from app.core.config import get_settings
 from app.core.logging import get_logger
-from app.services.llm.base import LLMProvider
+from app.services.llm.base import LLMProvider, ResourceExhaustedError
 
 logger = get_logger(__name__)
 
@@ -197,6 +197,8 @@ class GroqProvider(LLMProvider):
                 )
             return content
 
+        except openai.RateLimitError as e:
+            raise ResourceExhaustedError("groq", str(e)) from e
         except Exception as e:
             logger.error("groq_completion_error", error=str(e))
             raise
@@ -229,6 +231,8 @@ class GroqProvider(LLMProvider):
                 if delta.content:
                     yield delta.content
 
+        except openai.RateLimitError as e:
+            raise ResourceExhaustedError("groq", str(e)) from e
         except Exception as e:
             logger.error("groq_stream_error", error=str(e))
             raise

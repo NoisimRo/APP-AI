@@ -40,8 +40,12 @@ from app.db.session import init_db
 from app.db import session as db_session
 from app.models.decision import DecizieCNSC, ArgumentareCritica
 from app.services.analysis import DecisionAnalysisService
+from app.services.llm.base import ResourceExhaustedError
 
 logger = get_logger(__name__)
+
+# Circuit breaker: stop after this many consecutive failures
+CIRCUIT_BREAKER_THRESHOLD = 3
 
 
 def parse_bo_reference(ref: str) -> tuple[int, int] | None:
@@ -85,6 +89,9 @@ async def analyze_with_retry(
             )
             await session.commit()
             return (count, None)
+        except ResourceExhaustedError:
+            await session.rollback()
+            raise  # Propagate immediately — no retry, let circuit breaker handle
         except Exception as e:
             error_msg = str(e)
             await session.rollback()
@@ -332,6 +339,8 @@ async def main():
 
     analysis_service = DecisionAnalysisService(llm_provider=llm_provider)
     start_time = time.time()
+    consecutive_failures = 0
+    resource_exhausted = False
     stats = {
         "analyzed": 0,
         "skipped": 0,
@@ -356,16 +365,32 @@ async def main():
             flush=True,
         )
 
-        async with db_session.async_session_factory() as session:
-            count, error = await analyze_with_retry(
-                analysis_service, session, decision_id=dec_id,
-                external_id=ext_id, overwrite=overwrite_mode
-            )
+        try:
+            async with db_session.async_session_factory() as session:
+                count, error = await analyze_with_retry(
+                    analysis_service, session, decision_id=dec_id,
+                    external_id=ext_id, overwrite=overwrite_mode
+                )
+        except ResourceExhaustedError as e:
+            print(f"\n  RESOURCE EXHAUSTED: {e}")
+            print("  API quota or rate limit exceeded. Stopping immediately.")
+            print(f"  Progress saved: {stats['analyzed']} decisions analyzed, "
+                  f"{stats['argumentari_created']} argumentari created.")
+            resource_exhausted = True
+            stats["failed"] += 1
+            stats["errors"].append(f"{ext_id}: {e}")
+            break
 
         if error:
             print(f"FAILED: {error}")
             stats["failed"] += 1
             stats["errors"].append(error)
+            consecutive_failures += 1
+            # Circuit breaker: stop after N consecutive failures
+            if consecutive_failures >= CIRCUIT_BREAKER_THRESHOLD:
+                print(f"\n  CIRCUIT BREAKER: {consecutive_failures} consecutive failures. Stopping.")
+                print(f"  Progress saved: {stats['analyzed']} decisions analyzed.")
+                break
         elif count == 0:
             print("SKIPPED (already analyzed)")
             stats["skipped"] += 1
@@ -373,6 +398,7 @@ async def main():
             print(f"OK ({count} critici, {rate:.1f}/min)")
             stats["analyzed"] += 1
             stats["argumentari_created"] += count
+            consecutive_failures = 0  # Reset on success
 
         # Rate limiting
         if i < len(decisions):
@@ -399,7 +425,11 @@ async def main():
 
     print("=" * 60)
 
-    if stats["failed"] > 0:
+    if resource_exhausted:
+        print("\nProcess stopped due to API quota/rate limit exhaustion.")
+        print("Wait for quota to reset and re-run to continue from where you left off.")
+        sys.exit(2)
+    elif stats["failed"] > 0:
         sys.exit(1)
 
 
