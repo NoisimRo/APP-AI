@@ -109,11 +109,17 @@ class RAGService:
         limit: int = 15,
         scope_decision_ids: list[str] | None = None,
     ) -> list[tuple[ArgumentareCritica, float]]:
-        """Search ArgumentareCritica via pg_trgm word similarity on parent decision text.
+        """Search ArgumentareCritica via pg_trgm word similarity on CPV description fields.
 
         Complements vector search by catching exact term matches that
-        semantic search might miss (legal terminology, entity names, numbers).
-        Uses word_similarity() which handles short query vs long text well.
+        semantic search might miss (legal terminology, entity names, CPV terms).
+
+        Uses cpv_descriere + cpv_clasa instead of text_integral for performance:
+        text_integral is 78MB+ across all decisions and word_similarity on it
+        causes 10-30s scans. CPV fields are small and relevant for domain matching.
+
+        Only called when scope_decision_ids is set (scoped search).
+        For global (unscoped) search, vector search alone is sufficient.
 
         Args:
             query: User's search query.
@@ -125,7 +131,10 @@ class RAGService:
             List of (ArgumentareCritica, distance) tuples.
         """
         try:
-            wsim = func.word_similarity(query, DecizieCNSC.text_integral)
+            # Use cpv_descriere for trigram matching (small field, CPV-relevant)
+            # Coalesce to handle NULLs, combine cpv_descriere + cpv_clasa
+            combined_cpv = func.coalesce(DecizieCNSC.cpv_descriere, "") + " " + func.coalesce(DecizieCNSC.cpv_clasa, "")
+            wsim = func.word_similarity(query, combined_cpv)
 
             stmt = (
                 select(DecizieCNSC.id, wsim.label("wsim"))
@@ -353,6 +362,28 @@ class RAGService:
         logger.debug("parsed_article_query", results=results)
         return results
 
+    async def _batch_load_act_names(
+        self,
+        act_ids: list,
+        session: AsyncSession,
+    ) -> dict[str, str]:
+        """Batch load ActNormativ names for a list of act IDs.
+
+        Avoids N+1 queries by loading all needed acts in a single query.
+
+        Returns:
+            Dict mapping str(act_id) → denumire.
+        """
+        if not act_ids:
+            return {}
+        unique_ids = list(set(str(aid) for aid in act_ids if aid))
+        if not unique_ids:
+            return {}
+        result = await session.execute(
+            select(ActNormativ).where(ActNormativ.id.in_(unique_ids))
+        )
+        return {str(act.id): act.denumire for act in result.scalars().all()}
+
     async def _search_legislation_fragments(
         self,
         query: str,
@@ -421,23 +452,22 @@ class RAGService:
             found = list(result.scalars().all())
 
             for frag in found:
-                # Eagerly load act name
-                if frag.act_id:
-                    act_stmt = select(ActNormativ).where(ActNormativ.id == frag.act_id)
-                    act_result = await session.execute(act_stmt)
-                    act = act_result.scalar_one_or_none()
-                    act_name = act.denumire if act else "N/A"
-                else:
-                    act_name = "N/A"
-                fragments.append((frag, act_name))
+                fragments.append(frag)
 
         if fragments:
+            # Batch load act names (avoid N+1 queries)
+            act_map = await self._batch_load_act_names(
+                [f.act_id for f in fragments if f.act_id], session
+            )
+            named_fragments = [
+                (f, act_map.get(str(f.act_id), "N/A")) for f in fragments
+            ]
             logger.info(
                 "legislation_exact_match",
-                count=len(fragments),
-                refs=[f.citare for f, _ in fragments],
+                count=len(named_fragments),
+                refs=[f.citare for f, _ in named_fragments],
             )
-            return fragments[:limit]
+            return named_fragments[:limit]
 
         # 2. Vector search fallback on legislatie_fragmente
         try:
@@ -456,14 +486,14 @@ class RAGService:
             result = await session.execute(stmt)
             rows = result.all()
 
-            # Only include fragments with reasonable similarity
-            for row in rows:
-                if row.distance < 0.6:
-                    frag = row[0]
-                    act_stmt = select(ActNormativ).where(ActNormativ.id == frag.act_id)
-                    act_result = await session.execute(act_stmt)
-                    act = act_result.scalar_one_or_none()
-                    act_name = act.denumire if act else "N/A"
+            # Collect fragments with reasonable similarity, then batch-load act names
+            vector_frags = [row[0] for row in rows if row.distance < 0.6]
+            if vector_frags:
+                act_map = await self._batch_load_act_names(
+                    [f.act_id for f in vector_frags if f.act_id], session
+                )
+                for frag in vector_frags:
+                    act_name = act_map.get(str(frag.act_id), "N/A")
                     fragments.append((frag, act_name))
 
             if fragments:
@@ -733,22 +763,22 @@ class RAGService:
                 )
                 result = await session.execute(stmt)
 
+                # Collect matching fragments first, then batch-load act names
+                semantic_frags = []
                 for row in result.all():
                     if row.distance < 0.45 and row[0].id not in found_ids:
-                        frag = row[0]
-                        found_ids.add(frag.id)
-                        # Load act name
-                        act_name = "N/A"
-                        if frag.act_id:
-                            act_result = await session.execute(
-                                select(ActNormativ).where(ActNormativ.id == frag.act_id)
-                            )
-                            act = act_result.scalar_one_or_none()
-                            if act:
-                                act_name = act.denumire
-                        fragments.append((frag, act_name))
-                        if len(fragments) >= limit:
+                        semantic_frags.append(row[0])
+                        found_ids.add(row[0].id)
+                        if len(fragments) + len(semantic_frags) >= limit:
                             break
+
+                if semantic_frags:
+                    act_map = await self._batch_load_act_names(
+                        [f.act_id for f in semantic_frags if f.act_id], session
+                    )
+                    for frag in semantic_frags:
+                        act_name = act_map.get(str(frag.act_id), "N/A")
+                        fragments.append((frag, act_name))
             except Exception as e:
                 logger.warning("legislation_semantic_linking_failed", error=str(e))
 
@@ -987,7 +1017,7 @@ class RAGService:
                 for line in response.strip().split("\n")
                 if line.strip() and len(line.strip()) > 5
             ]
-            result = [query] + variants[:3]
+            result = [query] + variants[:1]
             logger.info(
                 "query_expansion",
                 original=query[:80],
@@ -1005,7 +1035,7 @@ class RAGService:
         session: AsyncSession,
         limit: int = 5,
         scope_decision_ids: list[str] | None = None,
-        enable_expansion: bool = True,
+        enable_expansion: bool = False,
         enable_rerank: bool = False,
     ) -> tuple[list[DecizieCNSC], list[tuple[ArgumentareCritica, float]]]:
         """Search for relevant decisions based on query.
@@ -1015,6 +1045,8 @@ class RAGService:
         2. Legal article/reference search (e.g. art. 57 din Legea 98/2016)
         3. CPV domain search (e.g. "catering" → find CPV codes → filter decisions)
         4. Hybrid search: vector + trigram with RRF merge, optionally with query expansion
+           - Trigram search only runs when scope filter is active (scoped to fewer decisions)
+           - Without scope, only vector search runs (trigram on 78MB text_integral is too slow)
         5. Keyword ILIKE fallback
 
         Args:
@@ -1023,7 +1055,7 @@ class RAGService:
             limit: Maximum number of decisions to return.
             scope_decision_ids: If provided, restrict search to these decision IDs only.
             enable_expansion: If True, use LLM to generate query reformulations
-                for better retrieval coverage.
+                for better retrieval coverage. Default False for performance.
             enable_rerank: If True, use LLM to rerank retrieved chunks by relevance.
 
         Returns:
@@ -1070,42 +1102,42 @@ class RAGService:
         # 3. Find CPV codes matching domain keywords in the query
         cpv_codes = await self._find_cpv_codes_for_query(query, session)
 
-        # 4. Check if embeddings exist for vector search
-        has_embeddings = await session.scalar(
-            select(func.count())
-            .select_from(ArgumentareCritica)
-            .where(ArgumentareCritica.embedding.isnot(None))
-        )
+        # 4. Vector search (+ optional trigram for scoped queries)
+        # No has_embeddings check needed — vector search returns [] if no embeddings exist
 
-        if has_embeddings and has_embeddings > 0:
-            # Query expansion: generate reformulations for better coverage
-            queries = [query]
-            if enable_expansion:
-                queries = await self._expand_query(query)
+        # Query expansion: generate reformulations for better coverage
+        # Default OFF for performance; user can enable via UI toggle
+        queries = [query]
+        if enable_expansion:
+            queries = await self._expand_query(query)
 
-            # Hybrid search: vector + trigram for each query variant
-            all_vector: list[tuple[ArgumentareCritica, float]] = []
-            all_trigram: list[tuple[ArgumentareCritica, float]] = []
+        # Vector search for each query variant
+        all_vector: list[tuple[ArgumentareCritica, float]] = []
+        for q in queries:
+            v_results = await self.search_by_vector(
+                q, session, limit=limit * 3,
+                scope_decision_ids=scope_decision_ids,
+            )
+            all_vector.extend(v_results)
 
+        # Trigram search only for scoped queries (small decision set)
+        # For global search, trigram on text_integral is too slow (78MB+)
+        all_trigram: list[tuple[ArgumentareCritica, float]] = []
+        if scope_decision_ids is not None:
             for q in queries:
-                v_results = await self.search_by_vector(
-                    q, session, limit=limit * 3,
-                    scope_decision_ids=scope_decision_ids,
-                )
                 t_results = await self._trigram_search(
                     q, session, limit=limit * 3,
                     scope_decision_ids=scope_decision_ids,
                 )
-                all_vector.extend(v_results)
                 all_trigram.extend(t_results)
 
-            # Merge with Reciprocal Rank Fusion
-            if all_vector and all_trigram:
-                matched_chunks = self._rrf_merge(all_vector, all_trigram)
-            elif all_vector:
-                matched_chunks = all_vector
-            else:
-                matched_chunks = all_trigram
+        # Merge with Reciprocal Rank Fusion
+        if all_vector and all_trigram:
+            matched_chunks = self._rrf_merge(all_vector, all_trigram)
+        elif all_vector:
+            matched_chunks = all_vector
+        else:
+            matched_chunks = all_trigram
 
             if matched_chunks:
                 # If we have CPV codes, boost chunks from decisions with matching CPV
@@ -1530,7 +1562,7 @@ class RAGService:
         conversation_history: list[dict] | None = None,
         max_decisions: int = 5,
         scope_decision_ids: list[str] | None = None,
-        enable_expansion: bool = True,
+        enable_expansion: bool = False,
         enable_rerank: bool = False,
     ) -> tuple[list[str], str, list[Citation], float, list[str]]:
         """Prepare RAG context without generating the LLM response.
@@ -1538,6 +1570,7 @@ class RAGService:
         Args:
             scope_decision_ids: If provided, restrict search to these decision IDs only.
             enable_expansion: If True, use LLM query expansion for better retrieval.
+                Default False for performance.
             enable_rerank: If True, use LLM reranking of retrieved chunks.
 
         Returns:
@@ -1656,6 +1689,7 @@ Răspunde în limba română, profesional și precis."""
         max_decisions: int = 5,
         scope_decision_ids: list[str] | None = None,
         enable_rerank: bool = False,
+        enable_expansion: bool = False,
     ) -> tuple[str, list[Citation], float, list[str]]:
         """Generate a response to user query using RAG.
 
@@ -1666,6 +1700,7 @@ Răspunde în limba română, profesional și precis."""
             max_decisions: Maximum number of decisions to retrieve.
             scope_decision_ids: If provided, restrict search to these decision IDs only.
             enable_rerank: If True, use LLM reranking of retrieved chunks.
+            enable_expansion: If True, use LLM query expansion for better retrieval.
 
         Returns:
             Tuple of (response_text, citations, confidence, suggested_questions).
@@ -1677,6 +1712,7 @@ Răspunde în limba română, profesional și precis."""
             query, session, conversation_history, max_decisions,
             scope_decision_ids=scope_decision_ids,
             enable_rerank=enable_rerank,
+            enable_expansion=enable_expansion,
         )
 
         if contexts is None:
