@@ -40,6 +40,11 @@ import {
   ChevronRight,
   Package,
   Layers,
+  TrendingUp,
+  Smartphone,
+  Share2,
+  Plus,
+  Shield,
 } from "lucide-react";
 
 // --- Types ---
@@ -311,7 +316,7 @@ const StatCard = ({ label, value, icon: Icon, color }: { label: string, value: s
 // --- Main Application ---
 
 const App = () => {
-  const [mode, setMode] = useState<AppMode>('dashboard');
+  const [mode, setMode] = useState<AppMode>('chat');
   const [apiKey] = useState(process.env.API_KEY || "");
   const [files, setFiles] = useState<UploadedFile[]>([]);
   const [fileSearch, setFileSearch] = useState("");
@@ -338,6 +343,10 @@ const App = () => {
   const [cpvTreeExpanded, setCpvTreeExpanded] = useState<Set<string>>(new Set());
   const [cpvTopStats, setCpvTopStats] = useState<{code: string, description: string | null, categorie: string | null, count: number}[]>([]);
   const [categoriiStats, setCategoriiStats] = useState<{name: string, count: number}[]>([]);
+  const [winRateByCategory, setWinRateByCategory] = useState<any[]>([]);
+  const [winRateByCritici, setWinRateByCritici] = useState<any[]>([]);
+  const [cpvTopGrouped, setCpvTopGrouped] = useState<any[]>([]);
+  const [showInstallBanner, setShowInstallBanner] = useState(true);
   const [showRulingDropdown, setShowRulingDropdown] = useState(false);
   const [showCriticiDropdown, setShowCriticiDropdown] = useState(false);
   const [showCpvDropdown, setShowCpvDropdown] = useState(false);
@@ -719,16 +728,22 @@ const App = () => {
     fetchTree();
   }, [filterCategorie]);
 
-  // Fetch dashboard CPV stats
+  // Fetch dashboard CPV stats + enriched win-rate data
   useEffect(() => {
     const fetchCpvStats = async () => {
       try {
-        const [topRes, catRes] = await Promise.all([
+        const [topRes, catRes, wrCatRes, wrCritRes, cpvGroupRes] = await Promise.all([
           fetch('/api/v1/decisions/stats/cpv-top?limit=10'),
           fetch('/api/v1/decisions/stats/categorii'),
+          fetch('/api/v1/decisions/stats/win-rate-by-category'),
+          fetch('/api/v1/decisions/stats/win-rate-by-critici'),
+          fetch('/api/v1/decisions/stats/cpv-top-grouped?limit=15'),
         ]);
         if (topRes.ok) setCpvTopStats(await topRes.json());
         if (catRes.ok) setCategoriiStats(await catRes.json());
+        if (wrCatRes.ok) setWinRateByCategory(await wrCatRes.json());
+        if (wrCritRes.ok) setWinRateByCritici(await wrCritRes.json());
+        if (cpvGroupRes.ok) setCpvTopGrouped(await cpvGroupRes.json());
       } catch (e) { /* ignore */ }
     };
     fetchCpvStats();
@@ -1184,8 +1199,8 @@ const App = () => {
 
   const MODE_LABELS: Record<AppMode, string> = {
     dashboard: 'Dashboard',
-    datalake: 'Data Lake',
-    chat: 'Asistent AI',
+    datalake: 'Filtrare date',
+    chat: 'Asistent AP',
     drafter: 'Drafter Contestații',
     redflags: 'Red Flags Detector',
     clarification: 'Clarificări',
@@ -1202,12 +1217,13 @@ const App = () => {
           <Menu size={22} />
         </button>
         <div className="flex items-center gap-2">
-          <div className="bg-blue-600 p-1 rounded-md">
-            <Database size={14} className="text-white" />
-          </div>
+          <img src="/public/favicon.svg" alt="ExpertAP" className="w-6 h-6 rounded" />
           <span className="text-white font-bold text-sm">ExpertAP</span>
         </div>
-        <span className="text-slate-400 text-xs ml-auto">{MODE_LABELS[mode]}</span>
+        <div className="flex items-center gap-1.5 ml-auto">
+          <div className={`w-2 h-2 rounded-full ${dbStats !== null && (dbStats?.total_decisions || 0) > 0 ? 'bg-green-400' : 'bg-slate-500'}`}></div>
+          <span className="text-slate-400 text-xs">{MODE_LABELS[mode]}</span>
+        </div>
       </div>
 
       {/* Backdrop for mobile */}
@@ -1225,24 +1241,25 @@ const App = () => {
         ${sidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}
       `}>
       <div className="p-6 border-b border-slate-800 flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-white flex items-center gap-2 tracking-tight">
-          <div className="bg-blue-600 p-1.5 rounded-lg">
-             <Database size={20} className="text-white" />
-          </div>
+        <h1 className="text-2xl font-bold text-white flex items-center gap-2.5 tracking-tight">
+          <img src="/public/logo.svg" alt="ExpertAP" className="w-9 h-9 rounded-lg" />
           ExpertAP
         </h1>
-        <button onClick={() => setSidebarOpen(false)} className="md:hidden text-slate-400 hover:text-white p-1">
-          <X size={20} />
-        </button>
+        <div className="flex items-center gap-2">
+          <div className={`w-2 h-2 rounded-full ${dbStats !== null && (dbStats?.total_decisions || 0) > 0 ? 'bg-green-400 animate-pulse' : dbStats === null ? 'bg-yellow-400 animate-pulse' : 'bg-slate-500'}`} title={dbStats !== null && (dbStats?.total_decisions || 0) > 0 ? 'Conectat' : 'Deconectat'}></div>
+          <button onClick={() => setSidebarOpen(false)} className="md:hidden text-slate-400 hover:text-white p-1">
+            <X size={20} />
+          </button>
+        </div>
       </div>
       <p className="text-xs text-slate-500 px-6 pt-2 font-medium">Platformă de Business Intelligence <br/>pentru Achiziții Publice</p>
 
       <nav className="flex-1 overflow-y-auto px-4 py-6 space-y-8">
         <div>
            <div className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3 px-2">Workspace</div>
+           <SidebarItem icon={MessageSquare} label="Asistent AP" active={mode === 'chat'} onClick={() => { setMode('chat'); setSidebarOpen(false); }} />
+           <SidebarItem icon={Filter} label="Filtrare date" active={mode === 'datalake'} onClick={() => { setMode('datalake'); setSidebarOpen(false); }} badge={files.length} />
            <SidebarItem icon={LayoutDashboard} label="Dashboard" active={mode === 'dashboard'} onClick={() => { setMode('dashboard'); setSidebarOpen(false); }} />
-           <SidebarItem icon={Database} label="Data Lake" active={mode === 'datalake'} onClick={() => { setMode('datalake'); setSidebarOpen(false); }} badge={files.length} />
-           <SidebarItem icon={MessageSquare} label="Asistent AI" active={mode === 'chat'} onClick={() => { setMode('chat'); setSidebarOpen(false); }} />
         </div>
 
         <div>
@@ -1299,212 +1316,288 @@ const App = () => {
 
   const renderDashboard = () => {
     const totalDecisions = dbStats?.total_decisions || 0;
-    const admisCount = (dbStats?.by_ruling?.['ADMIS'] || 0) + (dbStats?.by_ruling?.['ADMIS_PARTIAL'] || 0);
+    const admisCount = dbStats?.by_ruling?.['ADMIS'] || 0;
+    const admisPartialCount = dbStats?.by_ruling?.['ADMIS_PARTIAL'] || 0;
+    const admisTotal = admisCount + admisPartialCount;
     const respinsCount = dbStats?.by_ruling?.['RESPINS'] || 0;
     const rezultatCount = dbStats?.by_type?.['rezultat'] || 0;
+    const documentatieCount = dbStats?.by_type?.['documentatie'] || 0;
+    const necunoscutCount = totalDecisions - rezultatCount - documentatieCount;
     const isConnected = dbStats !== null && totalDecisions > 0;
+    const winRatePct = totalDecisions > 0 ? Math.round((admisTotal) / totalDecisions * 100) : 0;
+    const respinsPct = totalDecisions > 0 ? Math.round(respinsCount / totalDecisions * 100) : 0;
+
+    // Donut chart SVG helper
+    const DonutSegment = ({ pct, offset, color }: { pct: number, offset: number, color: string }) => {
+      const r = 40;
+      const c = 2 * Math.PI * r;
+      const dashLen = (pct / 100) * c;
+      const dashOff = -(offset / 100) * c;
+      return <circle cx="50" cy="50" r={r} fill="none" stroke={color} strokeWidth="12" strokeDasharray={`${dashLen} ${c - dashLen}`} strokeDashoffset={dashOff} strokeLinecap="round" className="transition-all duration-700" />;
+    };
 
     return (
-    <div className="p-4 md:p-8 max-w-6xl mx-auto animate-in fade-in duration-500">
-      <header className="mb-6 md:mb-8 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
-        <div>
-           <h2 className="text-2xl md:text-3xl font-bold text-slate-900">Dashboard</h2>
-           <p className="text-sm md:text-base text-slate-500">Bine ai venit în centrul de comandă ExpertAP.</p>
+    <div className="h-full overflow-y-auto">
+    <div className="p-4 md:p-8 max-w-7xl mx-auto animate-in fade-in duration-500">
+      {/* Header */}
+      <header className="mb-6 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+        <div className="flex items-center gap-3">
+          <img src="/public/logo.svg" alt="ExpertAP" className="w-10 h-10 rounded-xl hidden sm:block" />
+          <div>
+            <h2 className="text-2xl md:text-3xl font-bold text-slate-900">Dashboard</h2>
+            <p className="text-sm text-slate-500">Centrul de comandă ExpertAP</p>
+          </div>
         </div>
-        <div className="flex items-center gap-2 bg-white border border-slate-200 px-3 py-1.5 rounded-full shadow-sm">
-           <div className={`w-2.5 h-2.5 rounded-full ${isConnected ? 'bg-green-500 animate-pulse' : dbStats === null ? 'bg-yellow-500 animate-pulse' : 'bg-slate-300'}`}></div>
-           <span className="text-xs font-medium text-slate-600">
-              {isConnected ? `Conectat: ${totalDecisions} decizii` : dbStats === null ? "Conectare..." : "Deconectat"}
-           </span>
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 bg-white border border-slate-200 px-3 py-1.5 rounded-full shadow-sm">
+            <div className={`w-2 h-2 rounded-full ${isConnected ? 'bg-green-500' : dbStats === null ? 'bg-yellow-500 animate-pulse' : 'bg-slate-300'}`}></div>
+            <span className="text-xs font-medium text-slate-600">
+              {isConnected ? 'PostgreSQL' : dbStats === null ? 'Conectare...' : 'Deconectat'}
+            </span>
+          </div>
         </div>
       </header>
 
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-10">
-         <StatCard
-            label="Total Decizii CNSC"
-            value={totalDecisions}
-            icon={FileText}
-            color="bg-blue-500 text-blue-600"
-         />
-         <StatCard
-            label="Decizii Rezultat"
-            value={rezultatCount}
-            icon={Database}
-            color="bg-purple-500 text-purple-600"
-         />
-         <StatCard
-            label="Admise/Admis Parțial"
-            value={admisCount}
-            icon={CheckCircle}
-            color="bg-teal-500 text-teal-600"
-         />
-         <StatCard
-            label="Respinse"
-            value={respinsCount}
-            icon={XCircle}
-            color="bg-red-500 text-red-600"
-         />
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-        <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
-           <div className="flex justify-between items-center mb-6">
-              <h3 className="font-bold text-slate-800 flex items-center gap-2">
-                 <Database size={18} className="text-blue-500" />
-                 Conexiune Database
-              </h3>
-              <span className="text-xs bg-slate-100 text-slate-600 px-2 py-1 rounded border border-slate-200 font-mono">
-                PostgreSQL Cloud SQL
-              </span>
-           </div>
-
-           {dbStats === null ? (
-             <div className="flex flex-col items-center justify-center p-10">
-                <div className="w-14 h-14 rounded-full flex items-center justify-center mb-3 bg-blue-100">
-                   <RefreshCw size={24} className="text-blue-600 animate-spin" />
-                </div>
-                <span className="text-slate-700 font-medium">Se încarcă statisticile...</span>
-                <span className="text-xs text-slate-500 mt-1">Conectare la baza de date</span>
-             </div>
-           ) : isConnected ? (
-             <div className="bg-green-50 border border-green-100 rounded-lg p-6 flex flex-col items-center text-center">
-                <CheckCircle size={32} className="text-green-500 mb-2" />
-                <h4 className="font-bold text-green-800">Conexiune Activă</h4>
-                <p className="text-sm text-green-700 mt-1">
-                   Conectat la baza de date. {totalDecisions} decizii CNSC disponibile.
-                </p>
-                <button onClick={() => setMode('datalake')} className="mt-4 text-sm bg-white border border-green-200 text-green-700 px-4 py-2 rounded-lg hover:bg-green-100 transition shadow-sm font-medium">
-                   Explorează Deciziile
-                </button>
-             </div>
-           ) : (
-             <div className="bg-amber-50 border border-amber-100 rounded-lg p-6 flex flex-col items-center text-center">
-                <Database size={32} className="text-amber-500 mb-2" />
-                <h4 className="font-bold text-amber-800">Baza de Date Goală</h4>
-                <p className="text-sm text-amber-700 mt-1">
-                   Nu s-au găsit decizii în baza de date. Verifică conexiunea sau importă date.
-                </p>
-             </div>
-           )}
+      {/* Row 1: Central Donut + Type Breakdown */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+        {/* Central Donut Chart - Rata de Succes */}
+        <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm flex flex-col items-center">
+          <h3 className="font-bold text-slate-800 mb-4 flex items-center gap-2 self-start">
+            <TrendingUp size={18} className="text-blue-500" />
+            Rata de Succes Contestații
+          </h3>
+          <div className="relative w-40 h-40 mb-3">
+            <svg viewBox="0 0 100 100" className="w-full h-full -rotate-90">
+              <circle cx="50" cy="50" r="40" fill="none" stroke="#f1f5f9" strokeWidth="12" />
+              <DonutSegment pct={totalDecisions > 0 ? (admisCount / totalDecisions) * 100 : 0} offset={0} color="#10b981" />
+              <DonutSegment pct={totalDecisions > 0 ? (admisPartialCount / totalDecisions) * 100 : 0} offset={totalDecisions > 0 ? (admisCount / totalDecisions) * 100 : 0} color="#f59e0b" />
+              <DonutSegment pct={respinsPct} offset={totalDecisions > 0 ? (admisTotal / totalDecisions) * 100 : 0} color="#ef4444" />
+            </svg>
+            <div className="absolute inset-0 flex flex-col items-center justify-center">
+              <span className="text-3xl font-bold text-slate-800">{winRatePct}%</span>
+              <span className="text-[10px] text-slate-500 font-medium">Admise</span>
+            </div>
+          </div>
+          <div className="flex gap-4 text-xs">
+            <div className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 rounded-full bg-emerald-500"></div><span className="text-slate-600">Admis ({admisCount})</span></div>
+            <div className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 rounded-full bg-amber-500"></div><span className="text-slate-600">Parțial ({admisPartialCount})</span></div>
+            <div className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 rounded-full bg-red-500"></div><span className="text-slate-600">Respins ({respinsCount})</span></div>
+          </div>
         </div>
 
-        <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
-           <h3 className="font-bold text-slate-800 mb-4 flex items-center gap-2">
-              <CheckSquare size={18} className="text-green-500" />
-              Jurisprudență Disponibilă
-           </h3>
-           <p className="text-sm text-slate-600 mb-4">
-             Deciziile CNSC sunt disponibile pentru analiză AI în toate secțiunile aplicației.
-             Vezi detalii complete în <strong>Data Lake</strong>.
-           </p>
-
-           <div className="space-y-3">
-              {isConnected ? (
-                <>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="bg-blue-50 border border-blue-100 rounded-lg p-3">
-                      <div className="text-2xl font-bold text-blue-700">{totalDecisions}</div>
-                      <div className="text-xs text-blue-600 mt-1">Total Decizii</div>
+        {/* Type Breakdown: Documentație vs Rezultat */}
+        <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm lg:col-span-2">
+          <h3 className="font-bold text-slate-800 mb-4 flex items-center gap-2">
+            <Layers size={18} className="text-purple-500" />
+            Defalcare pe Tip Contestație
+          </h3>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-4">
+            <div className="bg-blue-50 border border-blue-100 rounded-xl p-4 text-center">
+              <div className="text-3xl font-bold text-blue-700">{totalDecisions.toLocaleString()}</div>
+              <div className="text-xs text-blue-600 mt-1 font-medium">Total Decizii</div>
+            </div>
+            <button onClick={() => { setFilterType('documentatie'); setMode('datalake'); }} className="bg-purple-50 border border-purple-100 rounded-xl p-4 text-center hover:bg-purple-100 transition cursor-pointer">
+              <div className="text-3xl font-bold text-purple-700">{documentatieCount.toLocaleString()}</div>
+              <div className="text-xs text-purple-600 mt-1 font-medium">Documentație</div>
+            </button>
+            <button onClick={() => { setFilterType('rezultat'); setMode('datalake'); }} className="bg-orange-50 border border-orange-100 rounded-xl p-4 text-center hover:bg-orange-100 transition cursor-pointer">
+              <div className="text-3xl font-bold text-orange-700">{rezultatCount.toLocaleString()}</div>
+              <div className="text-xs text-orange-600 mt-1 font-medium">Rezultat</div>
+            </button>
+          </div>
+          {/* Win rate per type */}
+          {winRateByCategory.length > 0 ? (
+            <div className="space-y-3">
+              {winRateByCategory.map((cat: any) => {
+                const catColors: Record<string, {bar: string, bg: string, text: string}> = {
+                  'Servicii': { bar: 'bg-blue-500', bg: 'bg-blue-50', text: 'text-blue-700' },
+                  'Furnizare': { bar: 'bg-orange-500', bg: 'bg-orange-50', text: 'text-orange-700' },
+                  'Lucrări': { bar: 'bg-green-500', bg: 'bg-green-50', text: 'text-green-700' },
+                };
+                const colors = catColors[cat.category] || { bar: 'bg-slate-500', bg: 'bg-slate-50', text: 'text-slate-700' };
+                const docType = cat.by_type?.find((t: any) => t.type === 'documentatie');
+                const rezType = cat.by_type?.find((t: any) => t.type === 'rezultat');
+                return (
+                  <div key={cat.category} className={`${colors.bg} rounded-lg p-3 border border-slate-100`}>
+                    <div className="flex justify-between items-center mb-2">
+                      <button onClick={() => { setFilterCategorie(cat.category); setMode('datalake'); }} className={`font-semibold text-sm ${colors.text} hover:underline`}>
+                        {cat.category}
+                      </button>
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-slate-500">{cat.total} decizii</span>
+                        <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${cat.win_rate >= 50 ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`}>
+                          {cat.win_rate}% admise
+                        </span>
+                      </div>
                     </div>
-                    <div className="bg-green-50 border border-green-100 rounded-lg p-3">
-                      <div className="text-2xl font-bold text-green-700">{admisCount}</div>
-                      <div className="text-xs text-green-600 mt-1">Admise</div>
+                    <div className="w-full bg-white/60 rounded-full h-2 mb-1.5">
+                      <div className={`${colors.bar} h-2 rounded-full transition-all duration-500`} style={{ width: `${(cat.total / totalDecisions) * 100}%` }}></div>
+                    </div>
+                    <div className="flex gap-4 text-[10px] text-slate-500">
+                      {docType && <span>Doc: {docType.total} ({docType.win_rate}% admise)</span>}
+                      {rezType && <span>Rez: {rezType.total} ({rezType.win_rate}% admise)</span>}
                     </div>
                   </div>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="bg-red-50 border border-red-100 rounded-lg p-3">
-                      <div className="text-2xl font-bold text-red-700">{respinsCount}</div>
-                      <div className="text-xs text-red-600 mt-1">Respinse</div>
+                );
+              })}
+            </div>
+          ) : categoriiStats.length > 0 ? (
+            <div className="space-y-3">
+              {categoriiStats.map((cat, idx) => {
+                const totalCat = categoriiStats.reduce((s, c) => s + c.count, 0);
+                const pct = totalCat > 0 ? Math.round((cat.count / totalCat) * 100) : 0;
+                const colors = ['bg-blue-500', 'bg-orange-500', 'bg-green-500'];
+                const bgColors = ['bg-blue-50', 'bg-orange-50', 'bg-green-50'];
+                return (
+                  <div key={cat.name} className={`${bgColors[idx % 3]} rounded-lg p-3`}>
+                    <div className="flex justify-between items-center mb-1">
+                      <button onClick={() => { setFilterCategorie(cat.name); setMode('datalake'); }} className="text-sm font-semibold text-slate-700 hover:underline">{cat.name}</button>
+                      <span className="text-xs text-slate-500">{cat.count} ({pct}%)</span>
                     </div>
-                    <div className="bg-purple-50 border border-purple-100 rounded-lg p-3">
-                      <div className="text-2xl font-bold text-purple-700">{rezultatCount}</div>
-                      <div className="text-xs text-purple-600 mt-1">Rezultat</div>
+                    <div className="w-full bg-white/60 rounded-full h-2">
+                      <div className={`${colors[idx % 3]} h-2 rounded-full transition-all duration-500`} style={{ width: `${pct}%` }}></div>
                     </div>
                   </div>
-                  <button onClick={() => setMode('datalake')} className="w-full text-sm bg-blue-500 text-white px-4 py-2 rounded-lg hover:bg-blue-600 transition shadow-sm font-medium">
-                    Explorează Database
-                  </button>
-                </>
-              ) : (
-                <div className="text-sm text-amber-600 bg-amber-50 p-3 rounded border border-amber-100">
-                   Nu există decizii în baza de date. AI-ul va răspunde doar din cunoștințe generale.
-                </div>
-              )}
-           </div>
+                );
+              })}
+            </div>
+          ) : null}
         </div>
       </div>
 
-      {/* CPV Statistics Section */}
-      {(cpvTopStats.length > 0 || categoriiStats.length > 0) && (
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mt-8">
-        {/* Category Distribution */}
-        {categoriiStats.length > 0 && (
-        <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
-          <h3 className="font-bold text-slate-800 mb-4 flex items-center gap-2">
-            <Package size={18} className="text-orange-500" />
-            Distribuție pe Categorii CPV
-          </h3>
-          <div className="space-y-3">
-            {categoriiStats.map((cat, idx) => {
-              const totalCat = categoriiStats.reduce((s, c) => s + c.count, 0);
-              const pct = totalCat > 0 ? Math.round((cat.count / totalCat) * 100) : 0;
-              const colors = ['bg-blue-500', 'bg-orange-500', 'bg-green-500', 'bg-purple-500'];
-              const textColors = ['text-blue-700', 'text-orange-700', 'text-green-700', 'text-purple-700'];
-              const bgColors = ['bg-blue-50', 'bg-orange-50', 'bg-green-50', 'bg-purple-50'];
-              return (
-                <div key={cat.name}>
-                  <div className="flex justify-between items-center mb-1">
-                    <button
-                      onClick={() => { setFilterCategorie(cat.name); setMode('datalake'); }}
-                      className={`text-sm font-semibold ${textColors[idx % 4]} hover:underline cursor-pointer`}
-                    >
-                      {cat.name}
-                    </button>
-                    <span className="text-xs text-slate-500">{cat.count} ({pct}%)</span>
-                  </div>
-                  <div className={`w-full ${bgColors[idx % 4]} rounded-full h-2.5`}>
-                    <div className={`${colors[idx % 4]} h-2.5 rounded-full transition-all duration-500`} style={{ width: `${pct}%` }}></div>
-                  </div>
+      {/* Row 2: Top CPV Codes (horizontal bar chart with win rate indicators) */}
+      {cpvTopGrouped.length > 0 && (
+      <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm mb-6">
+        <h3 className="font-bold text-slate-800 mb-4 flex items-center gap-2">
+          <BarChart3 size={18} className="text-purple-500" />
+          Top Coduri CPV — Volume și Rata de Admisibilitate
+        </h3>
+        <div className="space-y-2">
+          {cpvTopGrouped.map((cpv: any) => {
+            const maxCount = cpvTopGrouped[0]?.total || 1;
+            const barPct = Math.round((cpv.total / maxCount) * 100);
+            const catLabel = cpv.categorie === 'Servicii' ? 'S' : cpv.categorie === 'Furnizare' ? 'F' : cpv.categorie === 'Lucrări' ? 'L' : '?';
+            const catColor = cpv.categorie === 'Servicii' ? 'bg-blue-100 text-blue-700' : cpv.categorie === 'Furnizare' ? 'bg-orange-100 text-orange-700' : cpv.categorie === 'Lucrări' ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-700';
+            const winColor = cpv.win_rate >= 60 ? 'text-emerald-600' : cpv.win_rate >= 40 ? 'text-amber-600' : 'text-red-600';
+            return (
+              <button
+                key={cpv.code}
+                onClick={() => { setFilterCpv([cpv.code]); setMode('datalake'); }}
+                className="w-full text-left group hover:bg-slate-50 rounded-lg px-2 py-2 transition"
+              >
+                <div className="flex items-center gap-2 mb-1">
+                  <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${catColor}`}>{catLabel}</span>
+                  <span className="text-xs font-mono font-bold text-slate-600 w-24 shrink-0">{cpv.code}</span>
+                  <span className="text-xs text-slate-400 truncate flex-1">{cpv.description || ''}</span>
+                  <span className={`text-xs font-bold ${winColor} tabular-nums shrink-0`}>{cpv.win_rate}%</span>
+                  <span className="text-xs text-slate-500 tabular-nums shrink-0 w-10 text-right">{cpv.total}</span>
                 </div>
-              );
-            })}
-          </div>
+                <div className="w-full bg-slate-100 rounded-full h-2 relative">
+                  <div className="bg-slate-300 h-2 rounded-full transition-all duration-500" style={{ width: `${barPct}%` }}></div>
+                  <div className="bg-emerald-500 h-2 rounded-l-full absolute top-0 left-0 transition-all duration-500" style={{ width: `${barPct * (cpv.win_rate / 100)}%` }}></div>
+                </div>
+              </button>
+            );
+          })}
         </div>
-        )}
-
-        {/* Top CPV Codes */}
-        {cpvTopStats.length > 0 && (
-        <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
-          <h3 className="font-bold text-slate-800 mb-4 flex items-center gap-2">
-            <BarChart3 size={18} className="text-purple-500" />
-            Top 10 Coduri CPV
-          </h3>
-          <div className="space-y-2">
-            {cpvTopStats.map((cpv, idx) => {
-              const maxCount = cpvTopStats[0]?.count || 1;
-              const pct = Math.round((cpv.count / maxCount) * 100);
-              return (
-                <button
-                  key={cpv.code}
-                  onClick={() => { setFilterCpv([cpv.code]); setMode('datalake'); }}
-                  className="w-full text-left group hover:bg-slate-50 rounded-lg px-2 py-1.5 transition"
-                >
-                  <div className="flex items-center gap-2 mb-0.5">
-                    <span className="text-xs font-mono font-bold text-slate-600 w-24 shrink-0">{cpv.code}</span>
-                    <span className="text-xs text-slate-400 truncate flex-1">{cpv.description || ''}</span>
-                    <span className="text-xs font-semibold text-slate-600 tabular-nums shrink-0">{cpv.count}</span>
-                  </div>
-                  <div className="w-full bg-slate-100 rounded-full h-1.5">
-                    <div className="bg-purple-500 h-1.5 rounded-full transition-all duration-500" style={{ width: `${pct}%` }}></div>
-                  </div>
-                </button>
-              );
-            })}
-          </div>
+        <div className="flex gap-4 mt-3 text-[10px] text-slate-400 border-t border-slate-100 pt-2">
+          <span className="flex items-center gap-1"><div className="w-3 h-1.5 rounded bg-emerald-500"></div> Admise/Parțial admise</span>
+          <span className="flex items-center gap-1"><div className="w-3 h-1.5 rounded bg-slate-300"></div> Total decizii (scală relativă)</span>
         </div>
-        )}
       </div>
       )}
+
+      {/* Fallback: old CPV top if grouped not available */}
+      {cpvTopGrouped.length === 0 && cpvTopStats.length > 0 && (
+      <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm mb-6">
+        <h3 className="font-bold text-slate-800 mb-4 flex items-center gap-2">
+          <BarChart3 size={18} className="text-purple-500" />
+          Top 10 Coduri CPV
+        </h3>
+        <div className="space-y-2">
+          {cpvTopStats.map((cpv) => {
+            const maxCount = cpvTopStats[0]?.count || 1;
+            const pct = Math.round((cpv.count / maxCount) * 100);
+            return (
+              <button key={cpv.code} onClick={() => { setFilterCpv([cpv.code]); setMode('datalake'); }} className="w-full text-left group hover:bg-slate-50 rounded-lg px-2 py-1.5 transition">
+                <div className="flex items-center gap-2 mb-0.5">
+                  <span className="text-xs font-mono font-bold text-slate-600 w-24 shrink-0">{cpv.code}</span>
+                  <span className="text-xs text-slate-400 truncate flex-1">{cpv.description || ''}</span>
+                  <span className="text-xs font-semibold text-slate-600 tabular-nums shrink-0">{cpv.count}</span>
+                </div>
+                <div className="w-full bg-slate-100 rounded-full h-1.5">
+                  <div className="bg-purple-500 h-1.5 rounded-full transition-all duration-500" style={{ width: `${pct}%` }}></div>
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+      )}
+
+      {/* Row 3: Win rate by criticism code */}
+      {winRateByCritici.length > 0 && (
+      <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm mb-6">
+        <h3 className="font-bold text-slate-800 mb-4 flex items-center gap-2">
+          <Shield size={18} className="text-indigo-500" />
+          Rata de Succes pe Critici (sortare după volum)
+        </h3>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+          {winRateByCritici.slice(0, 12).map((cr: any) => {
+            const legend = CRITIQUE_LEGEND[cr.code] || cr.code;
+            const isDoc = cr.code.startsWith('D');
+            const tagColor = isDoc ? 'bg-purple-100 text-purple-700' : 'bg-orange-100 text-orange-700';
+            const winPct = cr.contestator_win_rate;
+            const ringColor = winPct >= 60 ? 'text-emerald-500' : winPct >= 40 ? 'text-amber-500' : 'text-red-500';
+            const ringBg = winPct >= 60 ? 'bg-emerald-50' : winPct >= 40 ? 'bg-amber-50' : 'bg-red-50';
+            return (
+              <button
+                key={cr.code}
+                onClick={() => { setFilterCritici([cr.code]); setMode('datalake'); }}
+                className={`${ringBg} border border-slate-100 rounded-xl p-3 text-left hover:shadow-md transition group`}
+              >
+                <div className="flex items-center justify-between mb-2">
+                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${tagColor}`}>{cr.code}</span>
+                  <span className="text-xs text-slate-400">{cr.total} cazuri</span>
+                </div>
+                <p className="text-[11px] text-slate-600 line-clamp-2 mb-2 leading-relaxed" title={legend}>{legend}</p>
+                <div className="flex items-center gap-2">
+                  <div className="flex-1 bg-white/60 rounded-full h-1.5">
+                    <div className={`h-1.5 rounded-full transition-all duration-500 ${winPct >= 60 ? 'bg-emerald-500' : winPct >= 40 ? 'bg-amber-500' : 'bg-red-500'}`} style={{ width: `${winPct}%` }}></div>
+                  </div>
+                  <span className={`text-xs font-bold ${ringColor} tabular-nums`}>{winPct}%</span>
+                </div>
+              </button>
+            );
+          })}
+        </div>
+        <div className="flex gap-4 mt-3 text-[10px] text-slate-400 border-t border-slate-100 pt-2">
+          <span className="flex items-center gap-1"><span className="bg-purple-100 text-purple-700 px-1.5 py-0.5 rounded text-[9px] font-bold">D</span> Documentație</span>
+          <span className="flex items-center gap-1"><span className="bg-orange-100 text-orange-700 px-1.5 py-0.5 rounded text-[9px] font-bold">R</span> Rezultat</span>
+          <span className="ml-auto">% = rata de admitere contestator</span>
+        </div>
+      </div>
+      )}
+
+      {/* Quick navigation */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <button onClick={() => setMode('chat')} className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm hover:shadow-md hover:border-blue-200 transition text-left group">
+          <MessageSquare size={20} className="text-blue-500 mb-2 group-hover:scale-110 transition-transform" />
+          <h4 className="font-bold text-slate-800 text-sm">Asistent AP</h4>
+          <p className="text-xs text-slate-500 mt-1">Întreabă despre jurisprudență CNSC</p>
+        </button>
+        <button onClick={() => setMode('datalake')} className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm hover:shadow-md hover:border-purple-200 transition text-left group">
+          <Filter size={20} className="text-purple-500 mb-2 group-hover:scale-110 transition-transform" />
+          <h4 className="font-bold text-slate-800 text-sm">Filtrare date</h4>
+          <p className="text-xs text-slate-500 mt-1">Explorează și filtrează decizii CNSC</p>
+        </button>
+        <button onClick={() => setMode('training')} className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm hover:shadow-md hover:border-amber-200 transition text-left group">
+          <GraduationCap size={20} className="text-amber-500 mb-2 group-hover:scale-110 transition-transform" />
+          <h4 className="font-bold text-slate-800 text-sm">TrainingAP</h4>
+          <p className="text-xs text-slate-500 mt-1">Generează materiale didactice</p>
+        </button>
+      </div>
+    </div>
     </div>
     );
   };
@@ -1540,7 +1633,7 @@ const App = () => {
           <div className="flex justify-between items-center mb-4">
             <div>
               <h2 className="text-xl font-bold text-slate-800 flex items-center gap-2">
-                <Database className="text-blue-600" size={22}/> Data Lake
+                <Filter className="text-blue-600" size={22}/> Filtrare date
               </h2>
               <div className="flex items-center gap-2 mt-1">
                 <div className="flex items-center gap-1.5 bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded-full border border-emerald-200 text-[11px] font-medium">
@@ -3132,7 +3225,8 @@ const App = () => {
   return (
     <div className="flex h-screen bg-slate-50 font-sans text-slate-900">
       {renderSidebar()}
-      <main className="flex-1 overflow-hidden relative shadow-2xl z-10 md:rounded-l-2xl md:border-l border-slate-200/50 bg-white md:ml-[-1px] pt-[52px] md:pt-0">
+      <main className="flex-1 overflow-hidden relative shadow-2xl z-10 md:rounded-l-2xl md:border-l border-slate-200/50 bg-white md:ml-[-1px] pt-[52px] md:pt-0 flex flex-col">
+        <div className="flex-1 overflow-hidden flex flex-col">
         {mode === 'dashboard' && renderDashboard()}
         {mode === 'datalake' && renderDataLake()}
         {mode === 'drafter' && renderDrafter()}
@@ -3517,6 +3611,33 @@ const App = () => {
         )}
         {mode === 'training' && renderTraining()}
         {mode === 'settings' && renderSettings()}
+        </div>
+
+        {/* Sticky Install Banner - Mobile PWA */}
+        {showInstallBanner && (
+        <div className="shrink-0 bg-gradient-to-r from-blue-600 to-purple-600 text-white px-4 py-2.5 flex items-center gap-3 md:hidden shadow-lg">
+          <Smartphone size={18} className="shrink-0" />
+          <div className="flex-1 min-w-0">
+            <p className="text-xs font-bold">Instalează ExpertAP</p>
+            <p className="text-[10px] opacity-80 truncate">Acces rapid de pe ecranul principal</p>
+          </div>
+          <button
+            onClick={() => {
+              const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+              const msg = isIOS
+                ? '1. Apasă butonul Share (⎙) din Safari\n2. Alege "Add to Home Screen"\n3. Confirmă cu "Add"'
+                : '1. Apasă meniul ⋮ din Chrome\n2. Alege "Add to Home screen" / "Install app"\n3. Confirmă instalarea';
+              alert(`Instalare ExpertAP pe telefon:\n\n${msg}`);
+            }}
+            className="shrink-0 bg-white text-blue-700 text-xs font-bold px-3 py-1.5 rounded-lg hover:bg-blue-50 transition"
+          >
+            Instalează
+          </button>
+          <button onClick={() => setShowInstallBanner(false)} className="shrink-0 text-white/70 hover:text-white">
+            <X size={14} />
+          </button>
+        </div>
+        )}
       </main>
 
       {/* Scope Manager Modal */}
@@ -3537,7 +3658,7 @@ const App = () => {
               <div className="text-center py-12 text-slate-400">
                 <Bookmark size={32} className="mx-auto mb-3 opacity-30" />
                 <p className="text-sm">Nu ai niciun scope salvat.</p>
-                <p className="text-xs mt-1">Mergi pe pagina Data Lake, aplică filtre, apoi apasă "Salvează Scope".</p>
+                <p className="text-xs mt-1">Mergi pe pagina Filtrare date, aplică filtre, apoi apasă "Salvează Scope".</p>
               </div>
             ) : (
               <div className="flex-1 overflow-y-auto space-y-3">
