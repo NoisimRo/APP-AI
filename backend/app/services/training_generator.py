@@ -408,9 +408,10 @@ class TrainingGenerator:
             ]
 
             if relevant:
+                from sqlalchemy.orm import defer
                 dec_ids = list({arg.decizie_id for arg, _ in relevant})
                 dec_result = await session.execute(
-                    select(DecizieCNSC).where(DecizieCNSC.id.in_(dec_ids))
+                    select(DecizieCNSC).options(defer(DecizieCNSC.text_integral)).where(DecizieCNSC.id.in_(dec_ids))
                 )
                 decisions = {d.id: d for d in dec_result.scalars().all()}
                 decision_refs = [d.external_id for d in decisions.values()]

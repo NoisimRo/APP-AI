@@ -441,9 +441,10 @@ Severitate:
         if not relevant_chunks:
             return [], []
 
-        # Load parent decisions
+        # Load parent decisions (defer text_integral — not needed, saves ~39KB/decision)
+        from sqlalchemy.orm import defer
         dec_ids = list({arg.decizie_id for arg, _ in relevant_chunks})
-        stmt = select(DecizieCNSC).where(DecizieCNSC.id.in_(dec_ids))
+        stmt = select(DecizieCNSC).options(defer(DecizieCNSC.text_integral)).where(DecizieCNSC.id.in_(dec_ids))
         result = await session.execute(stmt)
         decisions = list(result.scalars().all())
 

@@ -94,6 +94,7 @@ const fetchStream = async (
   onChunk: (text: string) => void,
   onDone: (meta: any) => void,
   onError: (error: string) => void,
+  onStatus?: (status: string) => void,
 ) => {
   const response = await fetch(url, {
     method: 'POST',
@@ -127,6 +128,7 @@ const fetchStream = async (
         try {
           const data = JSON.parse(part.slice(6));
           if (data.error) { onError(typeof data.error === 'string' ? data.error : JSON.stringify(data.error)); return; }
+          if (data.status && onStatus) onStatus(data.status);
           if (data.text) onChunk(data.text);
           if (data.done) onDone(data);
         } catch { /* ignore malformed SSE */ }
@@ -349,6 +351,7 @@ const App = () => {
   const [chatMessages, setChatMessages] = useState<Message[]>([]);
   const [chatInput, setChatInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [streamStatus, setStreamStatus] = useState("");
   const [generatedContent, setGeneratedContent] = useState<string>("");
   const [generatedDecisionRefs, setGeneratedDecisionRefs] = useState<string[]>([]);
 
@@ -868,6 +871,7 @@ const App = () => {
     setChatMessages(prev => [...prev, { role: 'user', text: userMsg }]);
     setChatInput("");
     setIsLoading(true);
+    setStreamStatus("Se caută în baza de date...");
 
     // Add placeholder for streaming response
     setChatMessages(prev => [...prev, { role: 'model', text: '' }]);
@@ -924,6 +928,7 @@ const App = () => {
             return updated;
           });
         },
+        (status) => setStreamStatus(status),
       );
     } catch (err) {
       console.error(err);
@@ -937,11 +942,13 @@ const App = () => {
       });
     } finally {
       setIsLoading(false);
+      setStreamStatus("");
     }
   };
 
   const handleDrafting = async () => {
     setIsLoading(true);
+    setStreamStatus("Se caută jurisprudență relevantă...");
     setGeneratedContent("");
     setGeneratedDecisionRefs([]);
 
@@ -965,12 +972,14 @@ const App = () => {
         (error) => {
           setGeneratedContent(`Eroare: ${error}`);
         },
+        (status) => setStreamStatus(status),
       );
     } catch (err) {
       console.error(err);
       setGeneratedContent("Eroare la generare. Verifică că backend-ul este pornit.");
     } finally {
       setIsLoading(false);
+      setStreamStatus("");
     }
   };
 
@@ -1139,6 +1148,7 @@ const App = () => {
     }
 
     setIsLoading(true);
+    setStreamStatus("Se caută jurisprudență relevantă...");
     setGeneratedContent("");
 
     try {
@@ -1158,12 +1168,14 @@ const App = () => {
         (error) => {
           setGeneratedContent(`Eroare: ${error}`);
         },
+        (status) => setStreamStatus(status),
       );
     } catch (err) {
       console.error(err);
       setGeneratedContent("Eroare la generarea memo-ului. Verifică că backend-ul este pornit și conectat la baza de date.");
     } finally {
       setIsLoading(false);
+      setStreamStatus("");
     }
   };
 
@@ -2234,7 +2246,7 @@ const App = () => {
             disabled={isLoading}
             className="w-full bg-slate-900 text-white py-4 rounded-xl font-medium hover:bg-slate-800 transition flex justify-center items-center gap-2 shadow-lg hover:shadow-xl mt-4"
           >
-            {isLoading ? <Loader2 className="animate-spin" /> : "Generează Proiect"}
+            {isLoading ? <><Loader2 className="animate-spin" size={18} /> <span className="text-sm">{streamStatus || "Se procesează..."}</span></> : "Generează Proiect"}
           </button>
         </div>
       </div>
@@ -3063,7 +3075,7 @@ const App = () => {
           <div className="flex justify-start">
              <div className="bg-white border border-slate-200 p-4 rounded-2xl rounded-bl-none shadow-sm flex gap-3 items-center">
                <Loader2 size={18} className="animate-spin text-blue-600" />
-               <span className="text-sm text-slate-500 font-medium">Analizez informațiile...</span>
+               <span className="text-sm text-slate-500 font-medium">{streamStatus || "Se procesează..."}</span>
              </div>
           </div>
         )}
@@ -3485,7 +3497,7 @@ const App = () => {
                           disabled={isLoading || !memoTopic.trim()}
                           className="w-full bg-teal-600 text-white py-2.5 rounded-lg text-sm font-medium hover:bg-teal-700 transition disabled:opacity-50"
                        >
-                          {isLoading ? "Analiză..." : "Generează Memo"}
+                          {isLoading ? (streamStatus || "Analiză...") : "Generează Memo"}
                        </button>
                        <p className="text-xs text-slate-400 mt-3 text-center">Căutare semantică în {dbStats?.total_decisions || 0} decizii din baza de date.</p>
                     </div>

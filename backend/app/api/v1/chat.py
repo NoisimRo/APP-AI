@@ -179,6 +179,12 @@ async def chat_stream(
                 detail="Nu am găsit informații relevante. Reformulează întrebarea.",
             )
 
+        # Build status messages for user feedback
+        status_msgs = []
+        n_sources = len(citations)
+        if n_sources:
+            status_msgs.append(f"Am identificat {n_sources} decizii CNSC relevante")
+
         # Stream the LLM response
         return await create_sse_response(
             llm=rag.llm,
@@ -194,6 +200,7 @@ async def chat_stream(
                 "conversation_id": request.conversation_id or f"conv-{hash(request.message)}",
                 "search_duration_s": search_duration_s,
             },
+            status_messages=status_msgs,
         )
 
     except Exception as e:

@@ -19,6 +19,7 @@ async def create_sse_response(
     max_tokens: int = 8192,
     metadata: dict | None = None,
     strip_preamble: bool = False,
+    status_messages: list[str] | None = None,
 ) -> StreamingResponse:
     """Create an SSE StreamingResponse from an LLM stream.
 
@@ -31,6 +32,8 @@ async def create_sse_response(
         max_tokens: Maximum output tokens.
         metadata: Optional metadata to send as final event (e.g. citations, decision_refs).
         strip_preamble: If True, discard any text before the first ## heading.
+        status_messages: Optional list of status messages to send before LLM stream starts.
+            Each message is sent as {"status": "message"} SSE event.
 
     Returns:
         FastAPI StreamingResponse with text/event-stream content type.
@@ -42,6 +45,13 @@ async def create_sse_response(
         first_token_logged = False
 
         try:
+            # Send status messages before LLM stream starts
+            if status_messages:
+                for msg in status_messages:
+                    yield f"data: {json.dumps({'status': msg})}\n\n"
+
+            # Signal that LLM generation is starting
+            yield f"data: {json.dumps({'status': 'Se generează răspunsul...'})}\n\n"
             # Buffer to strip preamble text before first ## heading
             preamble_buffer = ""
             preamble_passed = not strip_preamble
