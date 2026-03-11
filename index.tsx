@@ -411,6 +411,7 @@ const App = () => {
   const [scopes, setScopes] = useState<{id: string, name: string, description: string | null, filters: any, decision_count: number}[]>([]);
   const [activeScopeId, setActiveScopeId] = useState<string | null>(null);
   const [enableReranking, setEnableReranking] = useState(false);
+  const [enableExpansion, setEnableExpansion] = useState(false);
   const [showScopeModal, setShowScopeModal] = useState(false);
   const [showScopeManager, setShowScopeManager] = useState(false);
   const [editingScope, setEditingScope] = useState<{id: string, name: string, description: string | null} | null>(null);
@@ -883,6 +884,7 @@ const App = () => {
           })),
           scope_id: activeScopeId || undefined,
           rerank: enableReranking || undefined,
+          expansion: enableExpansion || undefined,
         },
         (chunk) => {
           accumulated += chunk;
@@ -3058,9 +3060,18 @@ const App = () => {
       </div>
       <div className="p-4 bg-white border-t border-slate-200">
         <div className="max-w-4xl mx-auto">
-          {/* Scope selector + reranking toggle */}
+          {/* Scope selector + expansion/reranking toggles */}
           <div className="flex items-center gap-4 mb-3">
             <div className="flex-1"><ScopeSelector compact /></div>
+            <label className="flex items-center gap-1.5 text-xs text-slate-400 cursor-pointer select-none whitespace-nowrap">
+              <input
+                type="checkbox"
+                checked={enableExpansion}
+                onChange={(e) => setEnableExpansion(e.target.checked)}
+                className="rounded border-slate-300 text-blue-600 focus:ring-blue-500/40 h-3.5 w-3.5"
+              />
+              Expansion
+            </label>
             <label className="flex items-center gap-1.5 text-xs text-slate-400 cursor-pointer select-none whitespace-nowrap">
               <input
                 type="checkbox"

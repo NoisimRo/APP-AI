@@ -30,6 +30,7 @@ class ChatRequest(BaseModel):
     history: list[ChatMessage] = Field(default_factory=list)
     scope_id: str | None = Field(None, description="Optional scope ID for pre-filtering decisions")
     rerank: bool = Field(False, description="Enable LLM reranking of retrieved chunks")
+    expansion: bool = Field(False, description="Enable LLM query expansion for better retrieval")
 
 
 class Citation(BaseModel):
@@ -95,6 +96,7 @@ async def chat(
             max_decisions=5,
             scope_decision_ids=scope_ids,
             enable_rerank=request.rerank,
+            enable_expansion=request.expansion,
         )
 
         # Generate or reuse conversation ID
@@ -161,6 +163,7 @@ async def chat_stream(
             query=query, session=session, conversation_history=history, max_decisions=5,
             scope_decision_ids=scope_ids,
             enable_rerank=request.rerank,
+            enable_expansion=request.expansion,
         )
 
         if contexts is None:
