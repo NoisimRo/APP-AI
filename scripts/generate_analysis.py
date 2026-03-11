@@ -26,6 +26,7 @@ Usage:
 
 import asyncio
 import argparse
+import re
 import sys
 import time
 from pathlib import Path
@@ -41,6 +42,15 @@ from app.models.decision import DecizieCNSC, ArgumentareCritica
 from app.services.analysis import DecisionAnalysisService
 
 logger = get_logger(__name__)
+
+
+def parse_bo_reference(ref: str) -> tuple[int, int] | None:
+    """Parse 'BO2025_1076' into (an_bo=2025, numar_bo=1076)."""
+    match = re.match(r'^BO(\d{4})_(\d+)$', ref)
+    if match:
+        return int(match.group(1)), int(match.group(2))
+    return None
+
 
 # Retry configuration
 MAX_RETRIES = 3
@@ -188,24 +198,46 @@ async def main():
         overwrite_mode = args.force
         if args.decision:
             # Target specific decisions by BO reference — highest priority
-            stmt = (
-                select(DecizieCNSC)
-                .where(DecizieCNSC.external_id.in_(args.decision))
+            # external_id is a @property (f"BO{an_bo}_{numar_bo}"), not a DB column,
+            # so we parse BO refs and query by an_bo + numar_bo
+            from sqlalchemy import or_, and_
+            bo_pairs = []
+            invalid_refs = []
+            for ref in args.decision:
+                parsed = parse_bo_reference(ref)
+                if parsed:
+                    bo_pairs.append(parsed)
+                else:
+                    invalid_refs.append(ref)
+
+            if invalid_refs:
+                print(f"  WARNING: Invalid BO format (expected BOyyyy_nnnn): {', '.join(invalid_refs)}")
+            if not bo_pairs:
+                print("  ERROR: No valid BO references provided")
+                return
+
+            bo_conditions = or_(
+                *[and_(DecizieCNSC.an_bo == year, DecizieCNSC.numar_bo == num)
+                  for year, num in bo_pairs]
             )
+            stmt = select(DecizieCNSC).where(bo_conditions)
             overwrite_mode = True  # Always overwrite when targeting specific decisions
 
-            # Warn about unfound references
+            # Check which were found
             result_check = await session.execute(
-                select(DecizieCNSC.external_id).where(
-                    DecizieCNSC.external_id.in_(args.decision)
-                )
+                select(DecizieCNSC.an_bo, DecizieCNSC.numar_bo).where(bo_conditions)
             )
-            found_refs = {row[0] for row in result_check.fetchall()}
-            missing_refs = set(args.decision) - found_refs
+            found_pairs = {(row[0], row[1]) for row in result_check.fetchall()}
+            found_refs = {f"BO{y}_{n}" for y, n in found_pairs}
+            requested_refs = {f"BO{y}_{n}" for y, n in bo_pairs}
+            missing_refs = requested_refs - found_refs
             if missing_refs:
                 print(f"  WARNING: BO references not found in DB: {', '.join(sorted(missing_refs))}")
             if found_refs:
                 print(f"  Targeting {len(found_refs)} specific decision(s): {', '.join(sorted(found_refs))}")
+
+            # Re-build stmt (previous execute consumed the connection state)
+            stmt = select(DecizieCNSC).where(bo_conditions)
 
         elif args.reanalyze_incomplete:
             # Find decisions that have incomplete analyses:
