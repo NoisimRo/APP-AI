@@ -270,20 +270,37 @@ const CRITIQUE_LEGEND: Record<string, string> = {
   R7: "Anularea fără temei legal a procedurii",
   R8: "Alte critici rezultat",
   RAL: "Alte critici rezultat",
-  // Neclasificate (C) — generate automat de LLM când codul D/R nu e explicit
-  C1: "Critică neclasificată #1",
-  C2: "Critică neclasificată #2",
-  C3: "Critică neclasificată #3",
-  C4: "Critică neclasificată #4",
-  C5: "Critică neclasificată #5",
-  C6: "Critică neclasificată #6",
-  C7: "Critică neclasificată #7",
-  C8: "Critică neclasificată #8",
-  C9: "Critică neclasificată #9",
-  C10: "Critică neclasificată #10",
 };
 
 // --- Components ---
+
+// Inline SVG logo — always renders, no external file dependency
+const AppLogo = ({ size = 36, className = "" }: { size?: number; className?: string }) => (
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none" width={size} height={size} className={className}>
+    <defs>
+      <linearGradient id="logo-bg" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse">
+        <stop offset="0%" stopColor="#2563EB"/>
+        <stop offset="100%" stopColor="#7C3AED"/>
+      </linearGradient>
+    </defs>
+    <rect width="64" height="64" rx="14" fill="url(#logo-bg)"/>
+    <g stroke="white" strokeLinecap="round" strokeLinejoin="round" fill="none">
+      <line x1="32" y1="12" x2="32" y2="48" strokeWidth="3.5"/>
+      <line x1="22" y1="48" x2="42" y2="48" strokeWidth="3.5"/>
+      <line x1="12" y1="17" x2="52" y2="15" strokeWidth="3.5"/>
+      <line x1="12" y1="17" x2="10" y2="30" strokeWidth="2"/>
+      <line x1="12" y1="17" x2="14" y2="30" strokeWidth="2"/>
+      <path d="M8,30 Q12,37 16,30" strokeWidth="2.5"/>
+      <line x1="52" y1="15" x2="50" y2="26" strokeWidth="2"/>
+      <line x1="52" y1="15" x2="54" y2="26" strokeWidth="2"/>
+      <path d="M48,26 Q52,33 56,26" strokeWidth="2.5"/>
+    </g>
+    <rect x="24" y="38" width="3" height="8" rx="1" fill="white" opacity="0.35"/>
+    <rect x="29" y="35" width="3" height="11" rx="1" fill="white" opacity="0.35"/>
+    <rect x="34" y="37" width="3" height="9" rx="1" fill="white" opacity="0.35"/>
+    <rect x="39" y="33" width="3" height="13" rx="1" fill="white" opacity="0.35"/>
+  </svg>
+);
 
 const SidebarItem = ({ 
   icon: Icon, 
@@ -1230,7 +1247,7 @@ const App = () => {
           <Menu size={22} />
         </button>
         <div className="flex items-center gap-2">
-          <img src="/favicon.svg" alt="ExpertAP" className="w-6 h-6 rounded" />
+          <AppLogo size={24} className="rounded" />
           <span className="text-white font-bold text-sm">ExpertAP</span>
         </div>
         <div className="flex items-center gap-1.5 ml-auto">
@@ -1255,7 +1272,7 @@ const App = () => {
       `}>
       <div className="p-6 border-b border-slate-800 flex items-center justify-between">
         <h1 className="text-2xl font-bold text-white flex items-center gap-2.5 tracking-tight">
-          <img src="/logo.svg" alt="ExpertAP" className="w-9 h-9 rounded-lg" />
+          <AppLogo size={36} className="rounded-lg" />
           ExpertAP
         </h1>
         <div className="flex items-center gap-2">
@@ -1355,7 +1372,7 @@ const App = () => {
       {/* Header */}
       <header className="mb-6 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
         <div className="flex items-center gap-3">
-          <img src="/logo.svg" alt="ExpertAP" className="w-10 h-10 rounded-xl hidden sm:block" />
+          <AppLogo size={40} className="rounded-xl hidden sm:block" />
           <div>
             <h2 className="text-2xl md:text-3xl font-bold text-slate-900">Dashboard</h2>
             <p className="text-sm text-slate-500">Centrul de comandă ExpertAP</p>
@@ -1554,8 +1571,6 @@ const App = () => {
       {winRateByCritici.length > 0 && (() => {
         const docCritici = winRateByCritici.filter((cr: any) => cr.code.startsWith('D'));
         const rezCritici = winRateByCritici.filter((cr: any) => cr.code.startsWith('R'));
-        const alteCritici = winRateByCritici.filter((cr: any) => !cr.code.startsWith('D') && !cr.code.startsWith('R'));
-
         const CriticaCard = ({ cr }: { cr: any }) => {
           const legend = CRITIQUE_LEGEND[cr.code] || `Critică ${cr.code}`;
           const winPct = cr.contestator_win_rate;
@@ -1613,19 +1628,6 @@ const App = () => {
               </div>
             </div>
           </div>
-          {/* Neclasificate - if any C-prefix codes exist */}
-          {alteCritici.length > 0 && (
-            <div className="mt-4 pt-4 border-t border-slate-100">
-              <div className="flex items-center gap-2 mb-3">
-                <span className="bg-slate-100 text-slate-600 px-2.5 py-1 rounded-md text-xs font-bold">C</span>
-                <span className="text-sm font-bold text-slate-600">NECLASIFICATE</span>
-                <span className="text-[10px] text-slate-400 ml-auto">{alteCritici.reduce((s: number, c: any) => s + c.total, 0)} total</span>
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
-                {alteCritici.map((cr: any) => <CriticaCard key={cr.code} cr={cr} />)}
-              </div>
-            </div>
-          )}
           <div className="mt-3 text-[10px] text-slate-400 border-t border-slate-100 pt-2 text-right">
             % = rata de admitere contestator (admis + parțial)
           </div>
