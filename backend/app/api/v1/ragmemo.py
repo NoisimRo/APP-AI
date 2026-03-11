@@ -137,6 +137,11 @@ async def generate_rag_memo_stream(
             detail="Nu am găsit jurisprudență relevantă pentru acest subiect.",
         )
 
+    status_msgs = []
+    n_sources = len(citations)
+    if n_sources:
+        status_msgs.append(f"Am identificat {n_sources} decizii CNSC relevante")
+
     return await create_sse_response(
         llm=rag.llm,
         prompt=query,
@@ -150,4 +155,5 @@ async def generate_rag_memo_stream(
             "decisions_used": len(citations),
             "search_duration_s": search_duration_s,
         },
+        status_messages=status_msgs,
     )

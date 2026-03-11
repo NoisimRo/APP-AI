@@ -15,6 +15,7 @@ from app.db.session import get_session
 from app.models.decision import ArgumentareCritica, DecizieCNSC
 from app.services.embedding import EmbeddingService
 from app.services.llm.factory import get_active_llm_provider, get_embedding_provider
+from app.services.llm.streaming import create_sse_response
 
 router = APIRouter()
 logger = get_logger(__name__)
@@ -33,24 +34,22 @@ class ClarificationResponse(BaseModel):
     decision_refs: list[str] = Field(default_factory=list)
 
 
-@router.post("/", response_model=ClarificationResponse)
-async def generate_clarification(
-    request: ClarificationRequest,
-    session: AsyncSession = Depends(get_session),
-) -> ClarificationResponse:
-    """Generate a formal clarification request with RAG jurisprudence."""
-    t0 = time.monotonic()
-    logger.info("clarification_request", clause_length=len(request.clause))
+async def _build_clarification_context(
+    clause: str,
+    session: AsyncSession,
+) -> tuple[str, list[str]]:
+    """Search jurisprudence and build prompt for clarification generation.
 
-    llm = await get_active_llm_provider(session)
+    Returns (prompt, decision_refs).
+    """
+    t0 = time.monotonic()
     embedding_service = EmbeddingService(llm_provider=get_embedding_provider())
 
-    # Step 1: Search for relevant CNSC jurisprudence via vector search
     jurisprudence_context = ""
     decision_refs: list[str] = []
 
     try:
-        query_vector = await embedding_service.embed_query(request.clause[:3000])
+        query_vector = await embedding_service.embed_query(clause[:3000])
         t_embed = time.monotonic()
         logger.info("timing_clarification_embed", duration_s=round(t_embed - t0, 2))
 
@@ -67,7 +66,6 @@ async def generate_clarification(
         result = await session.execute(stmt)
         rows = result.all()
 
-        # Filter by relevance
         relevant_chunks = [
             (row.ArgumentareCritica, row.distance)
             for row in rows
@@ -75,9 +73,10 @@ async def generate_clarification(
         ]
 
         if relevant_chunks:
+            from sqlalchemy.orm import defer
             dec_ids = list({arg.decizie_id for arg, _ in relevant_chunks})
             dec_result = await session.execute(
-                select(DecizieCNSC).where(DecizieCNSC.id.in_(dec_ids))
+                select(DecizieCNSC).options(defer(DecizieCNSC.text_integral)).where(DecizieCNSC.id.in_(dec_ids))
             )
             decisions = {d.id: d for d in dec_result.scalars().all()}
             decision_refs = [d.external_id for d in decisions.values()]
@@ -115,8 +114,7 @@ async def generate_clarification(
 
     logger.info("timing_clarification_search", duration_s=round(time.monotonic() - t0, 2))
 
-    # Step 2: Build prompt with jurisprudence
-    jurisprudence_section = ""
+    # Build prompt with jurisprudence
     if jurisprudence_context:
         jurisprudence_section = f"""
 
@@ -134,7 +132,7 @@ Notă: Nu s-a găsit jurisprudență CNSC specifică în baza de date. NU cita �
 
     prompt = f"""Ești un expert în achiziții publice din România. Clientul vrea să conteste sau clarifice următoarea clauză din documentația de atribuire:
 
-"{request.clause}"
+"{clause}"
 {jurisprudence_section}
 
 Redactează o Cerere de Clarificare formală către autoritatea contractantă, care:
@@ -154,6 +152,21 @@ Structură:
 
 Redactează în limba română, limbaj formal și profesionist."""
 
+    return prompt, decision_refs
+
+
+@router.post("/", response_model=ClarificationResponse)
+async def generate_clarification(
+    request: ClarificationRequest,
+    session: AsyncSession = Depends(get_session),
+) -> ClarificationResponse:
+    """Generate a formal clarification request with RAG jurisprudence."""
+    t0 = time.monotonic()
+    logger.info("clarification_request", clause_length=len(request.clause))
+
+    llm = await get_active_llm_provider(session)
+    prompt, decision_refs = await _build_clarification_context(request.clause, session)
+
     try:
         response_text = await llm.complete(
             prompt=prompt,
@@ -172,3 +185,29 @@ Redactează în limba română, limbaj formal și profesionist."""
     except Exception as e:
         logger.error("clarification_error", error=str(e))
         raise
+
+
+@router.post("/stream")
+async def generate_clarification_stream(
+    request: ClarificationRequest,
+    session: AsyncSession = Depends(get_session),
+):
+    """Stream a clarification request via SSE."""
+    logger.info("clarification_stream_request", clause_length=len(request.clause))
+
+    llm = await get_active_llm_provider(session)
+    prompt, decision_refs = await _build_clarification_context(request.clause, session)
+
+    status_msgs = []
+    if decision_refs:
+        status_msgs.append(f"Am găsit {len(decision_refs)} decizii CNSC relevante")
+    status_msgs.append("Se redactează cererea de clarificare...")
+
+    return await create_sse_response(
+        llm=llm,
+        prompt=prompt,
+        temperature=0.3,
+        max_tokens=8192,
+        metadata={"decision_refs": decision_refs},
+        status_messages=status_msgs,
+    )

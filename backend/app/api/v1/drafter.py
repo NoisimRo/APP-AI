@@ -86,9 +86,10 @@ async def _build_drafter_context(
         ]
 
         if relevant_chunks:
+            from sqlalchemy.orm import defer
             dec_ids = list({arg.decizie_id for arg, _ in relevant_chunks})
             dec_result = await session.execute(
-                select(DecizieCNSC).where(DecizieCNSC.id.in_(dec_ids))
+                select(DecizieCNSC).options(defer(DecizieCNSC.text_integral)).where(DecizieCNSC.id.in_(dec_ids))
             )
             decisions = {d.id: d for d in dec_result.scalars().all()}
             decision_refs = [d.external_id for d in decisions.values()]
@@ -266,10 +267,16 @@ async def draft_complaint_stream(
     prompt, decision_refs = await _build_drafter_context(request, session, scope_decision_ids=scope_ids)
     llm = await get_active_llm_provider(session)
 
+    status_msgs = []
+    if decision_refs:
+        status_msgs.append(f"Am găsit {len(decision_refs)} decizii CNSC relevante")
+    status_msgs.append("Se redactează contestația...")
+
     return await create_sse_response(
         llm=llm,
         prompt=prompt,
         temperature=0.3,
         max_tokens=16384,
         metadata={"decision_refs": decision_refs},
+        status_messages=status_msgs,
     )
