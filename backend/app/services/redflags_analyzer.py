@@ -18,7 +18,7 @@ import asyncio
 import json
 import re
 from typing import Optional
-from sqlalchemy import select, func
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.logging import get_logger
@@ -353,6 +353,7 @@ Severitate:
         query_text: str,
         session: AsyncSession,
         limit: int = 3,
+        query_vector=None,
     ) -> list[tuple[LegislatieFragment, str]]:
         """Search legislation fragments by vector similarity.
 
@@ -360,21 +361,13 @@ Severitate:
             query_text: Description of the issue to find relevant articles for.
             session: Database session.
             limit: Maximum fragments to return.
+            query_vector: Pre-computed embedding vector (avoids redundant API call).
 
         Returns:
             List of (LegislatieFragment, act_denumire) tuples.
         """
-        has_articles = await session.scalar(
-            select(func.count())
-            .select_from(LegislatieFragment)
-            .where(LegislatieFragment.embedding.isnot(None))
-        )
-
-        if not has_articles:
-            logger.warning("no_legislation_articles_available")
-            return []
-
-        query_vector = await self.embedding_service.embed_query(query_text)
+        if query_vector is None:
+            query_vector = await self.embedding_service.embed_query(query_text)
 
         stmt = (
             select(
@@ -410,6 +403,7 @@ Severitate:
         query_text: str,
         session: AsyncSession,
         limit: int = 5,
+        query_vector=None,
     ) -> tuple[list[DecizieCNSC], list[tuple[ArgumentareCritica, float]]]:
         """Search CNSC decisions by vector similarity.
 
@@ -417,20 +411,13 @@ Severitate:
             query_text: Description of the issue to find jurisprudence for.
             session: Database session.
             limit: Maximum chunks to return.
+            query_vector: Pre-computed embedding vector (avoids redundant API call).
 
         Returns:
             Tuple of (decisions, matched_chunks with distances).
         """
-        has_embeddings = await session.scalar(
-            select(func.count())
-            .select_from(ArgumentareCritica)
-            .where(ArgumentareCritica.embedding.isnot(None))
-        )
-
-        if not has_embeddings:
-            return [], []
-
-        query_vector = await self.embedding_service.embed_query(query_text)
+        if query_vector is None:
+            query_vector = await self.embedding_service.embed_query(query_text)
 
         stmt = (
             select(
@@ -488,9 +475,12 @@ Severitate:
         """
         search_query = clause_info.get("search_query", clause_info.get("issue", ""))
 
+        # Embed ONCE, reuse for both searches (avoids 2x Gemini API calls per flag)
+        query_vector = await self.embedding_service.embed_query(search_query)
+
         # Run searches SEQUENTIALLY — AsyncSession cannot handle concurrent queries
-        legal_articles = await self._search_legislation(search_query, session, limit=3)
-        decisions, matched_chunks = await self._search_jurisprudence(search_query, session, limit=5)
+        legal_articles = await self._search_legislation(search_query, session, limit=3, query_vector=query_vector)
+        decisions, matched_chunks = await self._search_jurisprudence(search_query, session, limit=5, query_vector=query_vector)
 
         return {
             "legal_articles": legal_articles,
@@ -767,6 +757,9 @@ Răspunde EXCLUSIV în format JSON:
         Returns:
             List of grounded red flags.
         """
+        import time
+        t0 = time.monotonic()
+
         logger.info(
             "analyzing_red_flags",
             text_length=len(document_text),
@@ -775,6 +768,8 @@ Răspunde EXCLUSIV în format JSON:
 
         # Pass 1: Dynamic detection (with chunking for large documents)
         detected_clauses = await self._detect_clauses(document_text)
+        t_detect = time.monotonic()
+        logger.info("timing_pass1_detection", duration_s=round(t_detect - t0, 2), clauses=len(detected_clauses))
 
         if not detected_clauses:
             logger.info("no_red_flags_detected")
@@ -805,6 +800,9 @@ Răspunde EXCLUSIV în format JSON:
                 ctx = await self._fetch_context_for_flag(clause, session)
                 contexts.append(ctx)
 
+            t_context = time.monotonic()
+            logger.info("timing_pass2_context_fetch", duration_s=round(t_context - t_detect, 2), flags=len(detected_clauses))
+
             # Phase 2b: Run LLM grounding calls in PARALLEL (no DB needed)
             semaphore = asyncio.Semaphore(MAX_CONCURRENT_GROUNDING)
 
@@ -832,6 +830,7 @@ Răspunde EXCLUSIV în format JSON:
                 for c in detected_clauses
             ]
 
+        t_end = time.monotonic()
         logger.info(
             "red_flags_analyzed",
             count=len(grounded_flags),
@@ -843,5 +842,6 @@ Răspunde EXCLUSIV în format JSON:
                 1 for f in grounded_flags if f.get("decision_refs")
             ),
         )
+        logger.info("timing_redflags_total", duration_s=round(t_end - t0, 2))
 
         return grounded_flags

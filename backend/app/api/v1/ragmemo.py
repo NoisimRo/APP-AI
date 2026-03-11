@@ -1,5 +1,7 @@
 """RAG Memo generation API endpoints."""
 
+import time
+
 from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -70,6 +72,7 @@ async def generate_rag_memo(
         query = f"Generează un memo juridic despre: {request.topic}. Include jurisprudență CNSC relevantă, argumente cheie și recomandări."
 
         # Generate response using RAG
+        t0 = time.monotonic()
         response_text, citations, confidence, _ = await rag.generate_response(
             query=query,
             session=session,
@@ -77,6 +80,7 @@ async def generate_rag_memo(
             max_decisions=request.max_decisions,
             scope_decision_ids=scope_ids,
         )
+        logger.info("timing_ragmemo_total", duration_s=round(time.monotonic() - t0, 2))
 
         logger.info(
             "rag_memo_generated",
@@ -119,10 +123,13 @@ async def generate_rag_memo_stream(
 
     query = f"Generează un memo juridic despre: {request.topic}. Include jurisprudență CNSC relevantă, argumente cheie și recomandări."
 
+    t0 = time.monotonic()
     contexts, system_prompt, citations, confidence, _ = await rag.prepare_context(
         query=query, session=session, conversation_history=None, max_decisions=request.max_decisions,
         scope_decision_ids=scope_ids,
     )
+    search_duration_s = round(time.monotonic() - t0, 2)
+    logger.info("timing_ragmemo_stream_search", duration_s=search_duration_s)
 
     if contexts is None:
         raise HTTPException(
@@ -141,5 +148,6 @@ async def generate_rag_memo_stream(
             "citations": [{"decision_id": c.decision_id, "text": c.text, "verified": c.verified} for c in citations],
             "confidence": confidence,
             "decisions_used": len(citations),
+            "search_duration_s": search_duration_s,
         },
     )
