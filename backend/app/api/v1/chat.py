@@ -158,6 +158,9 @@ async def chat_stream(
                 raise HTTPException(status_code=404, detail="Scope not found")
 
         # Run RAG search to get context and citations
+        import time
+        t_start = time.monotonic()
+
         query = request.message
         contexts, system_prompt, citations, confidence, suggested = await rag.prepare_context(
             query=query, session=session, conversation_history=history, max_decisions=5,
@@ -165,6 +168,9 @@ async def chat_stream(
             enable_rerank=request.rerank,
             enable_expansion=request.expansion,
         )
+
+        search_duration_s = round(time.monotonic() - t_start, 2)
+        logger.info("chat_stream_search_completed", duration_s=search_duration_s)
 
         if contexts is None:
             # No relevant results — return a non-streaming error message
@@ -186,6 +192,7 @@ async def chat_stream(
                 "confidence": confidence,
                 "suggested_questions": suggested,
                 "conversation_id": request.conversation_id or f"conv-{hash(request.message)}",
+                "search_duration_s": search_duration_s,
             },
         )
 
