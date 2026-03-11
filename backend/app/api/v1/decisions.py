@@ -612,6 +612,199 @@ async def get_stats(
     }
 
 
+@router.get("/stats/win-rate-by-category")
+async def get_win_rate_by_category(
+    session: AsyncSession = Depends(get_session),
+):
+    """Win rates broken down by CPV category (Furnizare/Servicii/Lucrari) and tip_contestatie."""
+    if not is_db_available():
+        return []
+
+    query = (
+        select(
+            DecizieCNSC.cpv_categorie,
+            DecizieCNSC.tip_contestatie,
+            DecizieCNSC.solutie_contestatie,
+            func.count().label("count"),
+        )
+        .where(DecizieCNSC.cpv_categorie.isnot(None))
+        .group_by(DecizieCNSC.cpv_categorie, DecizieCNSC.tip_contestatie, DecizieCNSC.solutie_contestatie)
+        .order_by(DecizieCNSC.cpv_categorie)
+    )
+    result = await session.execute(query)
+    rows = result.all()
+
+    # Aggregate into structured response
+    categories: dict = {}
+    for row in rows:
+        cat = row.cpv_categorie
+        tip = row.tip_contestatie or "necunoscut"
+        sol = row.solutie_contestatie or "NECUNOSCUT"
+        cnt = row.count
+
+        if cat not in categories:
+            categories[cat] = {"total": 0, "admis": 0, "admis_partial": 0, "respins": 0, "by_type": {}}
+        categories[cat]["total"] += cnt
+        if sol == "ADMIS":
+            categories[cat]["admis"] += cnt
+        elif sol == "ADMIS_PARTIAL":
+            categories[cat]["admis_partial"] += cnt
+        elif sol == "RESPINS":
+            categories[cat]["respins"] += cnt
+
+        if tip not in categories[cat]["by_type"]:
+            categories[cat]["by_type"][tip] = {"total": 0, "admis": 0, "admis_partial": 0, "respins": 0}
+        categories[cat]["by_type"][tip]["total"] += cnt
+        if sol == "ADMIS":
+            categories[cat]["by_type"][tip]["admis"] += cnt
+        elif sol == "ADMIS_PARTIAL":
+            categories[cat]["by_type"][tip]["admis_partial"] += cnt
+        elif sol == "RESPINS":
+            categories[cat]["by_type"][tip]["respins"] += cnt
+
+    return [
+        {
+            "category": cat,
+            "total": data["total"],
+            "admis": data["admis"],
+            "admis_partial": data["admis_partial"],
+            "respins": data["respins"],
+            "win_rate": round((data["admis"] + data["admis_partial"]) / data["total"] * 100, 1) if data["total"] > 0 else 0,
+            "by_type": [
+                {
+                    "type": tip,
+                    "total": tdata["total"],
+                    "admis": tdata["admis"],
+                    "admis_partial": tdata["admis_partial"],
+                    "respins": tdata["respins"],
+                    "win_rate": round((tdata["admis"] + tdata["admis_partial"]) / tdata["total"] * 100, 1) if tdata["total"] > 0 else 0,
+                }
+                for tip, tdata in data["by_type"].items()
+            ],
+        }
+        for cat, data in categories.items()
+    ]
+
+
+@router.get("/stats/win-rate-by-critici")
+async def get_win_rate_by_critici(
+    session: AsyncSession = Depends(get_session),
+):
+    """Win rates by criticism code (D1, R2, etc.) based on ArgumentareCritica.castigator_critica."""
+    if not is_db_available():
+        return []
+
+    query = (
+        select(
+            ArgumentareCritica.cod_critica,
+            ArgumentareCritica.castigator_critica,
+            func.count().label("count"),
+        )
+        .where(ArgumentareCritica.cod_critica.isnot(None))
+        .group_by(ArgumentareCritica.cod_critica, ArgumentareCritica.castigator_critica)
+        .order_by(ArgumentareCritica.cod_critica)
+    )
+    result = await session.execute(query)
+    rows = result.all()
+
+    codes: dict = {}
+    for row in rows:
+        cod = row.cod_critica
+        winner = row.castigator_critica or "unknown"
+        cnt = row.count
+
+        if cod not in codes:
+            codes[cod] = {"total": 0, "contestator": 0, "autoritate": 0, "partial": 0, "unknown": 0}
+        codes[cod]["total"] += cnt
+        if winner in codes[cod]:
+            codes[cod][winner] += cnt
+
+    result_list = [
+        {
+            "code": cod,
+            "total": data["total"],
+            "contestator_wins": data["contestator"],
+            "autoritate_wins": data["autoritate"],
+            "partial": data["partial"],
+            "unknown": data["unknown"],
+            "contestator_win_rate": round(
+                (data["contestator"] + data["partial"]) / data["total"] * 100, 1
+            ) if data["total"] > 0 else 0,
+        }
+        for cod, data in codes.items()
+    ]
+    # Sort by total volume descending
+    result_list.sort(key=lambda x: x["total"], reverse=True)
+    return result_list
+
+
+@router.get("/stats/cpv-top-grouped")
+async def get_cpv_top_grouped(
+    limit: int = Query(15, ge=1, le=50),
+    session: AsyncSession = Depends(get_session),
+):
+    """Top CPV codes grouped by their 2-digit division with win rates."""
+    if not is_db_available():
+        return []
+
+    query = (
+        select(
+            DecizieCNSC.cod_cpv,
+            func.coalesce(DecizieCNSC.cpv_descriere, NomenclatorCPV.descriere).label("descriere"),
+            DecizieCNSC.cpv_categorie,
+            DecizieCNSC.solutie_contestatie,
+            func.count().label("count"),
+        )
+        .outerjoin(NomenclatorCPV, DecizieCNSC.cod_cpv == NomenclatorCPV.cod_cpv)
+        .where(DecizieCNSC.cod_cpv.isnot(None))
+        .group_by(
+            DecizieCNSC.cod_cpv, DecizieCNSC.cpv_descriere,
+            DecizieCNSC.cpv_categorie, DecizieCNSC.solutie_contestatie,
+            NomenclatorCPV.descriere,
+        )
+        .order_by(func.count().desc())
+    )
+    result = await session.execute(query)
+    rows = result.all()
+
+    # Aggregate per CPV code first
+    cpv_data: dict = {}
+    for row in rows:
+        code = row.cod_cpv
+        if code not in cpv_data:
+            cpv_data[code] = {
+                "code": code,
+                "description": row.descriere,
+                "categorie": row.cpv_categorie,
+                "division": code[:2] if code else "??",
+                "total": 0,
+                "admis": 0,
+                "admis_partial": 0,
+                "respins": 0,
+            }
+        sol = row.solutie_contestatie or ""
+        cpv_data[code]["total"] += row.count
+        if sol == "ADMIS":
+            cpv_data[code]["admis"] += row.count
+        elif sol == "ADMIS_PARTIAL":
+            cpv_data[code]["admis_partial"] += row.count
+        elif sol == "RESPINS":
+            cpv_data[code]["respins"] += row.count
+
+    # Sort by total and take top N
+    sorted_cpvs = sorted(cpv_data.values(), key=lambda x: x["total"], reverse=True)[:limit]
+
+    return [
+        {
+            **cpv,
+            "win_rate": round(
+                (cpv["admis"] + cpv["admis_partial"]) / cpv["total"] * 100, 1
+            ) if cpv["total"] > 0 else 0,
+        }
+        for cpv in sorted_cpvs
+    ]
+
+
 @router.post("/upload")
 async def upload_decision(
     file: UploadFile = File(..., description="Decision file (.txt or .pdf)"),
