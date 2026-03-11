@@ -1071,103 +1071,92 @@ class RAGService:
         # 3. Find CPV codes matching domain keywords in the query
         cpv_codes = await self._find_cpv_codes_for_query(query, session)
 
-        # 4. Vector search (+ optional trigram for scoped queries)
-        # No has_embeddings check needed — vector search returns [] if no embeddings exist
-
-        # Query expansion: generate reformulations for better coverage
-        # Default OFF for performance; user can enable via UI toggle
+        # 4. Vector search (same logic as working version ffe3ed6)
+        # Optional query expansion (OFF by default, user can enable via UI toggle)
         queries = [query]
         if enable_expansion:
             queries = await self._expand_query(query)
 
         # Vector search for each query variant
-        # Pass pre-computed vector for the original query; expanded queries get their own embedding
-        all_vector: list[tuple[ArgumentareCritica, float]] = []
+        matched_chunks: list[tuple[ArgumentareCritica, float]] = []
         for i, q in enumerate(queries):
             v_results = await self.search_by_vector(
                 q, session, limit=limit * 3,
                 scope_decision_ids=scope_decision_ids,
                 query_vector=query_vector if i == 0 else None,
             )
-            all_vector.extend(v_results)
+            matched_chunks.extend(v_results)
 
-        # Trigram search only for scoped queries (small decision set)
-        # For global search, trigram on text_integral is too slow (78MB+)
-        all_trigram: list[tuple[ArgumentareCritica, float]] = []
-        if scope_decision_ids is not None:
+        # Optional trigram search (only when scope + expansion are both active)
+        if scope_decision_ids is not None and enable_expansion:
+            all_trigram: list[tuple[ArgumentareCritica, float]] = []
             for q in queries:
                 t_results = await self._trigram_search(
                     q, session, limit=limit * 3,
                     scope_decision_ids=scope_decision_ids,
                 )
                 all_trigram.extend(t_results)
+            if matched_chunks and all_trigram:
+                matched_chunks = self._rrf_merge(matched_chunks, all_trigram)
+            elif all_trigram:
+                matched_chunks = all_trigram
 
-        # Merge with Reciprocal Rank Fusion
-        if all_vector and all_trigram:
-            matched_chunks = self._rrf_merge(all_vector, all_trigram)
-        elif all_vector:
-            matched_chunks = all_vector
-        else:
-            matched_chunks = all_trigram
-
-            if matched_chunks:
-                # If we have CPV codes, boost chunks from decisions with matching CPV
-                if cpv_codes:
-                    cpv_set = set(cpv_codes)
-                    # Load decision CPV codes for matched chunks
-                    chunk_dec_ids = list({arg.decizie_id for arg, _ in matched_chunks})
-                    stmt = (
-                        select(DecizieCNSC.id, DecizieCNSC.cod_cpv)
-                        .where(DecizieCNSC.id.in_(chunk_dec_ids))
-                    )
-                    result = await session.execute(stmt)
-                    dec_cpv_map = {row[0]: row[1] for row in result.all()}
-
-                    # Re-score: reduce distance for CPV-matching decisions
-                    boosted_chunks = []
-                    for arg, dist in matched_chunks:
-                        dec_cpv = dec_cpv_map.get(arg.decizie_id)
-                        if dec_cpv and dec_cpv in cpv_set:
-                            boosted_chunks.append((arg, dist * 0.5))  # Boost by halving distance
-                        else:
-                            boosted_chunks.append((arg, dist))
-                    matched_chunks = sorted(boosted_chunks, key=lambda x: x[1])
-
-                # Optional LLM reranking
-                if enable_rerank:
-                    matched_chunks = await self._rerank_chunks(
-                        query, matched_chunks, top_k=limit * 3
-                    )
-
-                # Get unique decision IDs from matched chunks
-                seen_ids = set()
-                unique_decision_ids = []
-                for arg, _dist in matched_chunks:
-                    if arg.decizie_id not in seen_ids:
-                        seen_ids.add(arg.decizie_id)
-                        unique_decision_ids.append(arg.decizie_id)
-                        if len(unique_decision_ids) >= limit:
-                            break
-
-                # Load parent decisions
+        if matched_chunks:
+            # CPV boost: reduce distance for decisions matching query CPV codes
+            if cpv_codes:
+                cpv_set = set(cpv_codes)
+                chunk_dec_ids = list({arg.decizie_id for arg, _ in matched_chunks})
                 stmt = (
-                    select(DecizieCNSC)
-                    .where(DecizieCNSC.id.in_(unique_decision_ids))
+                    select(DecizieCNSC.id, DecizieCNSC.cod_cpv)
+                    .where(DecizieCNSC.id.in_(chunk_dec_ids))
                 )
                 result = await session.execute(stmt)
-                decisions = list(result.scalars().all())
+                dec_cpv_map = {row[0]: row[1] for row in result.all()}
 
-                # Sort decisions to match the order from vector search
-                id_order = {did: i for i, did in enumerate(unique_decision_ids)}
-                decisions.sort(key=lambda d: id_order.get(d.id, 999))
+                boosted_chunks = []
+                for arg, dist in matched_chunks:
+                    dec_cpv = dec_cpv_map.get(arg.decizie_id)
+                    if dec_cpv and dec_cpv in cpv_set:
+                        boosted_chunks.append((arg, dist * 0.5))
+                    else:
+                        boosted_chunks.append((arg, dist))
+                matched_chunks = sorted(boosted_chunks, key=lambda x: x[1])
 
-                logger.info(
-                    "vector_search_decisions_found",
-                    count=len(decisions),
-                    chunks_matched=len(matched_chunks),
-                    cpv_boost=bool(cpv_codes),
+            # Optional LLM reranking (OFF by default, user can enable via UI toggle)
+            if enable_rerank:
+                matched_chunks = await self._rerank_chunks(
+                    query, matched_chunks, top_k=limit * 3
                 )
-                return decisions, matched_chunks
+
+            # Get unique decision IDs from matched chunks
+            seen_ids = set()
+            unique_decision_ids = []
+            for arg, _dist in matched_chunks:
+                if arg.decizie_id not in seen_ids:
+                    seen_ids.add(arg.decizie_id)
+                    unique_decision_ids.append(arg.decizie_id)
+                    if len(unique_decision_ids) >= limit:
+                        break
+
+            # Load parent decisions
+            stmt = (
+                select(DecizieCNSC)
+                .where(DecizieCNSC.id.in_(unique_decision_ids))
+            )
+            result = await session.execute(stmt)
+            decisions = list(result.scalars().all())
+
+            # Sort decisions to match the order from vector search
+            id_order = {did: i for i, did in enumerate(unique_decision_ids)}
+            decisions.sort(key=lambda d: id_order.get(d.id, 999))
+
+            logger.info(
+                "vector_search_decisions_found",
+                count=len(decisions),
+                chunks_matched=len(matched_chunks),
+                cpv_boost=bool(cpv_codes),
+            )
+            return decisions, matched_chunks
 
         # 5. CPV domain search (when no embeddings or vector search returned nothing)
         if cpv_codes:
@@ -1578,33 +1567,14 @@ class RAGService:
                      decisions=len(decisions),
                      chunks=len(matched_chunks))
 
-        # Legislation Linking: find legal provisions referenced by matched chunks
-        # (uses explicit reference parsing only — no additional embedding calls)
-        if matched_chunks:
-            already_found = {frag.id for frag, _ in legislation_fragments}
-            chunk_legislation = await self._find_legislation_for_chunks(
-                matched_chunks, session,
-                already_found_ids=already_found,
-                limit=8,
-            )
-            if chunk_legislation:
-                legislation_fragments.extend(chunk_legislation)
-                logger.info(
-                    "legislation_linking_enriched_context",
-                    from_query=len(legislation_fragments) - len(chunk_legislation),
-                    from_chunks=len(chunk_legislation),
-                )
-
-        t_linking = time.monotonic()
-        logger.info("timing_legislation_linking",
-                     duration_s=round(t_linking - t_decisions, 2))
+        # Legislation linking removed — was not in the working version (ffe3ed6),
+        # added complexity and latency without proven benefit.
 
         logger.info("timing_prepare_context_total",
-                     duration_s=round(t_linking - t0, 2),
+                     duration_s=round(t_decisions - t0, 2),
                      embedding_s=round(t_embed - t0, 2),
                      legislation_s=round(t_legis - t_embed, 2),
-                     decisions_s=round(t_decisions - t_legis, 2),
-                     linking_s=round(t_linking - t_decisions, 2))
+                     decisions_s=round(t_decisions - t_legis, 2))
 
         if not decisions and not legislation_fragments:
             return None, None, [], 0.0, ["Ce decizii CNSC sunt disponibile?", "Arată-mi toate deciziile"]
