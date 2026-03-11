@@ -4,6 +4,19 @@ from abc import ABC, abstractmethod
 from typing import AsyncIterator
 
 
+class ResourceExhaustedError(Exception):
+    """Raised when an API quota or rate limit is exhausted.
+
+    This signals that the process should stop retrying and halt,
+    as further requests will also fail until quota resets.
+    """
+
+    def __init__(self, provider: str, message: str, retry_after: float | None = None):
+        self.provider = provider
+        self.retry_after = retry_after
+        super().__init__(f"[{provider}] Resource exhausted: {message}")
+
+
 class LLMProvider(ABC):
     """Abstract base class for LLM providers.
 

@@ -7,7 +7,7 @@ from google.genai import types
 
 from app.core.config import get_settings
 from app.core.logging import get_logger
-from app.services.llm.base import LLMProvider
+from app.services.llm.base import LLMProvider, ResourceExhaustedError
 
 logger = get_logger(__name__)
 
@@ -103,6 +103,7 @@ class GeminiProvider(LLMProvider):
             return text
 
         except Exception as e:
+            self._check_resource_exhausted(e)
             logger.error("gemini_completion_error", error=str(e))
             raise
 
@@ -130,6 +131,7 @@ class GeminiProvider(LLMProvider):
                     yield chunk.text
 
         except Exception as e:
+            self._check_resource_exhausted(e)
             logger.error("gemini_stream_error", error=str(e))
             raise
 
@@ -155,8 +157,19 @@ class GeminiProvider(LLMProvider):
             return [e.values for e in result.embeddings]
 
         except Exception as e:
+            self._check_resource_exhausted(e)
             logger.error("gemini_embed_error", error=str(e))
             raise
+
+    def _check_resource_exhausted(self, error: Exception) -> None:
+        """Raise ResourceExhaustedError if the error is a quota/rate-limit issue."""
+        err_str = str(error).lower()
+        if any(kw in err_str for kw in [
+            "resource_exhausted", "resource exhausted",
+            "quota", "rate limit", "429", "too many requests",
+            "rate_limit", "ratelimit",
+        ]):
+            raise ResourceExhaustedError("gemini", str(error)) from error
 
     def _build_prompt(
         self,

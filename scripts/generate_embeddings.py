@@ -33,6 +33,7 @@ from app.db.session import init_db
 from app.db import session as db_session
 from app.models.decision import ArgumentareCritica
 from app.services.embedding import EmbeddingService
+from app.services.llm.base import ResourceExhaustedError
 
 logger = get_logger(__name__)
 
@@ -112,6 +113,12 @@ async def generate_embeddings_batched(
                     batch_size=api_batch_size,
                     rate_limit_delay=rate_limit,
                 )
+            except ResourceExhaustedError as e:
+                print(f"\n  RESOURCE EXHAUSTED: {e}")
+                print("  API quota or rate limit exceeded. Stopping immediately.")
+                print(f"  Progress saved: {total_generated} embeddings committed so far.")
+                print("  Wait for quota to reset and re-run to continue.")
+                return total_generated
             except Exception as e:
                 print(f"  ERROR: {e}")
                 print(f"  Progress saved: {total_generated} embeddings committed so far.")

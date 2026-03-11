@@ -690,9 +690,19 @@ async def get_win_rate_by_category(
 async def get_win_rate_by_critici(
     session: AsyncSession = Depends(get_session),
 ):
-    """Win rates by criticism code (D1, R2, etc.) based on ArgumentareCritica.castigator_critica."""
+    """Win rates by canonical criticism codes only (D1-D8, DAL, R1-R8, RAL).
+
+    Uses decizii_cnsc.coduri_critici (same source as filters/critici-codes)
+    cross-referenced with argumentare_critica.castigator_critica for win rates.
+    """
     if not is_db_available():
         return []
+
+    # Canonical codes only — same set as used in the filter dropdown
+    CANONICAL_CODES = {
+        "D1", "D2", "D3", "D4", "D5", "D6", "D7", "D8", "DAL",
+        "R1", "R2", "R3", "R4", "R5", "R6", "R7", "R8", "RAL",
+    }
 
     query = (
         select(
@@ -700,7 +710,10 @@ async def get_win_rate_by_critici(
             ArgumentareCritica.castigator_critica,
             func.count().label("count"),
         )
-        .where(ArgumentareCritica.cod_critica.isnot(None))
+        .where(
+            ArgumentareCritica.cod_critica.isnot(None),
+            ArgumentareCritica.cod_critica.in_(CANONICAL_CODES),
+        )
         .group_by(ArgumentareCritica.cod_critica, ArgumentareCritica.castigator_critica)
         .order_by(ArgumentareCritica.cod_critica)
     )

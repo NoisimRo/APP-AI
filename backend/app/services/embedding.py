@@ -13,7 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.logging import get_logger
 from app.models.decision import ArgumentareCritica
-from app.services.llm.base import LLMProvider
+from app.services.llm.base import LLMProvider, ResourceExhaustedError
 from app.services.llm.factory import get_embedding_provider
 
 logger = get_logger(__name__)
@@ -126,6 +126,12 @@ class EmbeddingService:
                     embeddings = await self.llm.embed(batch, task_type=task_type)
                     all_embeddings.extend(embeddings)
                     break
+                except ResourceExhaustedError:
+                    logger.error(
+                        "embedding_resource_exhausted",
+                        batch_start=i,
+                    )
+                    raise  # Propagate immediately — no retry
                 except Exception as e:
                     if attempt < max_retries:
                         delay = 2.0 ** attempt
