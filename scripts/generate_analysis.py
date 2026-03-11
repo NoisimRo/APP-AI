@@ -113,6 +113,12 @@ async def main():
         help="Show what would be analyzed without actually doing it",
     )
     parser.add_argument(
+        "--reanalyze-incomplete",
+        action="store_true",
+        help="Find and re-analyze decisions with incomplete analyses "
+             "(missing AC arguments or CNSC reasoning, typically caused by input truncation)",
+    )
+    parser.add_argument(
         "--rate-limit",
         type=float,
         default=RATE_LIMIT_DELAY,
@@ -160,7 +166,40 @@ async def main():
         print()
 
         # Build query for decisions to analyze
-        if args.force:
+        overwrite_mode = args.force
+        if args.reanalyze_incomplete:
+            # Find decisions that have incomplete analyses:
+            # ArgumentareCritica records with missing AC arguments or CNSC reasoning
+            from sqlalchemy import or_
+            incomplete_ids = (
+                select(ArgumentareCritica.decizie_id)
+                .where(
+                    or_(
+                        ArgumentareCritica.argumente_ac.is_(None),
+                        ArgumentareCritica.argumente_ac == "",
+                        ArgumentareCritica.argumentatie_cnsc.is_(None),
+                        ArgumentareCritica.argumentatie_cnsc == "",
+                        ArgumentareCritica.elemente_retinute_cnsc.is_(None),
+                        ArgumentareCritica.elemente_retinute_cnsc == "",
+                    )
+                )
+                .distinct()
+            )
+            result_incomplete = await session.execute(incomplete_ids)
+            incomplete_decision_ids = [row[0] for row in result_incomplete.fetchall()]
+
+            if not incomplete_decision_ids:
+                print("No decisions with incomplete analyses found.")
+                return
+
+            print(f"  Found {len(incomplete_decision_ids)} decisions with incomplete analyses")
+            stmt = (
+                select(DecizieCNSC)
+                .where(DecizieCNSC.id.in_(incomplete_decision_ids))
+                .order_by(func.length(DecizieCNSC.text_integral).desc())  # Largest first
+            )
+            overwrite_mode = True  # Must overwrite to replace incomplete records
+        elif args.force:
             stmt = select(DecizieCNSC).order_by(DecizieCNSC.created_at.desc())
         else:
             # Only decisions without ArgumentareCritica
@@ -224,9 +263,10 @@ async def main():
         # (safe to use after session rollback, when ORM objects are expired)
         ext_id = decision.external_id
         dec_id = decision.id
+        text_len = len(decision.text_integral) if decision.text_integral else 0
 
         print(
-            f"[{i}/{len(decisions)}] Analyzing {ext_id}... ",
+            f"[{i}/{len(decisions)}] Analyzing {ext_id} ({text_len:,} chars)... ",
             end="",
             flush=True,
         )
@@ -234,7 +274,7 @@ async def main():
         async with db_session.async_session_factory() as session:
             count, error = await analyze_with_retry(
                 analysis_service, session, decision_id=dec_id,
-                external_id=ext_id, overwrite=args.force
+                external_id=ext_id, overwrite=overwrite_mode
             )
 
         if error:
