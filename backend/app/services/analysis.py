@@ -114,12 +114,22 @@ class DecisionAnalysisService:
         Returns:
             Tuple of (list of argumentation dicts, list of warning messages).
         """
+        text_len = len(decision.text_integral) if decision.text_integral else 0
+        was_truncated = text_len > 500000
+
+        logger.info(
+            "analyzing_decision",
+            external_id=decision.external_id,
+            text_length=text_len,
+            truncated=was_truncated,
+        )
+
         prompt = ANALYSIS_PROMPT_TEMPLATE.format(
             external_id=decision.external_id,
             coduri_critici=", ".join(decision.coduri_critici) if decision.coduri_critici else "N/A",
             tip_contestatie=decision.tip_contestatie,
             solutie=decision.solutie_contestatie or "N/A",
-            text_integral=decision.text_integral[:60000],  # Gemini context limit safety
+            text_integral=decision.text_integral[:500000],  # Gemini 2.5 Pro: 1M tokens (~4M chars), 500K chars ≈ 125K tokens
         )
 
         try:

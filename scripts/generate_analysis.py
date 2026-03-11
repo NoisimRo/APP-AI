@@ -17,6 +17,9 @@ Usage:
     python scripts/generate_analysis.py --limit 10       # Test with 10 decisions
     python scripts/generate_analysis.py --force           # Re-analyze everything
     python scripts/generate_analysis.py --dry-run         # Show what would be analyzed
+    python scripts/generate_analysis.py --decision BO2025_1076  # Re-analyze specific decision(s)
+    python scripts/generate_analysis.py --reanalyze-incomplete  # Fix incomplete analyses
+    python scripts/generate_analysis.py --reanalyze-incomplete --min-length 60000 --max-length 100000
     python scripts/generate_analysis.py --provider gemini --model gemini-2.5-pro
     python scripts/generate_analysis.py --provider groq --model llama-3.3-70b-versatile
 """
@@ -113,6 +116,12 @@ async def main():
         help="Show what would be analyzed without actually doing it",
     )
     parser.add_argument(
+        "--reanalyze-incomplete",
+        action="store_true",
+        help="Find and re-analyze decisions with incomplete analyses "
+             "(missing AC arguments or CNSC reasoning, typically caused by input truncation)",
+    )
+    parser.add_argument(
         "--rate-limit",
         type=float,
         default=RATE_LIMIT_DELAY,
@@ -128,6 +137,22 @@ async def main():
         "--model",
         type=str,
         help="Specific model to use (e.g., gemini-2.5-pro, claude-sonnet-4-6, llama-3.3-70b-versatile)",
+    )
+    parser.add_argument(
+        "--decision",
+        nargs="+",
+        metavar="BO_REF",
+        help="Specific BO reference(s) to analyze/re-analyze (e.g., BO2025_1076 BO2025_823)",
+    )
+    parser.add_argument(
+        "--min-length",
+        type=int,
+        help="Only include decisions with text_integral >= this many characters",
+    )
+    parser.add_argument(
+        "--max-length",
+        type=int,
+        help="Only include decisions with text_integral <= this many characters",
     )
 
     args = parser.parse_args()
@@ -160,7 +185,66 @@ async def main():
         print()
 
         # Build query for decisions to analyze
-        if args.force:
+        overwrite_mode = args.force
+        if args.decision:
+            # Target specific decisions by BO reference — highest priority
+            stmt = (
+                select(DecizieCNSC)
+                .where(DecizieCNSC.external_id.in_(args.decision))
+            )
+            overwrite_mode = True  # Always overwrite when targeting specific decisions
+
+            # Warn about unfound references
+            result_check = await session.execute(
+                select(DecizieCNSC.external_id).where(
+                    DecizieCNSC.external_id.in_(args.decision)
+                )
+            )
+            found_refs = {row[0] for row in result_check.fetchall()}
+            missing_refs = set(args.decision) - found_refs
+            if missing_refs:
+                print(f"  WARNING: BO references not found in DB: {', '.join(sorted(missing_refs))}")
+            if found_refs:
+                print(f"  Targeting {len(found_refs)} specific decision(s): {', '.join(sorted(found_refs))}")
+
+        elif args.reanalyze_incomplete:
+            # Find decisions that have incomplete analyses:
+            # - NULL or empty fields (AC arguments, CNSC reasoning, CNSC elements)
+            # - Fields containing "nu este disponibil" (LLM placeholder when input was truncated)
+            from sqlalchemy import or_
+            incomplete_ids = (
+                select(ArgumentareCritica.decizie_id)
+                .where(
+                    or_(
+                        ArgumentareCritica.argumente_ac.is_(None),
+                        ArgumentareCritica.argumente_ac == "",
+                        ArgumentareCritica.argumente_ac.ilike("%nu este disponibil%"),
+                        ArgumentareCritica.argumentatie_cnsc.is_(None),
+                        ArgumentareCritica.argumentatie_cnsc == "",
+                        ArgumentareCritica.argumentatie_cnsc.ilike("%nu este disponibil%"),
+                        ArgumentareCritica.elemente_retinute_cnsc.is_(None),
+                        ArgumentareCritica.elemente_retinute_cnsc == "",
+                        ArgumentareCritica.elemente_retinute_cnsc.ilike("%nu este disponibil%"),
+                    )
+                )
+                .distinct()
+            )
+            result_incomplete = await session.execute(incomplete_ids)
+            incomplete_decision_ids = [row[0] for row in result_incomplete.fetchall()]
+
+            if not incomplete_decision_ids:
+                print("No decisions with incomplete analyses found.")
+                return
+
+            print(f"  Found {len(incomplete_decision_ids)} decisions with incomplete analyses")
+            print(f"  (includes NULL/empty fields AND 'nu este disponibil' placeholders)")
+            stmt = (
+                select(DecizieCNSC)
+                .where(DecizieCNSC.id.in_(incomplete_decision_ids))
+                .order_by(func.length(DecizieCNSC.text_integral).desc())  # Largest first
+            )
+            overwrite_mode = True  # Must overwrite to replace incomplete records
+        elif args.force:
             stmt = select(DecizieCNSC).order_by(DecizieCNSC.created_at.desc())
         else:
             # Only decisions without ArgumentareCritica
@@ -170,6 +254,14 @@ async def main():
                 .where(DecizieCNSC.id.notin_(analyzed_ids))
                 .order_by(DecizieCNSC.created_at.desc())
             )
+
+        # Apply text length filters (works with all modes)
+        if args.min_length:
+            stmt = stmt.where(func.length(DecizieCNSC.text_integral) >= args.min_length)
+            print(f"  Filter: text length >= {args.min_length:,} chars")
+        if args.max_length:
+            stmt = stmt.where(func.length(DecizieCNSC.text_integral) <= args.max_length)
+            print(f"  Filter: text length <= {args.max_length:,} chars")
 
         if args.limit:
             stmt = stmt.limit(args.limit)
@@ -224,9 +316,10 @@ async def main():
         # (safe to use after session rollback, when ORM objects are expired)
         ext_id = decision.external_id
         dec_id = decision.id
+        text_len = len(decision.text_integral) if decision.text_integral else 0
 
         print(
-            f"[{i}/{len(decisions)}] Analyzing {ext_id}... ",
+            f"[{i}/{len(decisions)}] Analyzing {ext_id} ({text_len:,} chars)... ",
             end="",
             flush=True,
         )
@@ -234,7 +327,7 @@ async def main():
         async with db_session.async_session_factory() as session:
             count, error = await analyze_with_retry(
                 analysis_service, session, decision_id=dec_id,
-                external_id=ext_id, overwrite=args.force
+                external_id=ext_id, overwrite=overwrite_mode
             )
 
         if error:
