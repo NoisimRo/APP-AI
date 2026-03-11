@@ -743,65 +743,108 @@ async def get_cpv_top_grouped(
     limit: int = Query(15, ge=1, le=50),
     session: AsyncSession = Depends(get_session),
 ):
-    """Top CPV codes grouped by their 2-digit division with win rates."""
+    """Top CPV groups (3-digit prefix) with win rates.
+
+    Groups CPV codes by their first 3 digits (e.g., 331 = medical,
+    555 = catering) to aggregate related codes into meaningful categories.
+    For each group, finds the best representative description from the
+    nomenclator at the highest hierarchy level (nivel=1 or 2).
+    """
     if not is_db_available():
         return []
 
+    # Step 1: Get all decisions with CPV codes and their rulings
     query = (
         select(
             DecizieCNSC.cod_cpv,
-            func.coalesce(DecizieCNSC.cpv_descriere, NomenclatorCPV.descriere).label("descriere"),
             DecizieCNSC.cpv_categorie,
             DecizieCNSC.solutie_contestatie,
             func.count().label("count"),
         )
-        .outerjoin(NomenclatorCPV, DecizieCNSC.cod_cpv == NomenclatorCPV.cod_cpv)
         .where(DecizieCNSC.cod_cpv.isnot(None))
         .group_by(
-            DecizieCNSC.cod_cpv, DecizieCNSC.cpv_descriere,
-            DecizieCNSC.cpv_categorie, DecizieCNSC.solutie_contestatie,
-            NomenclatorCPV.descriere,
+            DecizieCNSC.cod_cpv,
+            DecizieCNSC.cpv_categorie,
+            DecizieCNSC.solutie_contestatie,
         )
-        .order_by(func.count().desc())
     )
     result = await session.execute(query)
     rows = result.all()
 
-    # Aggregate per CPV code first
-    cpv_data: dict = {}
+    # Step 2: Group by 3-digit prefix
+    groups: dict = {}
     for row in rows:
         code = row.cod_cpv
-        if code not in cpv_data:
-            cpv_data[code] = {
-                "code": code,
-                "description": row.descriere,
-                "categorie": row.cpv_categorie,
-                "division": code[:2] if code else "??",
+        prefix = code[:3] if code and len(code) >= 3 else code or "?"
+        sol = row.solutie_contestatie or ""
+        cat = row.cpv_categorie
+
+        if prefix not in groups:
+            groups[prefix] = {
+                "prefix": prefix,
+                "categorie": cat,
                 "total": 0,
                 "admis": 0,
                 "admis_partial": 0,
                 "respins": 0,
+                "cpv_codes": set(),
             }
-        sol = row.solutie_contestatie or ""
-        cpv_data[code]["total"] += row.count
+        groups[prefix]["total"] += row.count
+        groups[prefix]["cpv_codes"].add(code)
+        if cat and not groups[prefix]["categorie"]:
+            groups[prefix]["categorie"] = cat
         if sol == "ADMIS":
-            cpv_data[code]["admis"] += row.count
+            groups[prefix]["admis"] += row.count
         elif sol == "ADMIS_PARTIAL":
-            cpv_data[code]["admis_partial"] += row.count
+            groups[prefix]["admis_partial"] += row.count
         elif sol == "RESPINS":
-            cpv_data[code]["respins"] += row.count
+            groups[prefix]["respins"] += row.count
 
-    # Sort by total and take top N
-    sorted_cpvs = sorted(cpv_data.values(), key=lambda x: x["total"], reverse=True)[:limit]
+    # Step 3: Get group descriptions from nomenclator (nivel 1-2 = Diviziune/Grup)
+    prefixes = list(groups.keys())
+    if prefixes:
+        # Match nomenclator entries whose code starts with the 3-digit prefix
+        # Prefer lowest nivel (highest hierarchy) for the best group name
+        nom_query = (
+            select(
+                NomenclatorCPV.cod_cpv,
+                NomenclatorCPV.descriere,
+                NomenclatorCPV.nivel,
+            )
+            .where(NomenclatorCPV.nivel.in_([1, 2, 3]))
+            .order_by(NomenclatorCPV.nivel)
+        )
+        nom_result = await session.execute(nom_query)
+        nom_rows = nom_result.all()
+
+        # Build prefix -> description mapping
+        prefix_desc: dict[str, str] = {}
+        for nom in nom_rows:
+            nom_prefix = nom.cod_cpv[:3] if nom.cod_cpv and len(nom.cod_cpv) >= 3 else ""
+            if nom_prefix and nom_prefix in groups and nom_prefix not in prefix_desc:
+                prefix_desc[nom_prefix] = nom.descriere
+
+        for prefix, desc in prefix_desc.items():
+            groups[prefix]["description"] = desc
+
+    # Step 4: Sort by total and limit
+    sorted_groups = sorted(groups.values(), key=lambda x: x["total"], reverse=True)[:limit]
 
     return [
         {
-            **cpv,
+            "code": g["prefix"],
+            "description": g.get("description", f"Cod CPV {g['prefix']}xxx"),
+            "categorie": g["categorie"],
+            "total": g["total"],
+            "admis": g["admis"],
+            "admis_partial": g["admis_partial"],
+            "respins": g["respins"],
+            "cpv_count": len(g["cpv_codes"]),
             "win_rate": round(
-                (cpv["admis"] + cpv["admis_partial"]) / cpv["total"] * 100, 1
-            ) if cpv["total"] > 0 else 0,
+                (g["admis"] + g["admis_partial"]) / g["total"] * 100, 1
+            ) if g["total"] > 0 else 0,
         }
-        for cpv in sorted_cpvs
+        for g in sorted_groups
     ]
 
 
