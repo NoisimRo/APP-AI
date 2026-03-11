@@ -1002,6 +1002,7 @@ class RAGService:
         query: str,
         session: AsyncSession,
         limit: int = 5,
+        max_chunks: int = 20,
         scope_decision_ids: list[str] | None = None,
         enable_expansion: bool = False,
         enable_rerank: bool = False,
@@ -1009,29 +1010,34 @@ class RAGService:
     ) -> tuple[list[DecizieCNSC], list[tuple[ArgumentareCritica, float]]]:
         """Search for relevant decisions based on query.
 
+        Returns top max_chunks ArgumentareCritica syntheses (LLM-extracted)
+        plus their parent decision metadata (without text_integral).
+        More chunks = broader coverage across more decisions (typically 10-15+).
+
         Search strategy (in order of priority):
         1. Direct BO references (e.g. BO2025_1011)
         2. Legal article/reference search (e.g. art. 57 din Legea 98/2016)
-        3. CPV domain search (e.g. "catering" → find CPV codes → filter decisions)
-        4. Hybrid search: vector + trigram with RRF merge, optionally with query expansion
-           - Trigram search only runs when scope filter is active (scoped to fewer decisions)
-           - Without scope, only vector search runs (trigram on 78MB text_integral is too slow)
-        5. Keyword ILIKE fallback
+        3. Vector search on ArgumentareCritica embeddings (primary strategy)
+        4. Keyword ILIKE fallback
 
         Args:
             query: User's search query.
             session: Database session.
-            limit: Maximum number of decisions to return.
+            limit: Maximum decisions for fallback searches (BO, legal ref, keyword).
+            max_chunks: Maximum ArgumentareCritica chunks to return from vector search.
             scope_decision_ids: If provided, restrict search to these decision IDs only.
-            enable_expansion: If True, use LLM to generate query reformulations
-                for better retrieval coverage. Default False for performance.
-            enable_rerank: If True, use LLM to rerank retrieved chunks by relevance.
+            enable_expansion: If True, use LLM to generate query reformulations.
+            enable_rerank: If True, use LLM to rerank retrieved chunks.
+            query_vector: Pre-computed embedding vector.
 
         Returns:
             Tuple of (decisions, matched_chunks). matched_chunks is a list of
             (ArgumentareCritica, distance) tuples; empty if using fallback.
         """
-        logger.info("searching_decisions", query=query, limit=limit,
+        import time
+        t0 = time.monotonic()
+
+        logger.info("searching_decisions", query=query, max_chunks=max_chunks,
                      scoped=scope_decision_ids is not None,
                      expansion=enable_expansion, rerank=enable_rerank)
 
@@ -1068,31 +1074,33 @@ class RAGService:
             if ref_decisions:
                 return ref_decisions, ref_chunks
 
-        # 3. Find CPV codes matching domain keywords in the query
-        cpv_codes = await self._find_cpv_codes_for_query(query, session)
-
-        # 4. Vector search (same logic as working version ffe3ed6)
+        # 3. Vector search — primary strategy
         # Optional query expansion (OFF by default, user can enable via UI toggle)
         queries = [query]
         if enable_expansion:
             queries = await self._expand_query(query)
 
         # Vector search for each query variant
+        t_vec_start = time.monotonic()
         matched_chunks: list[tuple[ArgumentareCritica, float]] = []
         for i, q in enumerate(queries):
             v_results = await self.search_by_vector(
-                q, session, limit=limit * 3,
+                q, session, limit=max_chunks,
                 scope_decision_ids=scope_decision_ids,
                 query_vector=query_vector if i == 0 else None,
             )
             matched_chunks.extend(v_results)
+        t_vec = time.monotonic()
+        logger.info("timing_vector_search",
+                     duration_s=round(t_vec - t_vec_start, 2),
+                     chunks=len(matched_chunks))
 
         # Optional trigram search (only when scope + expansion are both active)
         if scope_decision_ids is not None and enable_expansion:
             all_trigram: list[tuple[ArgumentareCritica, float]] = []
             for q in queries:
                 t_results = await self._trigram_search(
-                    q, session, limit=limit * 3,
+                    q, session, limit=max_chunks,
                     scope_decision_ids=scope_decision_ids,
                 )
                 all_trigram.extend(t_results)
@@ -1102,71 +1110,55 @@ class RAGService:
                 matched_chunks = all_trigram
 
         if matched_chunks:
-            # CPV boost: reduce distance for decisions matching query CPV codes
-            if cpv_codes:
-                cpv_set = set(cpv_codes)
-                chunk_dec_ids = list({arg.decizie_id for arg, _ in matched_chunks})
-                stmt = (
-                    select(DecizieCNSC.id, DecizieCNSC.cod_cpv)
-                    .where(DecizieCNSC.id.in_(chunk_dec_ids))
-                )
-                result = await session.execute(stmt)
-                dec_cpv_map = {row[0]: row[1] for row in result.all()}
-
-                boosted_chunks = []
-                for arg, dist in matched_chunks:
-                    dec_cpv = dec_cpv_map.get(arg.decizie_id)
-                    if dec_cpv and dec_cpv in cpv_set:
-                        boosted_chunks.append((arg, dist * 0.5))
-                    else:
-                        boosted_chunks.append((arg, dist))
-                matched_chunks = sorted(boosted_chunks, key=lambda x: x[1])
-
             # Optional LLM reranking (OFF by default, user can enable via UI toggle)
             if enable_rerank:
                 matched_chunks = await self._rerank_chunks(
-                    query, matched_chunks, top_k=limit * 3
+                    query, matched_chunks, top_k=max_chunks
                 )
 
-            # Get unique decision IDs from matched chunks
-            seen_ids = set()
-            unique_decision_ids = []
-            for arg, _dist in matched_chunks:
-                if arg.decizie_id not in seen_ids:
-                    seen_ids.add(arg.decizie_id)
-                    unique_decision_ids.append(arg.decizie_id)
-                    if len(unique_decision_ids) >= limit:
-                        break
+            # Deduplicate chunks (same chunk from different query variants)
+            seen_chunk_ids = set()
+            deduped_chunks = []
+            for arg, dist in matched_chunks:
+                if arg.id not in seen_chunk_ids:
+                    seen_chunk_ids.add(arg.id)
+                    deduped_chunks.append((arg, dist))
+            matched_chunks = deduped_chunks[:max_chunks]
 
-            # Load parent decisions
+            # Collect ALL unique decision IDs from matched chunks (no cap)
+            unique_decision_ids = list({arg.decizie_id for arg, _ in matched_chunks})
+
+            # Load parent decisions WITHOUT text_integral (metadata only)
+            t_load_start = time.monotonic()
+            from sqlalchemy.orm import defer
             stmt = (
                 select(DecizieCNSC)
+                .options(defer(DecizieCNSC.text_integral))
                 .where(DecizieCNSC.id.in_(unique_decision_ids))
             )
             result = await session.execute(stmt)
             decisions = list(result.scalars().all())
+            t_load = time.monotonic()
+            logger.info("timing_decision_load",
+                         duration_s=round(t_load - t_load_start, 2),
+                         count=len(decisions))
 
-            # Sort decisions to match the order from vector search
-            id_order = {did: i for i, did in enumerate(unique_decision_ids)}
-            decisions.sort(key=lambda d: id_order.get(d.id, 999))
+            # Sort decisions by first appearance in matched chunks
+            first_appearance = {}
+            for i, (arg, _) in enumerate(matched_chunks):
+                if arg.decizie_id not in first_appearance:
+                    first_appearance[arg.decizie_id] = i
+            decisions.sort(key=lambda d: first_appearance.get(d.id, 999))
 
             logger.info(
                 "vector_search_decisions_found",
                 count=len(decisions),
                 chunks_matched=len(matched_chunks),
-                cpv_boost=bool(cpv_codes),
+                duration_s=round(t_load - t0, 2),
             )
             return decisions, matched_chunks
 
-        # 5. CPV domain search (when no embeddings or vector search returned nothing)
-        if cpv_codes:
-            cpv_decisions, cpv_chunks = await self._search_by_cpv_domain(
-                cpv_codes, session, limit=limit
-            )
-            if cpv_decisions:
-                return cpv_decisions, cpv_chunks
-
-        # 6. Fallback: keyword ILIKE search
+        # 4. Fallback: keyword ILIKE search
         logger.info("falling_back_to_keyword_search", query=query)
         decisions = await self._keyword_search(
             query, session, limit, scope_decision_ids=scope_decision_ids
@@ -1193,15 +1185,18 @@ class RAGService:
             conditions.append(DecizieCNSC.cpv_descriere.ilike(keyword_pattern))
             conditions.append(DecizieCNSC.cpv_clasa.ilike(keyword_pattern))
 
+        from sqlalchemy.orm import defer
         if not conditions:
             stmt = (
                 select(DecizieCNSC)
+                .options(defer(DecizieCNSC.text_integral))
                 .order_by(DecizieCNSC.data_decizie.desc().nulls_last())
                 .limit(limit)
             )
         else:
             stmt = (
                 select(DecizieCNSC)
+                .options(defer(DecizieCNSC.text_integral))
                 .where(or_(*conditions))
                 .order_by(DecizieCNSC.data_decizie.desc().nulls_last())
                 .limit(limit)
@@ -1324,10 +1319,6 @@ class RAGService:
             for arg, dist in matched_chunks:
                 chunks_by_decision.setdefault(arg.decizie_id, []).append((arg, dist))
 
-            # Budget: structured data + verbatim excerpts
-            # ~4000 chars per decision for verbatim text
-            verbatim_budget = max(2000, 20000 // max(len(chunks_by_decision), 1))
-
             for decizie_id, chunks in chunks_by_decision.items():
                 dec = decision_map.get(decizie_id)
                 if not dec:
@@ -1385,26 +1376,14 @@ class RAGService:
                         context_parts.append(f"Câștigător: {arg.castigator_critica}")
                     context_parts.append("")
 
-                # Add verbatim excerpt from text_integral for direct quoting
-                verbatim = self._extract_verbatim_excerpt(
-                    dec.text_integral, chunks, max_chars=verbatim_budget
-                )
-                context_parts.extend([
-                    "## Text original din decizie (pentru citare verbatim):",
-                    "",
-                    verbatim,
-                    "",
-                ])
+                # Sintezele LLM din ArgumentareCritica conțin toată informația
+                # relevantă — text_integral nu mai este necesar (conține garbage)
 
                 contexts.append("\n".join(context_parts))
         else:
-            # Fallback: use text_integral (up to 15000 chars per decision,
-            # reduced proportionally when multiple decisions to stay within
-            # LLM context limits)
-            max_chars_per_decision = max(4000, 60000 // max(len(decisions), 1))
+            # Fallback: keyword search found decisions but no ArgumentareCritica chunks
+            # Show only metadata (text_integral not loaded for performance)
             for dec in decisions:
-                text = dec.text_integral
-                truncated = len(text) > max_chars_per_decision
                 cpv_info = dec.cod_cpv or 'N/A'
                 if dec.cpv_descriere:
                     cpv_info += f" — {dec.cpv_descriere}"
@@ -1421,9 +1400,6 @@ class RAGService:
                     f"Soluție: {dec.solutie_contestatie or 'N/A'}",
                     f"Contestator: {dec.contestator or 'N/A'}",
                     f"Autoritate contractantă: {dec.autoritate_contractanta or 'N/A'}",
-                    "",
-                    "Text integral:" if not truncated else "Text integral (fragment):",
-                    text[:max_chars_per_decision] + ("..." if truncated else ""),
                 ]
                 contexts.append("\n".join(context_parts))
 
@@ -1451,7 +1427,7 @@ class RAGService:
                             break
 
                 if not citation_text:
-                    citation_text = dec.text_integral[:200] + "..."
+                    citation_text = f"Decizia {dec.external_id} — {dec.solutie_contestatie or 'N/A'}"
 
                 citations.append(Citation(
                     decision_id=dec.external_id,
@@ -1541,11 +1517,13 @@ class RAGService:
         t0 = time.monotonic()
 
         # EMBED QUERY ONCE — reuse the vector in all sub-functions
-        # This eliminates 2 redundant Gemini API calls (each 1-60s)
         query_vector = await self.embedding_service.embed_query(query)
         t_embed = time.monotonic()
         logger.info("timing_embed_query", duration_s=round(t_embed - t0, 2))
 
+        # Note: legislation + decisions share the same DB session,
+        # so they must run sequentially (asyncpg doesn't support
+        # concurrent queries on the same connection)
         legislation_fragments = await self._search_legislation_fragments(
             query, session, limit=5, query_vector=query_vector
         )
@@ -1566,9 +1544,6 @@ class RAGService:
                      duration_s=round(t_decisions - t_legis, 2),
                      decisions=len(decisions),
                      chunks=len(matched_chunks))
-
-        # Legislation linking removed — was not in the working version (ffe3ed6),
-        # added complexity and latency without proven benefit.
 
         logger.info("timing_prepare_context_total",
                      duration_s=round(t_decisions - t0, 2),
