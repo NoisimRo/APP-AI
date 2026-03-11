@@ -895,10 +895,21 @@ const App = () => {
           });
         },
         (meta) => {
-          // Append citations on completion
+          // Log timing for Network/Console tab visibility
+          if (meta.search_duration_s !== undefined) {
+            console.log(`[ExpertAP] Search duration: ${meta.search_duration_s}s`);
+          }
+
+          // Append citations + timing on completion
+          let suffix = "";
           if (meta.citations && meta.citations.length > 0) {
-            const sources = "\n\n📚 **Surse:** " + meta.citations.map((c: any) => `[[${c.decision_id}]]`).join(" ");
-            accumulated += sources;
+            suffix += "\n\n📚 **Surse:** " + meta.citations.map((c: any) => `[[${c.decision_id}]]`).join(" ");
+          }
+          if (meta.search_duration_s !== undefined) {
+            suffix += `\n\n⏱ *Căutare: ${meta.search_duration_s}s*`;
+          }
+          if (suffix) {
+            accumulated += suffix;
             setChatMessages(prev => {
               const updated = [...prev];
               updated[updated.length - 1] = { role: 'model', text: accumulated };
