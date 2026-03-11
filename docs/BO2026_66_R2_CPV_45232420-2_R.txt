@@ -1,0 +1,1599 @@
+În conformitate cu prevederile art. 12 alin. (1) și ale art. 27
+alin. (1) din Legea nr. 101/2016 privind remediile și căile de
+atac în materie de atribuire a contractelor de achiziție publică, a
+contractelor sectoriale și a contractelor de concesiune de lucrări
+și  concesiune  de  servicii,  precum  și  pentru  organizarea  și
+funcționarea Consiliului Național de Soluționare a Contestațiilor,
+Consiliul adoptă următoarea
+DECIZIE
+Nr. 66 / C7 / 3770
+Data: 13.01.2026
+Prin  contestația  datată  24.09.2025,  transmisă  prin  mijloace
+electronice (e-mail), înregistrată la Consiliul Național de Soluționare a
+Contestațiilor cu nr. 66907/25.09.2025, (...) SRL, cu sediul în localitatea
+(...), înregistrată la Registrul Comerțului sub nr. ...., având CUI RO ....,
+reprezentată legal prin ..., în calitate de administrator și convențional
+prin Societatea civilă de avocați (...), unde solicită comunicarea actelor,
+privind procedura de licitație deschisă, organizată de (...), în calitate de
+entitate contractantă, cu sediul în (...), în vederea atribuirii contractului
+de achiziție publică având ca obiect „(...), s-a solicitat:
+I.  anularea  comunicării  rezultatului  procedurii,  a  raportului
+procedurii nr. 14801/16.09.2025 și a proceselor-verbale de evaluare, în
+ceea ce privește decizia entității contractante de a declara neconformă
+oferta (...) SRL;
+II. anularea raportului procedurii nr. 14801/16.09.2025, în ceea ce
+privește  decizia  entității  contractante  de  anulare  a  procedurii  de
+atribuire;
+III. obligarea entității contractante la:
+– reluarea procedurii de atribuire prin reevaluarea ofertei depuse
+de (...) SRL, cu luarea în considerare a motivelor invocate în contestație
+și cu respectarea legislației aplicabile;
+– la stabilirea și comunicarea unui nou rezultat al procedurii prin
+emiterea unui nou raport al procedurii, în conformitate cu documentația
+de atribuire și cu decizia CNSC care urmează a fi pronunțată.
+IV. Obligarea entității contractante la plata cheltuielilor de judecată
+ocazionate de formularea contestației.
+Procedura de soluționare în fața Consiliului s-a desfășurat în scris.
+CONSILIUL NAȚIONAL DE SOLUȚIONARE A CONTESTAȚIILOR,
+asupra cauzei de față, constată următoarele:
+Pagina 1 din 36
+Consiliul a fost legal sesizat și este competent, potrivit dispozițiilor
+art. 12 alin. (1) din Legea nr. 101/2016, să soluționeze contestația de
+față,  prin  care  (...)  SRL  critică  raportului  procedurii  nr.
+14801/16.09.2025,  comunicarea  rezultatului  procedurii  nr.
+14804/16.09.2025 și actele premergătoare care au stat la baza emiterii
+raportului procedurii amintit și a tuturor actelor subsecvente, emise de
+către (...), în procedura menționată în partea introductivă. 
+Contestatoarea precizează că au fost depuse două oferte de către
+asocierile  (...)  SRL  –  (...)  și  (...)SRL  –  (...)AG.  După  evaluarea
+propunerilor tehnice, comisia a declarat oferta asocierii (...)SRL – (...)AG
+inacceptabilă și oferta (...) SRL – (...) neconformă, și în consecință s-a
+decis anularea procedurii, nefiind nicio ofertă admisibilă.
+În  etapa  de  evaluare  a  propunerilor  tehnice  depuse  în  cadrul
+procedurii de atribuire, asocierii (...) SRL – (...) i-a fost transmisă de
+către  entitatea  contractantă  solicitarea  de  clarificări  nr.
+12591/18.08.2025, la care a formulat și a transmis, în termenul legal
+stabilit, răspunsul nr. 25269/22.08.2025.
+Ulterior analizării răspunsurilor transmise, comisia de evaluare i-a
+comunicat rezultatul procedurii prin adresa nr. 14804/16.09.2025, prin
+care i-a adus la cunoștință faptul că oferta asocierii (...) SRL – (...) a fost
+declarată  neconformă.  În  cuprinsul  acestei  comunicări,  comisia  de
+evaluare a arătat că, în urma examinării răspunsurilor la solicitările de
+clarificări, au fost identificate mai multe neconformități și lipsuri care, în
+aprecierea sa, afectează caracterul conform al propunerii tehnice.
+Astfel, comisia de evaluare a reținut că în cadrul documentației
+depuse lipsesc notele de calcul hidraulic pentru linia de nămol, fiind
+prezentate doar notele de calcul aferente liniei apei. De asemenea, s-a
+menționat subdimensionarea pompelor de recirculare externă, întrucât
+conform  DWA-ATV-131E  §6.4,  debitul  de  recirculare  externă  se
+raportează  la  QWW,h,  rezultând  un  debit  QRS  cuprins  între  0,75–
+1,0×QWW,h,  rezultând  QRC=  0,75  –  1,0  X  QWW,h  (până  la
+1,5×QWW,h).
+În  continuare,  comisia  de  evaluare  a  reținut  subdimensionarea
+pompelor de nămol din fosele septice, arătând că debitul de pompare
+indicat pentru  aceste pompe, respectiv Qp= 1,15 m³/h  (aproximativ
+0,32 l/s), este foarte mic pentru o conductă de refulare a apelor uzate
+menajere. Totodată, s-a menționat că este incorectă metodologia pentru
+calculul dozării clorurii ferice, cu impact asupra costurilor de operare,
+deoarece, conform DWA A131E pentru balanța fosforului se utilizează
+CP,ER= 0,6 – 0,7 x CP,ER; la CP,ER = 5 mg/l rezultă CP,EST > 3,5 mg/l,
+iar cantitatea de fosfor ce trebuie precipitată în absența BioP este 18,32
+mg/l, și nu de 16,82 mg/l, astfel cum este prevăzut în ofertă.
+De  asemenea,  comisia  de  evaluare  a  reținut  nedocumentarea
+concentrației de oxigen utilizate în calculul suflantelor, apreciind că acest
+aspect nu este suficient justificat în propunerea tehnică.
+Pagina 2 din 36
+Au  fost  semnalate  și  discrepanțe  între  debitele  de  supernatant
+estimate și cele utilizate în dimensionare, aspecte care, în opinia comisiei
+de  evaluare  ar  avea  impact  asupra  bilanțului  de  intrare  în  treapta
+biologică a stației de epurare.
+În plus, comisia de evaluare a indicat utilizarea unor normative
+considerate neacceptate prin documentația de atribuire, fără clarificarea
+ierarhiei acestora.
+Totodată, au fost menționate erori în tabelul costurilor de operare,
+despre care s-a apreciat că ar afecta transparența și comparabilitatea
+ofertelor depuse în cadrul procedurii.
+În final, comisia de evaluare a reținut că termenele de execuție
+propuse  sunt  nerealiste  raportat  la  complexitatea  obiectivului  supus
+procedurii de atribuire, acest aspect fiind, de asemenea, inclus printre
+motivele care au condus la declararea ofertei ca neconformă.
+Având în vedere neconformitățile constatate, precum și faptul că
+observațiile aferente întrebărilor 2.a, 2.b, 2.c, 2.l și 4 au fost acceptate
+condiționat (necesitau completări în ofertă) care nu au fost introduse
+corespunzător  în  ofertă,  comisia  de  evaluare  a  concluzionat  că
+propunerea  tehnică  depusă  nu  respectă  cerințele  documentației  de
+atribuire.
+În consecință, comisia de evaluare a reținut că, prin răspunsurile
+formulate la solicitările de clarificări, nu a fost demonstrată îndeplinirea
+cerințelor impuse, motiv pentru care oferta a fost declarată neconformă,
+în temeiul art. 228 alin. (5) din Legea nr. 99/2016, coroborate cu art.
+143 alin. (3) lit. a) din HG nr. 394/2016, potrivit cărora oferta este
+considerată  neconformă  în  situația  în  care  nu  satisface  în  mod
+corespunzător cerințele caietului de sarcini.
+În  cuprinsul  contestației  se  arată  că  vor  fi  analizate  punctual
+aspectele  de  neconformitate  reținute  de  entitatea  contractantă,  fiind
+vizată, în primul rând, lipsa notelor de calcul hidraulic pentru linia
+de nămol.
+În acest sens, se menționează că, în etapa de clarificări, comisia de
+evaluare  i-a  solicitat  să  indice  locul  din  ofertă  unde  se  regăsește
+breviarul de calcul hidraulic aferent liniei de nămol, având în vedere
+prevederile Fișei de date, Secțiunea IV.4.1) – Modul de prezentare a
+propunerii tehnice, Formularul nr. 10 „Propunere tehnică”, precum și
+cerințele  din  Caietul  de  sarcini  referitoare  la  prezentarea  profilului
+hidraulic.
+Prin  răspunsul  transmis  la  solicitarea  de  clarificări,  ofertantul  a
+indicat  expres  faptul  că  breviarul  de  calcul  hidraulic  este  inclus  în
+propunerea tehnică la paginile 458–462, iar profilele hidraulice pentru
+linia apei și linia nămolului se regăsesc la pagina 463, în cadrul Planșei
+SEAU-02 – Profil hidraulic – SEAU Cosoba – Linia apei și Linia nămolului.
+Totodată, se face referire la existența planșei menționate, care conține
+reprezentarea grafică a profilului hidraulic pentru ambele linii.
+Pagina 3 din 36
+În continuare, se arată că, în pofida acestor informații, comisia de
+evaluare a reținut în mod eronat lipsa notelor de calcul hidraulic pentru
+linia de nămol, menționând că ar fi fost prezentate doar cele pentru linia
+apei.  Astfel,  se  susține  că  cerința  din  fișa  de  date  referitoare  la
+prezentarea breviarului și a profilelor hidraulice a fost îndeplinită, fiind
+documentată prin trimiterile precise la paginile din oferta depusă.
+De asemenea, se menționează că oferta conține atât breviarul de
+calcul,  care  include  metodologia,  ipotezele  și  rezultatele,  precum  și
+profilul hidraulic reprezentat grafic, iar metodologia de calcul hidraulic
+utilizată este comună ambelor linii tehnologice, diferențele constând doar
+în  parametrii  de  intrare.  În  acest  context,  se  susține  că  existența
+profilului hidraulic aferent liniei de nămol, prezentat în planșa dedicată,
+demonstrează realizarea și includerea calculului corespunzător acestei
+linii în documentația tehnică depusă.
+În continuarea argumentației,  se susține că situația reținută de
+comisia de evaluare reprezintă o eroare de verificare a documentelor
+puse la dispoziție, și nu o problemă de conformitate a ofertei, evaluarea
+urmând a fi realizată pe baza elementelor existente în ofertă, respectiv a
+paginilor 458–463. Totodată, se menționează că evaluarea efectuată de
+comisie trebuie să fie obiectivă și motivată, iar eventualele constatări de
+neconformitate  trebuie  să  indice  în  mod  clar  și  concret  elementele
+considerate lipsă.
+În acest sens, se subliniază că mențiunea generală privind „lipsa
+notelor  de  calcul  pentru  linia  de  nămol”,  fără  trimitere  la  elemente
+concrete sau la calcule determinate care ar lipsi, nu justifică în mod
+concret deficiențele reținute. De asemenea, se arată că, în situația în
+care entitatea contractantă ar fi apreciat că informațiile prezentate nu
+sunt suficiente, comisia de evaluare ar fi trebuit să precizeze exact ce
+informații suplimentare sunt necesare și să formuleze o nouă solicitare
+de clarificări, în loc să rețină în mod direct neconformitatea ofertei.
+În ceea ce privește dimensionarea pompelor de recirculare
+externă, se arată că solicitarea de clarificări formulată la punctul 2 e) a
+vizat indicarea locului din ofertă unde pompele de nămol recirculat au
+fost dimensionate pentru a asigura debite variabile cuprinse între 50% și
+100% din debitul maxim orar influent epurat, fără utilizarea unităților de
+rezervă.
+În  răspunsul  transmis,  contestatoarea  a  arătat  că  pompele  de
+nămol  recirculat  sunt  dimensionate  pentru  a asigura  debite variabile
+între 50% și 100% din debitul maxim influent în treapta biologică, fără
+utilizarea unităților de rezervă, făcând trimitere la Breviarul de calcul
+tehnologic, pagina 514, precum și la Lista de echipamente, poziția 15.1,
+pagina 535. Totodată, au fost indicate valorile debitului de recirculare
+externă, respectiv 15,04 m³/h pentru 50% din debitul de calcul și 30,08
+m³/h pentru 100% din debitul de calcul.
+Pagina 4 din 36
+S-a menționat că pentru recircularea externă au fost prevăzute trei
+pompe (două active și una de rezervă), fiecare cu un debit de 16,74
+m³/h și o înălțime de pompare de 8,89 m, conform Listei T1/2, pagina
+1306,  acestea  fiind  echipate  cu  convertizoare  de  frecvență  pentru
+asigurarea variației debitului necesar. De asemenea, au fost prezentate
+datele privind debitele zilnice și orare maxime, precum și corespondența
+acestora cu debitele de recirculare externă și internă.
+În urma analizării răspunsului la clarificări, comisia de evaluare a
+apreciat că, în propunerea tehnică depusă,  pompele de recirculare
+externă au fost subdimensionate , motivând că, potrivit prevederilor
+DWA-ATV-131E §6.4, debitul de recirculare  externă  se raportează  la
+QWW,h,  rezultând  un  debit  QRS  =  0,75–1,0×QWW,h  (până  la
+1,5×QWW,h).
+În  continuare,  se  susține  că  și  această  decizie  a  comisiei  de
+evaluare  referitoare  la  pretinsa  subdimensionare  a  pompelor  de
+recirculare  externă  este  eronată.  Prin  răspunsul  la  solicitarea  de
+clarificări,  contestatoarea  a  indicat  faptul  că  pompele  de  recirculare
+externă sunt dimensionate pentru a asigura debite variabile cuprinse
+între 50% și 100% din debitul maxim orar influent (Qc), fiind echipate cu
+convertizoare de frecvență care permit reglarea fină a debitului în acest
+interval.
+Se mai arată că, în motivarea sa, comisia de evaluare a invocat
+prevederile  DWA-ATV-131E  §6.4,  apreciind  că  debitul  de  recirculare
+externă trebuie raportat la QWW,h, rezultând un debit QRS = 0,75 – 1,0
+× QWW,h (până la 1,5×QWW,h). În acest context, se menționează că,
+pentru  nămolul activ de recirculare,  au fost efectuate calcule pentru
+toate  situațiile  de  funcționare,  respectiv  debit  mediu  +  supernatant,
+debit maxim zilnic + supernatant și debit orar maxim + supernatant, iar
+pompele au fost alese pentru a asigura recircularea în intervalul 50%–
+100%.
+De  asemenea,  se  precizează  că  acest  debit  reprezintă  practic
+echivalentul  QWW,h,  astfel  că  metoda  de  raportare  este  corectă,
+diferența fiind doar de notare utilizat, și nu de fond.
+Totodată, se arată că, în caietul de sarcini se solicită utilizarea
+standardelor  internaționale  și  a  normativelor  naționale  aplicabile,  iar
+ghidul  DWA-ATV-131E,  invocat  de  comisia  de  evaluare,  este  un
+document recunoscut, dar cu caracter orientativ, care poate fi aplicat cu
+adaptări în funcție de condițiile concrete ale proiectului, neavând caracter
+obligatoriu exclusiv.
+În continuare, se menționează că dimensionarea propusă asigură
+intervalul de 50%–100% din debitul de calcul Qc, acoperind scenariul
+minim  necesar  și  oferind  flexibilitate  operațională  prin  utilizarea
+convertizoarelor de frecvență. De asemenea, se susține că o eventuală
+supradimensionare  a  pompelor,  până  la  1,5×QWW,h,  ar  conduce  la
+costuri suplimentare de achiziție, consum de energie și întreținere.
+Pagina 5 din 36
+În concluzie, se susține că dimensiunile și debitele pompelor de
+recirculare externă sunt conforme cu cerințele documentației de
+atribuire, fiind prezentate în propunerea tehnică la paginile 514, 535 și
+1306. Totodată, se face referire la prevederile art. 228 alin. (5) din
+Legea nr. 99/2016 și art. 143 alin. (3) lit. a) din HG nr. 394/2016,
+arătându-se  că  o  ofertă  este  neconformă  doar  dacă  nu  respectă
+cerințele  caietului  de  sarcini ,  or  cerința  privind  dimensionarea
+pompelor pentru asigurarea unui debit de 50%–100% din debitul maxim
+influent, fără utilizarea unităților de rezervă, a fost îndeplinită.
+În  ceea  ce  privește  dimensionarea  pompelor  de  nămol  din
+fosele septice , se arată că, prin solicitarea de clarificări formulată la
+punctul  2  g),  comisia  de  evaluare  a  solicitat  indicarea  calculului  de
+dimensionare a acestor pompe, cu luarea în considerare a debitului,
+tipului de lichid, diametrului conductei și a vitezei minime de curgere de
+0,7 m/s.
+În răspunsul transmis, contestatoarea a indicat că aceste calcule se
+regăsesc în Breviarul de calcul, la paragraful 5.5 „Cameră de recepție
+pentru nămolul provenit din fose septice”, paginile 499–500, unde sunt
+prezentate datele privind debitele de nămol septic, valorile minime și
+maxime ale debitului pompelor, numărul de pompe active și de rezervă,
+precum și caracteristicile acestora.
+Totodată,  se  menționează  că  faptul  că  procedura  vizează  un
+contract de proiectare și execuție, astfel încât proiectarea detaliată a
+subansamblelor stației de recepție a nămolului provenit din fose
+septice urmează a fi realizată în etapa de proiectare, ca parte a
+contractului.
+Cu toate acestea, comisia de evaluare a apreciat, în mod eronat, că
+pompele de nămol ar fi subdimensionate , motivând că debitul de
+pompare indicat, respectiv Qp=1,15 m³/h (aproximativ 0,32 l/s), ar fi
+foarte mic pentru o conductă de refulare a apei uzate menajere. În
+continuare, se susține că această apreciere este nefundamentată, nefiind
+indicat un standard sau o reglementare tehnică obligatorie  care ar
+fi fost încălcată, fiind menționată ca atare în documentație.
+Se mai arată că cerința din solicitarea de clarificări făcea referire la
+viteza minimă de curgere de 0,7 m/s, iar debitul de pompare trebuie
+analizat  în  corelație  cu  diametrul  conductei  de  refulare ,
+menționându-se că utilizarea unor conducte cu diametre reduse (DN40
+sau DN50) viteza rezultată este perfect compatibilă cu debitul indicat. În
+acest context, se arată că debitul de 1,15 m³/h este corect raportat la
+condițiile de exploatare și la diametrul conductei de refulare, respectând
+viteza minimă solicitată de 0,7 m/s.
+De asemenea, se menționează că propunerea tehnică are caracter
+orientativ, iar detaliile de proiectare, inclusiv alegerea diametrelor exacte
+ale conductelor și verificările hidraulice finale, urmează a fi realizate în
+etapa de proiectare, în conformitate cu reglementările aplicabile și cu
+Pagina 6 din 36
+tipul contractului de proiectare și execuție. În final, se arată că oferta
+respectă cerințele documentației de atribuire, iar eventualele ajustări de
+detaliu se realizează în faza de proiectare.
+În ceea ce privește dozarea clorurii ferice , se arată că, prin
+adresa  de  clarificări,  punctul  2  h),  comisia  de  evaluare  a  solicitat
+clarificări privind modul de respectare a cerinței din caietul de sarcini
+referitoare  la  dimensionarea  unității  de  dozare  ferică,  astfel  încât
+instalația să fie dimensionată  pentru a asigura reducerea întregii
+cantități de fosfor exclusiv prin precipitare chimică, fără a lua în
+considerare reducerea biologică.
+În răspunsul transmis, contestatoarea precizează că a indicat faptul
+că dimensionarea unității de dozare a clorurii ferice este prezentată în
+Breviarul  de calcul, la paragraful 7.4 „Reducerea  fosforului”, paginile
+508–510. S-a menționat că apele uzate menajere conțin o cantitate de
+fosfor peste necesarul echilibrului nutrițional al biomasei, fiind necesară
+îndepărtarea  surplusului  prin  precipitare  chimică  pentru  respectarea
+limitei maxime de 5 mg/l prevăzute în documentația de atribuire.
+De asemenea, s-a arătat că dimensionarea a fost realizată conform
+normativului ATV-DVWK-A 202E, fiind avute în vedere concentrația de
+fosfor în influentul stației de epurare, concentrația de fosfor în influentul
+treptei  biologice,  care include și  supernatantul  de la  linia  nămolului,
+precum și concentrația de fosfor în efluentul stației de epurare. În acest
+context,  au  fost  prezentate  valorile  utilizate  pentru  calcul,  respectiv
+concentrația de fosfor în influent de aproximativ 22 mg/l, concentrația de
+fosfor în influentul treptei biologice de 21,82 mg/l și concentrația de
+fosfor în efluent stației de epurare de 5 mg/l.
+În continuare, s-a arătat că, în ipoteza reducerii fosforului exclusiv
+pe cale chimică, din calculele de dimensionare rezultă o concentrație de
+fosfor ce trebuie reținută de 16,82 mg/l. Au fost prezentate, totodată,
+datele privind precipitantul necesar, respectiv FeCl3 40%: 249,65 l/zi,
+volumul  rezervorului  de  stocare  4,0  m3,  caracteristicile  pompelor  de
+dozare și punctele de dozare, precum și necesarul zilnic de precipitant la
+debitul zilnic mediu, fără reducere biologică a fosforului, cu trimitere la
+paginile corespunzătoare din oferta tehnică.
+Se indică faptul că, la paginile 550–551 din propunerea tehnică,
+este  prezentat  calculul  aferent  ipotezei  „fără  reducere  biologică”,  cu
+parametrii utilizați și rezultatele privind necesarul de precipitant. În acest
+context, se menționează că ofertantul a prezentat metodologia de calcul
+pentru dozarea clorurii ferice și a arătat că dimensionarea a fost realizată
+pentru ambele ipoteze, respectiv cu reducere biologică și fără reducere
+biologică a fosforului.
+Cu  toate  acestea,  se  arată  că,  în  comunicarea  rezultatului
+procedurii, comisia de evaluare a reținut că metodologia utilizată pentru
+calculul dozării clorurii ferice ar fi incorectă și ar avea impact asupra
+costurilor de operare. În motivarea acestei concluzii, comisia de evaluare
+Pagina 7 din 36
+a invocat normativul DWA A131E și a indicat faptul că, pentru balanța
+fosforului, se utilizează relația CP,EST = 0,6–0,7 × CP,ER, iar pentru
+CP,ER = 5 mg/l ar rezulta CP,EST > 3,5 mg/l. Pe această bază, comisia a
+apreciat că valoarea de fosfor ce trebuie precipitată în absența reducerii
+biologice ar fi 21,82 – 3,5 = 18,32 mg/l, și nu 16,82 mg/l, astfel cum ar
+fi fost calculat și prezentat în ofertă.
+Se invocă prevederea din caietul de sarcini, cap. 2, secțiunea 5,
+par.  6.3,  potrivit  căreia  dozele  de  reactiv  au  fost  calculate  pentru
+reducerea concentrației de fosfor în apa epurată la valori < 5 mg/l. Se
+susține că oferta sa respectă această cerință, întrucât a demonstrat că
+unitatea  de  dozare  este  capabilă  să  reducă  fosforul  exclusiv  prin
+precipitare chimică.
+Se menționează că în ofertă calculul necesarului de precipitant a
+fost realizat atât în ipoteza reducerii fosforului pe cale biologică, cât și pe
+cale chimică. În acest sens, sunt indicate valorile de 109,40 l/zi pentru
+scenariul  cu  reducere  biologică  și  249,65  l/zi  pentru  scenariul  fără
+reducere biologică, exclusiv prin precipitare chimică.
+Se arată că a fost propus un rezervor de stocare a precipitantului
+cu capacitatea de 4 m³, care ar asigura o autonomie de aproximativ 37
+de zile în condițiile funcționării stației la debitul și încărcările date, cu
+reducere biologică a fosforului și o autonomie de aproximativ 16 zile în
+situațiile în care reducerea fosforului se realizează doar pe cale chimică.
+De  asemenea,  se  menționează  că  pompele  de  dozare  au  fost  alese
+pentru condițiile considerate cele mai nefavorabile, respectiv scenariul de
+reducere a fosforului doar pe cale chimică, fiind prevăzută configurația
+1A+1R, cu debit de 2,5–6,0 l/h.
+În continuare, se arată că entitatea contractantă a aplicat în mod
+eronat normativul DWA A131E, fiind menționată formula Cp,est = 0,6–
+0,7  ×  Cp,er,  despre  care  se  susține  că  se  referă  la  încărcările
+reziduale de fosfor estimate în efluent , după procese biologice și
+chimice,  și  nu  la  scenariul  solicitat  prin  documentația  de  atribuire,
+respectiv îndepărtarea exclusiv chimică. În acest context, se susține că
+metodologia  invocată  de  comisie  nu  este  aplicabilă  cerinței  din
+documentația de atribuire.
+Se mai menționează că diferența numerică indicată (16,82 mg/l
+față de 18,32 mg/l) este prezentată ca fiind marginală și ca neafectând
+dimensionarea instalației, fiind invocate, în acest sens, dimensionarea
+propusă a dozării la 249,65 l/zi și existența a două pompe dozatoare cu
+frecvență variabilă și a rezervorului de 4 m³, ca elemente care ar oferi
+flexibilitate în exploatare. În final, se susține că oferta sa a fost evaluată
+după ale criterii decât cele din documentația de atribuire, oferta putând fi
+declarată  neconformă  doar  dacă  nu  respectă  cerințele  caietului  de
+sarcini, fiind invocate prevederile art. 143 alin. (3) lit. a) din HG nr.
+394/2016.
+Pagina 8 din 36
+În legătură cu valoarea concentrației de oxigen utilizate în
+calculul  suflantelor ,  contestatoarea  arată  că,  prin  solicitarea  de
+clarificări  formulată  la  punctul  2  i),  comisia  de  evaluare  a  cerut
+precizarea valorii concentrației oxigenului din bazinul de aerare luată în
+considerare  în  calculul  suflantelor  și  eficiența  sistemului  de  aerare,
+conform datelor depuse în ofertă. În răspunsul transmis, contestatoarea
+a precizat că a fost utilizată o concentrație de oxigen de 2 mgO₂/l, iar
+eficiența sistemului de aerare este de 2,98 kg O₂/kWh, cu trimitere la
+pagina 548 din propunerea tehnică și la Lista de garanții, pagina 663.
+Totodată, se menționează că, la pagina 548 din propunerea tehnică
+este indicată eficiența oxigenului suflantelor, iar la pagina 663, în Lista
+de garanții, este menționată eficiența sistemului de aerare în apă curată,
+precum  și  condiția  referitoare  la  concentrația  minimă  de  oxigen  în
+bazinul de aerare, fiind indicată valoarea de 2 mgO₂/l și eficiența de 2,98
+kg O₂/kWh.
+Cu toate acestea, în comunicarea rezultatului procedurii, comisia de
+evaluare a reținut „nedocumentarea concentrației de oxigen utilizate în
+calculul suflantelor”, cu toate că, solicitarea de clarificări a vizat explicit
+precizarea  valorii  concentrației  de  oxigen  și  a  eficienței  aerării,  iar
+răspunsul transmis a indicat aceste valori în mod expres și fără echivoc,
+cu trimiteri la paginile relevante din ofertă.
+De asemenea, se menționează că valoarea concentrației de oxigen
+de  2  mg/l  este  valoare  standard  utilizată  internațional  pentru
+dimensionarea treptelor biologice cu nămol activ, iar eficiența de 2,98 kg
+O₂/kWh  este  o  valoare  tehnic  justificată,  susținută  de  documentația
+furnizorului de echipamente. Mai mult, se invocă prevederile art. 228
+alin. (5) din Legea nr. 99/2016 și art. 143 alin. (3) lit. a) din HG nr.
+394/2016,  arătându-se  că  oferta  sa  respectă  cerințele  caietului  de
+sarcini, iar concluzia comisiei de evaluare este contrazisă de datele din
+ofertă.
+În  privința  debitului  de  supernatant  estimat ,  se  arată  că
+solicitarea de clarificări, punctul 2 r) a vizat explicarea diferențelor de
+debit și încărcare la intrarea în treapta de epurare biologică, în contextul
+în care supernatant estimat are o valoare mult mai mică decât debitul de
+supernatant rezultat din treapta de tratare a nămolului.
+În  răspunsul  transmis,  contestatoarea  a  arătat  că  debitul  de
+supernatant indicat la pagina 503 este un debit estimat și utilizat pentru
+dimensionarea treptei biologice, estimarea fiind realizată pe baza unei
+producții specifice de nămol de 0,5 kg 55/kg CCO. S-a menționat că
+debitul de supernatant de la pagina 531 reprezintă debitul rezultat în
+urma calculului de dimensionare. De asemenea, s-a arătat că diferența
+dintre debitul estimat și debitul calculat este influențată și de timpul de
+deshidratare, considerat 5 zile pe săptămână, 8 ore pe zi, debitele de
+supernatant fiind calculate în consecință. Totodată, s-a menționat că, la
+dimensionarea  treptei  biologice,  încărcarea  supernatantului  a  fost
+Pagina 9 din 36
+considerată ca procent din încărcările apei uzate influente, în proporție
+de 5%.
+Se mai arată că, având în vedere că procedura vizează un contract
+de proiectare și execuție, în această etapă se poate vorbi despre un debit
+estimat,  iar  estimarea  debitului  de  supernatant  este  prezentată  ca
+practică  standard  de  proiectare  utilizată  pentru  dimensionarea
+etapelor ulterioare. În acest context, se menționează că diferența dintre
+valoarea estimată și valoarea rezultată din dimensionare este explicată
+ca rezultat al trecerii de la o valoare teoretică la una determinată pe
+baza parametrilor de funcționare, inclusiv programul de deshidratare.
+Așadar, răspunsul transmis la clarificări a explicat sursa diferenței,
+respectiv programul de funcționare și metoda de calcul, explicațiile fiind
+conform cerinței formulate la punctul 2 r). Se susține că nu există date
+contradictorii sau eronate, ci o diferență între o valoare estimată și una
+rezultată din dimensionare, iar faptul că ambele valori sunt documentate
+și explicate demonstrează transparență și rigurozitate. Mai mult, se arată
+că aprecierea comisiei de evaluare privind existența unor discrepanțe cu
+impact asupra bilanțului de intrare în treapta biologică este nejustificată.
+În  legătură  cu  normativele utilizate,  se  susține  că  entitatea
+contractantă  a  reținut  ca  neconformitate  utilizarea  normativului  NP
+133/2022  în  cadrul  propunerii  tehnice.  Prin  solicitarea  de  clarificări
+formulată  la  punctul  2  s),  comisia  de  evaluare  a  cerut  justificarea
+utilizării acestui normativ, în condițiile în care documentația de atribuire
+făcea  trimitere  la  utilizarea  standardelor  internaționale  sau  a
+normativului  NP  133/2013,  în  conformitate  cu  studiul  de  fezabilitate
+recepționat anterior revizuirii normativului.
+În  răspunsul  transmis,  contestatoarea  a  indicat  faptul  că
+dimensionarea  a  fost  realizată  pe  baza  mai  multor  normative  de
+proiectare specifice stațiilor de epurare, inclusiv standarde internaționale
+și normative naționale, printre care DWA-A 131, ATV-DVWK-A 202E,
+DWA-M 229-1, NP 118-06 și NP 133/2022. Totodată, a fost indicat faptul
+că NP 133/2022 este inclus în lista reglementărilor tehnice în vigoare
+publicată de Ministerul Dezvoltării, Lucrărilor Publice și Administrației,
+fiind menționat că, la data intrării sale în vigoare, respectiv 12 februarie
+2023, normativul NP 133/2013 a fost abrogat.
+Cu toate acestea, entitatea contractantă a apreciat utilizarea NP
+133/2022 ca fiind o neconformitate, reținând utilizarea unor normative
+considerate neacceptate prin documentația de atribuire, fără clarificarea
+ierarhiei acestora. În continuare, se arată că normativul NP 133/2022
+este  un  act  oficial  publicat  în  Monitorul  Oficial  și  face  parte  din
+reglementările tehnice în vigoare în domeniul construcțiilor.
+Se face referire la prevederile Legii nr. 10/1995 privind calitatea în
+construcții și ale HG nr. 907/2016, potrivit cărora proiectarea trebuie
+realizată în conformitate cu reglementările tehnice în vigoare la data
+elaborării proiectului. În acest context, sunt invocate dispozițiile art. 15
+Pagina 10 din 36
+alin. (1) din HG nr.  907/2016, care reglementează  situațiile în care
+documentațiile tehnico-economice se întocmesc sau se actualizează în
+funcție de reglementările aplicabile la momentul respectiv.
+Se menționează că, deși studiul de fezabilitate a fost realizat într-o
+perioadă  în  care  era  în  vigoare  normativul  NP  133/2013,  la  data
+elaborării ofertei acesta era deja abrogat, fiind aplicabil normativul NP
+133/2022. În acest sens, se arată că documentațiile aferente fazelor
+ulterioare de proiectare trebuie actualizate conform reglementărilor în
+vigoare, potrivit art. 15 alin. (1) lit. d) din HG nr. 907/2016.
+De asemenea, se invocă prevederile art. 30 din Legea nr. 10/1995,
+potrivit  cărora  proiectantul  și  ceilalți  factori  implicați  răspund  pentru
+nerespectarea  normelor  de  proiectare  și  execuție  în  vigoare  la  data
+realizării  construcției.  În  acest  context,  se  arată  că  utilizarea
+normativului NP 133/2022 nu contrazice studiul de fezabilitate realizat
+anterior, ci reprezintă o actualizare a acestuia în acord cu reglementările
+legale aplicabile.
+Totodată, se menționează că documentația de atribuire nu poate
+impune aplicarea unui normativ abrogat, iar utilizarea NP 133/2022 este
+prezentată ca fiind conformă obligațiilor legale ale proiectantului, motiv
+pentru  care  concluzia  entității  contractante  privind  existența  unei
+neconformități este contestată.
+În  privința  erorilor  identificate  în  tabelul  costurilor  de
+operare, se arată că entitatea contractantă a formulat o solicitare de
+clarificări referitoare la costurile de operare, prin care a cerut justificarea
+diferențelor dintre valorile puterilor electrice înscrise în tabelul de costuri
+de operare și cele din listele de utilaje, fiind indicat cu titlu de exemplu
+un caz de neconcordanță între valorile Pe și Pi (T1/1 = Pe = 4,8 kW față
+de Pi = 2,20 kW).
+În răspunsul transmis, contestatoarea a arătat că, din cauza unor
+erori de redactare/transcriere, în tabelul costurilor de operare au fost
+înscrise  valori  greșite  ale  puterilor  electrice  pentru  mai  multe
+echipamente. Totodată, contestatoarea a susținut că această eroare se
+poate  încadra  în  categoria  abaterilor  tehnice  minore,  conform
+prevederilor art. 140 alin. (7) și (8) din HG nr. 394/2016, potrivit cărora
+abaterile  tehnice  minore  sunt  acele  omisiuni  sau  abateri  care  pot  fi
+completate sau corectate fără a conduce la depunerea unei noi oferte, și
+prezentând condițiile în care o modificare nu poate fi considerată abatere
+tehnică minoră.
+De  asemenea,  se  menționează  că  eroarea  de  redactare  nu
+afectează  calculul  costului  anual  de  operare,  prețul  ofertat  fiind  cel
+corect, și a arătat că își asumă realizarea lucrărilor conform cerințelor
+documentației de atribuire, fără modificarea ofertei depuse.
+Astfel că, în pofida acestor explicații, comisia de evaluare a reținut
+că propunerea tehnică ar conține erori în tabelul costurilor de operare
+care ar afecta transparența și comparabilitatea ofertelor.
+Pagina 11 din 36
+În legătură cu termenele de execuție , se arată că entitatea
+contractantă  a  formulat  o  solicitare  de  clarificări  privind  justificarea
+termenelor de execuție prevăzute în propunerea tehnică pentru lucrările
+civile, apreciate ca fiind foarte scurte raportat la complexitatea lucrărilor,
+fiind menționate, cu titlu de exemplu, termenul de 12 zile pentru stația
+de suflante, 15 zile pentru bazinele biologice și decantoare, 8 zile pentru
+pavilionul de nămol și 10 zile pentru clădirea administrativă.
+În răspunsul transmis, contestatoarea a indicat că termenele de
+execuție  sunt  fundamentate  pe  mobilizarea  unui  număr  ridicat  de
+muncitori  calificați  și  necalificați  pentru  fiecare  obiect,  permițând
+desfășurarea simultană de lucrări pe fronturi multiple. De asemenea, s-a
+arătat că organizarea șantierului pe fronturi de lucru distincte permite
+executarea activităților în paralel, iar utilizarea elementelor prefabricate
+și a echipamentelor mecanizate reduce semnificativ durata execuției.
+Totodată, s-a menționat utilizarea unor utilaje dedicate și experiența
+echipei alocate, specializată în realizarea unor obiective similare.
+Se  precizează  că  duratele  indicate  se  referă  strict  la  execuția
+lucrărilor civile pentru fiecare obiect și nu includ timpii de așteptare, alte
+activități  conexe  fiind  planificate  în  paralel.  În  acest  context,  se
+menționează că realizabilitatea termenelor este susținută de alocarea
+resurselor prezentată în propunerea tehnică, la paginile 1210–1218.
+Cu toate acestea, entitatea contractantă a apreciat, în mod nelegal,
+că  termenele  de  execuție  prevăzute  sunt  nerealiste  raportat  la
+complexitatea  obiectivului.  Se  susține  că  această  apreciere  este
+prezentată  ca  fiind  rezultatul  unei  evaluări  subiective,  întrucât
+documentația  de  atribuire  nu  stabilește  durate  minime  sau  maxime
+pentru execuția lucrărilor. Se face referire la prevederile art. 228 alin.
+(5)  din  Legea  nr.  99/2016  și  art.  143  alin.  (3)  lit.  a)  din  HG  nr.
+394/2016, fiind arătat că o ofertă este considerată neconformă doar
+dacă nu respectă cerințele caietului de sarcini, or, răspunsul transmis la
+solicitarea de clarificări privind termenele de execuție a fost complet și
+justificat, fiind furnizate explicații detaliate referitoare la resursele umane
+alocate,  organizarea  lucrărilor  pe  fronturi  multiple,  utilizarea
+prefabricatelor, echipamentele mobilizate și experiența echipei, aceste
+elemente fiind prezentate ca argumente obiective privind fezabilitatea
+termenelor propuse.
+De asemenea,  se menționează  că termenele de execuție pot fi
+reduse  prin  mobilizarea  simultană  a  mai  multor  echipe,  execuția  pe
+fronturi  multiple,  utilizarea  prefabricatelor  și  a  utilajelor  mecanizate,
+precum și planificarea în paralel a lucrărilor conexe, aceste metode fiind
+prezentate  ca  practici  utilizate  în  proiecte  similare,  rezultând  că
+termenele propuse sunt consecința unei organizări eficiente.
+Mai mult, se susține că interpretarea termenelor scurte ca motiv de
+neconformitate  echivalează  cu  încălcarea  principiului  egalității  de
+tratament, întrucât ar genera o diferențiere între ofertanți, fiind invocat
+Pagina 12 din 36
+art. 2 alin. (2) lit. a) din Legea nr. 99/2016 privind tratamentul egal și
+nediscriminarea în procedurile de achiziții sectoriale.
+Astfel,  se  susține  că  entitatea  contractantă  a  transformat  o
+chestiune de apreciere subiectivă într-un motiv de neconformitate, iar
+decizia este nelegală, fiind invocate art. 228 alin. (5) din Legea nr.
+99/2016,  art.  143  alin.  (3)  lit.  a)  din  HG  nr.  394/2016,  precum  și
+principiile egalității de tratament și proporționalității.
+În  ceea  ce  privește  ultimul  motiv  reținut  de  entitatea
+contractantă,  se  arată  că,  în  comunicarea  rezultatului  procedurii,
+aceasta a menționat că anumite observații formulate la întrebările 2.a,
+2.b, 2.c, 2.l și 4 au fost acceptate condiționat, necesitând completări în
+ofertă, și întrucât aceste completări nu au fost introduse corespunzător,
+comisia de evaluare a concluzionat că propunerea tehnică nu respectă
+cerințele documentației de atribuire.
+Se menționează că nu i-a fost transmisă o solicitare suplimentară
+de clarificări din care să rezulte faptul că răspunsurile oferite au fost
+acceptate condiționat sau că  necesitau completări în ofertă. În acest
+context, nu avea posibilitatea de a cunoaște existența unor astfel de
+condiționări,  în  lipsa  unei  comunicări  oficiale  din  partea  comisiei  de
+evaluare.
+De  asemenea,  se  precizează  că  nu  a  solicitat  modificarea  sau
+completarea propunerii tehnice, ci doar a clarificat punctual aspectele
+solicitate (de ex. soluția By-Pass), în strictă conformitate cu solicitarea
+de clarificări nr. 12591/18.08.2025.
+Mai mult, se arată că entitatea contractantă nu a transmis nicio
+solicitare suplimentară prin care să indice că informațiile furnizate ar fi
+incomplete sau că ar fi necesare completări ale documentației.
+În continuare, se face referire la dispozițiile art. 221 din Legea nr.
+99/2016, potrivit cărora, în cazul în care informațiile sau documentele
+prezentate  sunt  incomplete  sau  eronate,  entitatea  contractantă  are
+dreptul de a solicita clarificări și completări, cu respectarea principiilor
+tratamentului egal și transparenței. În acest context, se arată că, dacă
+comisia de evaluare ar fi apreciat că răspunsurile transmise necesitau
+completări în ofertă, aceasta ar fi trebuit să formuleze o nouă solicitare
+de clarificări.
+Se menționează că reținerea unor „acceptări condiționate” fără o
+comunicare  oficială  către  ofertant  este  prezentată  ca  fiind  contrară
+principiilor transparenței și tratamentului egal. Practica administrativă și
+jurisprudența sunt în sensul preferinței pentru solicitarea de clarificări
+care să conducă la obținerea unor informații certe, în locul respingerii
+ofertei pe considerente de fapt insuficient clarificate.
+În sprijinul susținerii privind necesitatea solicitării de clarificări, este
+indicată hotărârea Tribunalului de Primă Instanță de la Luxemburg din
+10.12.2009, cauza T-195/08, Antwerpse Bouwwerken NV împotriva CE,
+punctele 56 și 57.
+Pagina 13 din 36
+Totodată, se susține că entitatea contractantă a încălcat principiul
+proporționalității,  întrucât  argumentele  invocate  pentru  respingerea
+ofertei sale nu justifică decizia adoptată, sens în care s-a făcut trimitere
+la Hotărârea Curții din 05.05.1998, National Farmers Union și alții C-
+157/96,  pct.  60.  Se  susține  că  interpretările  entității  contractante
+reflectă un formalism excesiv și lipsit de justificare și că respingerea
+ofertei  ar  fi  fost  realizată  în  mod  nelegal,  cu  încălcarea  principiului
+proporționalității  care  stă  la  baza  atribuirii  contractelor  de  achiziție
+sectorială.
+Se menționează că evaluarea realizată a înregistrat abateri de la
+cadrul legal, motiv pentru care este necesară o nouă corespondență cu
+ofertantul,  în condițiile în care o decizie de admitere sau respingere
+trebuie fundamentată pe o evaluare temeinică și pe probe concludente,
+nu  pe  elemente  insuficiente  sau  neclare  care  nu  permit  o  evaluare
+obiectivă.
+În concluzie, respingerea ofertei depuse a avut la bază interpretări
+eronate  care  nu  au  demonstrat  neconformitatea,  fiind  apreciată  ca
+expresie  a  unui  formalism  excesiv  și  ca  având  efect  încălcarea
+principiului eficienței utilizării fondurilor publice. Mai mult, deși solicitările
+entității  contractante  au  fost  clarificate,  comisia  de  evaluare  a
+concluzionat  că  prin  răspunsul  la  clarificări  nu  a  fost  demonstrată
+îndeplinirea cerințelor caietului de sarcini și, în consecință, oferta este
+neconformă, cu trimitere la art. 228 alin. (5) din Legea nr. 99/2016.
+Se mai arată și că, potrivit art. 133 alin. (1) din HG nr. 394/2016,
+comisia  de  evaluare  avea  obligația  de  a  verifica  informațiile  din
+propunerea tehnică în ansamblu și de a stabili dacă cerințele minime din
+caietul de sarcini sunt îndeplinite, fiind susținut că această obligație nu a
+fost  îndeplinită  riguros.  În  acest  context,  se  indică  necesitatea
+reverificării conținutului propunerii tehnice și a stabilirii în mod clar a
+modului în care aceasta îndeplinește sau nu cerințele minime stabilite.
+De asemenea, se susține că, dacă evaluarea ar fi fost obiectivă, nu
+ar  fi  existat  motive  pentru  declararea  ofertei  ca  neconformă,  motiv
+pentru  care  se  solicită  Consiliului  constatarea  caracterului  nelegal  al
+evaluării și admiterea contestației.
+Prin punctul său de vedere nr. 15887/01.10.2025, înregistrat la
+Consiliu cu nr. 68583/01.10.2025, entitatea contractantă a solicitat, în
+principal,  respingerea  contestației  ca  nefondată,  iar  în  subsidiar,  în
+temeiul art. 26 alin. (6) din Legea nr. 101/2016, a solicitat respingerea
+contestației ca nefondată pentru motivele expuse.
+1. În legătură cu lipsa notelor de calcul hidraulic pentru linia
+de  nămol ,  entitatea  contractantă  face  trimitere  la  prevederile
+documentației de atribuire,  Capitolul 2 – Secțiunea 5 – Specificații de
+proces – Cerințe specifice proiectului – Apă uzată, paragraful 2 „Cerințe
+generale de proiectare” , care impun prezentarea,  odată cu oferta,  a
+calculelor  hidraulice  și  de  proces  pentru  epurarea  apelor  uzate  și  a
+Pagina 14 din 36
+nămolului.  Aceste  calcule  trebuie  să  indice  metoda  de  proiectare
+utilizată,  o  balanță  a  maselor  pentru  încărcarea  proiectată  pentru
+întreaga stație, precum și parametrii de proiectare relevanți, inclusiv
+pierderile de sarcină dintre obiectele stației de epurare,  dimensiunile
+conductelor de legătură, cu precizarea vitezelor de curgere și recirculările
+externe.
+Se arată că, în cadrul ofertei și al răspunsurilor la solicitarea de
+clarificări, ofertantul a indicat paginile 458–462 din propunerea tehnică
+drept locație a calculelor hidraulice pentru linia de nămol. În fapt, la
+paginile respective sunt prezentate exclusiv calcule aferente liniei de
+apă,  fără  existența  unor  calcule  pentru  linia  de  nămol,  conținând
+modalitatea de calcul a pierderilor de sarcină dintre obiectele de pe linia
+nămolului,  dimensionarea  conductelor  de  legătură  și  a  rezultatelor
+privind vitezele de curgere.
+Se  mai  arată  că  prezentarea  reprezentării  grafice  a  profilului
+hidraulic pentru linia de nămol nu este considerată suficientă, întrucât
+lipsesc  elementele  din  care  să  rezulte  corectitudinea  acesteia.  Se
+menționează că parametrii de intrare pentru  linia de nămol, precum
+concentrația, vâscozitatea și debitul, sunt diferiți de cei de pe linia apei,
+astfel încât calculele nu pot fi asimilate, rezultatele fiind diferite. În lipsa
+calculelor aferente, reprezentarea grafică nu poate fi verificată din punct
+de vedere tehnic.
+Entitatea  contractantă  arată  că  scopul  evaluării  tehnice  este
+verificarea corectitudinii calculelor, cu corespondență în toate celelalte
+elemente ale ofertei, asigurând trasabilitatea documentelor în corelare cu
+bunele practici de proiectare și normativele menționate în documentația
+de atribuire. În acest context, se arată că ofertantul nu a prezentat
+calcule de dimensionare pentru conductele de nămol în exces și nici
+modul de calcul al pierderilor de sarcină pentru conductele de refulare a
+nămolului în exces și a nămolului de recirculare.
+Se  menționează  că,  în  mod  normal,  stabilirea  diametrului
+conductelor, a lungimilor de traseu, a pierderilor de sarcină liniare și
+locale și a cotei geodezice ar trebui să conducă la determinarea înălțimii
+de pompare și a caracteristicilor pompelor de nămol în exces, precum și
+a puterii electrice consumate de acestea, putere care ar trebui avută în
+vedere la calculul costurilor de operare.
+Mai  mult,  se  arată  că  acceptarea  contestației  privind  această
+cerință ar crea un precedent, în sensul posibilității ca, în viitor, ofertanții
+să nu mai prezinte calcule hidraulice pentru linia de nămol, ceea ce ar
+împiedica realizarea unei evaluări corecte a propunerilor tehnice.
+2.  În  ceea  ce  privește  dimensionarea  pompelor  de
+recirculare externă, entitatea contractantă arată că, potrivit propunerii
+tehnice, ofertantul a indicat la pagina 501 utilizarea normativului ATV-
+DVWK-A 131 pentru calculul treptei biologice. În acest normativ sunt
+prevăzute  cerințe  clare  privind  debitele  de  recirculare  externă  a
+Pagina 15 din 36
+nămolului, fiind menționat că debitul de recirculare externă QRS trebuie
+raportat  la  debitul  orar  maxim  influent  QWW,h,  cu  posibilitatea  de
+ajustare până la 1,5 × QWW,h, în funcție de configurația pompelor,
+inclusiv rezerva.
+Se arată că, pentru stația de epurare Cosoba, debitul orar maxim
+prevăzut  în  documentația  de  atribuire,  Capitolul  2,  Secțiunea  5,
+paragraful  3,  este  considerat  echivalentul  debitului  QWW,h  din
+normativul menționat. Totodată, documentația de atribuire prevede, la
+Capitolul 2, Secțiunea 5, paragraful 6.5, că pompele de nămol recirculat
+trebuie  să  fie  capabile  să  recircule  debite  variabile  cuprinse  între
+minimum 50% și 100% raportat la debitul maxim orar influent epurat,
+fără utilizarea unităților de rezervă, raportat la numărul de pompe ales
+de ofertant (2 active + 1 rezervă).
+În acest context, se arată că, având în vedere configurația propusă
+de ofertant, respectiv două pompe active și una de rezervă, debitul
+necesar pe fiecare pompă activă ar fi trebuit să fie de aproximativ 38,5
+m³/h, astfel încât cele două pompe active să poată asigura împreună un
+debit de până la 100% din debitul orar maxim influent. În consecință,
+alegerea pompelor de către ofertantă cu un debit individual de 16,74
+m³/h, astfel cum este indicat în ofertă, este considerată eronată.
+Se face trimitere la notele din oferta depusă, unde este menționat
+că pentru recircularea externă au fost prevăzute trei pompe (două active
+și una de rezervă), fiecare cu un debit de 16,74 m³/h și o înălțime de
+pompare de 8,89 m, conform Listei T1/2, pagina 1306, precum și la Lista
+de echipamente, poziția 15.1, pagina 535.
+3.  În ceea  ce privește dimensionarea  pompelor de nămol
+aferente  foselor  septice ,  entitatea  contractantă  arată  că,  potrivit
+tabelului de la pagina 500 din oferta depusă, debitul de pompare pentru
+pompele de nămol recepționat de la fosele septice  este cuprins între
+0,68 m³/h și 1,13 m³/h, respectiv între aproximativ 0,18 l/s și 0,31 l/s.
+Se susține că aceste debite nu sunt uzuale pentru pompe submersibile
+destinate apelor uzate menajere, prevăzute cu sistem de autocuplare, ci
+pentru pompe folosite pentru evacuarea apelor uzate din bașe și aplicații
+casnice.
+Entitatea contractantă arată că, potrivit datelor din ofertă, timpul
+maxim de golire al bazinului este de 147,33 ore, respectiv 6,14 zile, iar
+timpul minim de golire al bazinului este de 88,40 ore, respectiv 3,68 zile.
+Se menționează că astfel de durate sunt considerate inacceptabile pentru
+exploatarea unei stații de epurare, întrucât nămolul ar putea intra în
+fermentație, cu efecte asupra procesului de epurare.
+De asemenea, se arată că stabilirea debitelor minime pentru stațiile
+de  pompare  a  apelor  uzate  trebuie  să  țină  seama  de  cerințele
+normativelor NP 133/2013 și NP 133/2022, precum și de standardul SR
+EN 12050-1/2015, care impun o viteză minimă de curgere de 0,7 m/s pe
+conductele de refulare apă uzată. În acest context, ofertanta a indicat în
+Pagina 16 din 36
+cadrul contestației un debit de 1,15 m³/h echivalentul a 0,31 l/s care
+trebuie analizat cu diametrul conductei de DN40 și DN50, la care se
+atinge viteza de 0,7m/s impusă.
+Se prezintă un calcul al vitezei de curgere pentru o conductă cu
+diametrul interior de 50 mm, din care rezultă o viteză de aproximativ
+0,17 m/s, inferioară vitezei minime cerute de 0,7 m/s. Se menționează
+că, pentru debitul de 1,15 m³/h, viteza minimă de 0,7 m/s ar fi atinsă
+doar  pentru  un  diametru  interior  de  aproximativ  20  mm,  diametru
+considerat neacceptabil pentru refularea apelor uzate menajere într-o
+stație de pompare. Se arată că aceste concluzii pot fi verificate și prin
+nomogramele furnizorilor de conducte din PEID.
+Entitatea  contractantă  mai arată  că debitele minime și maxime
+prezentate în ofertă nu respectă cerințele normativelor NP 133 și SR EN
+12050-1/2015  și  că  nici  afirmația  privind  asigurarea  vitezei  minime
+pentru  diametrele  DN40 sau  DN50 nu  este susținută  de calcule.  Se
+susține și că pompele propuse în ofertă, sunt dimensionate pentru un
+debit  de  aproximativ  1,187  m³/h,  debit  care  în  urma  calculului  s-a
+constatat că este greșit.
+Dimensionarea la debite mai mici conduce la imposibilitatea tehnică
+de golire corespunzătoare a bazinului stației de pompare, la utilizarea
+unor  conducte  de  refulare  apă  uzată  care  nu  respectă  practicile
+inginerești uzuale și la o putere electrică mai mică a echipamentelor,
+aspect care ar influența calculul costurilor de operare. În acest context,
+se face referire la puterea electrică a pompelor de transfer a nămolului
+din fosele septice indicată în tabelul costurilor de operare.
+Mai mult, se susține că acceptarea unor astfel de erori ar putea
+crea un precedent  și ar putea conduce la o poziționare favorabilă a
+ofertantului  față  de  beneficiar  și  supervizor,  inclusiv  în  etapa  de
+proiectare  ulterioară.  Astfel că,  din  perspectiva  tratamentului  egal și
+nediscriminatoriu între ofertanți, un calcul eronat conduce la un calcul
+incorect  al  costurilor  de  operare  și  influențează  evaluarea  tehnico-
+economică  a  ofertei,  motiv  pentru  care  cerința  a  fost  considerată
+neîndeplinită.
+4.  În  ceea  ce  privește  dozarea  clorurii  ferice ,  entitatea
+contractantă arată că, potrivit breviarului de calcul din ofertă, precum și
+răspunsurilor la clarificări, ofertantul a prezentat dimensionarea unității
+de dozare a clorurii ferice, aceasta având impact direct asupra costurilor
+de  operare.  Se  menționează  că  ofertantul  a  indicat  utilizarea
+normativului ATV-DVWK-A 131 pentru calculul treptei biologice, normativ
+care prevede explicit metodologia de calcul pentru reducerea fosforului
+prin precipitare chimică, pe baza ecuației de bilanț al fosforului.
+Entitatea  contractantă  arată  că,  potrivit  acestui  normativ,
+concentrația  de  fosfor  ce  trebuie  precipitată  chimic  se  determină  în
+funcție de concentrația fosforului la intrarea în treapta biologică (Cp,IAT)
+și de concentrația estimată în efluent (Cp,EST), aceasta din urmă fiind
+Pagina 17 din 36
+stabilită ca 60–70% din concentrația maxim admisă în efluent (Cp,ER).
+Se precizează  că  documentația  de atribuire  nu  permite  considerarea
+reducerilor de încărcări în treapta de pretratare, astfel încât Cp,IAT este
+echivalentă cu concentrația fosforului la intrarea în stație.
+Aplicând  această  metodologie,  entitatea  contractantă  arată  că
+valoarea fosforului care trebuie precipitat este de aproximativ 18,5 mg/l,
+chiar în ipoteza cea mai favorabilă de calcul, și face trimitere atât la
+normativul ATV-DVWK-A 131, cât și la prevederi similare din normativul
+românesc NP 133/2013, indicat în documentația de atribuire.
+Se  menționează  că  ofertantul  a  susținut  în  contestație  că
+metodologia aplicată de comisie nu  ar fi aplicabilă scenariului  cerut,
+respectiv  îndepărtarea  exclusiv  chimică  a  fosforului.  Entitatea
+contractantă arată însă că metodologia utilizată în evaluare este cea
+prevăzută de normativele indicate chiar de ofertant și că ofertantul a
+aplicat  aceeași  metodologie,  dar  folosind  valori  care  conduc  la  un
+necesar mai mic de clorură ferică și, implicit, la costuri de operare mai
+reduse.
+Se mai arată că observația din raportul de evaluare nu vizează
+capacitatea instalației de dozare sau volumul de stocare a reactivului, ci
+cantitatea de clorură ferică luată în calcul pentru costurile de operare,
+cantitate  care  influențează  direct  evaluarea  tehnico-economică  și
+departajarea ofertelor.
+5. În legătură cu valoarea concentrației de oxigen utilizate
+în calculul suflantelor , entitatea contractantă arată că ofertantul a
+indicat în ofertă,  la pagina 519, că a realizat calculul aerării pentru
+diferite încărcări conform normativului DWA-A 131. Se menționează că,
+potrivit normativului invocat, pentru dimensionarea instalației de aerare
+se  aplică  o  concentrație  de oxigen  dizolvat  în  bazinul  de  aerare  de
+aproximativ 2 mg/l.
+Entitatea contractantă arată că, în aceeași ofertă, la pagina 519,
+este prezentat un tabel de calcul al aerării pentru diverse ipoteze, în care
+apare parametrul Cx cu valoarea de 1,50 mg/l. Pe baza acestui element,
+se susține că valoarea concentrației de oxigen utilizată în calculul aerării
+care nu este de 2 mg/l, așa cum a precizat ofertanta în răspunsul la
+clarificare,  ci  1,5  mg/l,  conform  tabelului  din  propunerea  tehnică.
+Diferența dintre valorile de 2 mg/l și cea de 1,5 mg/l are implicații
+asupra  calculului  costurilor  de  operare  și  asupra  alegerii  capacității
+echipamentelor aferente liniei de aerare.
+6.   În  privința  debitului  de  supernatant  estimat,  entitatea
+contractantă arată că acest debit este utilizat la dimensionarea treptei de
+epurare biologică, fiind influent al acesteia. Debitul de supernatant este,
+în principal, rezultatul proceselor de îngroșare și deshidratare, aducând
+încărcări  și  debite  suplimentare  care  trebuie  epurate.  Entitatea
+contractantă precizează că, deși încărcările aferente acestui debit pot fi
+estimate  (în  cazul  de  față  ofertanta  alegând  valoarea  de  5%  din
+Pagina 18 din 36
+încărcarea stației), debitele sunt rezultatul clar al calculelor  realizate
+pentru treapta de tratare a nămolului și nu pot fi stabilite prin estimare.
+Întregul calcul de proces influențează capacitățile proiectate și costurile
+de operare,  cu impact asupra prețului ofertei și asupra criteriilor de
+evaluare.
+Se arată că ofertantul a susținut, în răspunsul la clarificarea de la
+punctul 2 r), că debitul de supernatant de la pagina 503 este un debit
+estimat  utilizat  la  dimensionarea  treptei  biologice,  iar  debitul  de  la
+pagina 531 este cel rezultat din calculul de dimensionare, diferența fiind
+explicată prin timpul de deshidratare considerat de 5 zile pe săptămână
+și 8 ore pe zi, precum și prin considerarea încărcării supernatantului ca
+procent de 5% din încărcările apei uzate influente.
+Entitatea  contractantă  susține  că  această  justificare  este
+considerată eronată și prezintă un calcul comparativ: debitul calculat de
+45,13 m³/zi la 5 zile lucrătoare pe săptămână și debitul estimat de 28,90
+m³/zi. Se menționează că, raportat la 7 zile calendaristice, debitul zilnic
+ar  rezulta  ca  45,13  m³/zi  lucrătoare  ×  5/7  =  32,24  m³/zi
+calendaristică,  valoare  considerată  diferită  de  cea  estimată  de
+ofertantă. În final, se arată că valoarea corectă este cea rezultată din
+calculul treptei de tratare a nămolului și că aceasta ar fi trebuit să se
+regăsească la intrarea în treapta biologică.
+7. În legătură cu normativele, entitatea contractantă arată că, în
+raport cu ordinul de aprobare a reglementării tehnice „Normativ privind
+proiectarea, execuția și exploatarea sistemelor de alimentare cu apă și
+canalizare ale localităților, indicativ NP 133” (volumul II – Sisteme de
+canalizare), ofertanta nu ar fi avut în vedere dispozițiile art. 3 și nu a
+ținut cont de cerințele din documentația de atribuire, cap. 2, secțiunea 5,
+paragraful 2.
+În acest context, este redat art. 3 din ordin, care prevede că actul
+normativ nu se aplică anumitor obiective/proiecte de investiții privind
+sistemele  de  canalizare  ale  localităților,  inclusiv  celor  pentru  care
+procedurile  de  achiziție  publică  pentru  proiecte  tehnice/studii  de
+fezabilitate/documentații de avizare au fost inițiate până la data intrării
+în vigoare a ordinului ori ale căror documentații au fost recepționate,
+precum  și  celor  ale  căror  proiecte  tehnice  sunt  elaborate  în  baza
+documentațiilor  menționate  anterior,  precum  și  celor  care  necesită
+actualizare în conformitate cu actele normative în vigoare ori pentru care
+a fost aprobată finanțarea.
+Entitatea contractantă menționează că, în contestație, ofertanta nu
+a  ținut  cont  de art.  3  lit.  b)  și  c)  din  Anexa  la  Ordinul  ministrului
+dezvoltării,  lucrărilor  publice  și  administrației  nr.  14/2023  pentru
+aprobarea reglementării tehnice referitoare la NP 133-2022, volumul II,
+publicat în Monitorul Oficial al României, Partea I, nr. 41 bis/13.01.2023.
+Se indică faptul că anexa la ordin este avută în vedere în argumentație.
+Pagina 19 din 36
+8.  În  privința  erorilor  identificate  în  tabelul  costurilor  de
+operare, entitatea contractantă arată că ofertantul a răspuns solicitării
+de clarificări, precizând că, din cauza unor erori de redactare/transcriere,
+în  tabelul  costurilor  de  operare  au  fost  înscrise  valori  eronate  ale
+puterilor electrice pentru mai multe echipamente. Se menționează că
+aceste erori au condus la o valoare diferită a costurilor de operare față
+de valoarea reală și corect calculată.
+Se arată că ofertantul a susținut că aceste erori se încadrează în
+categoria abaterilor tehnice minore, în sensul art. 140 alin. (7) și (8) din
+HG nr. 394/2016. Entitatea contractantă precizează însă că există și
+echipamente indicate de ofertantă ca fiind introduse în bazinele de nămol
+care nu au fost prezentate în fișele tehnice, în tabelul puterilor sau în
+costurile  de  operare,  ceea  ce  conduce  la  concluzia  că  prezentarea
+calculului costurilor de operare este incorectă.
+Se face referire la documentația de atribuire, respectiv Capitolul 0 –
+Fișa de date și formulare, Anexa 1 la fișa de date a achiziției, unde se
+arată că modalitatea de acordare a punctajului include costul de operare
+ca factor de evaluare. Se menționează că factorul de evaluare „ Costul
+de  operare  anual  maxim  garantat  pentru  stația  de  epurare
+Cosoba” reprezintă componenta tehnică a ofertei și are o pondere de
+40% din punctajul total, fiind un criteriu care poate face diferența între
+ofertanți.
+Entitatea contractantă arată că eroarea din calculul costurilor de
+operare  nu  poate  fi  considerată  abatere  tehnică  minoră,  întrucât
+valoarea costurilor de operare influențează  direct  punctajul ofertei  și
+rezultatul  procedurii  de  atribuire.  Se  menționează  că  acest  cost
+reprezintă un indicator de performanță asociat exploatării instalațiilor,
+costuri care vor fi suportate de entitatea contractantă în calitate de viitor
+deținător și operator al stației de epurare.
+Se mai arată că asumarea de către ofertantă a realizării lucrărilor
+conform  documentației,  fără  modificarea  ofertei,  este  considerată
+inacceptabilă, întrucât orice eroare de calcul poate modifica punctajul și
+încalcă principiul tratamentului egal între ofertanți. În acest context, se
+menționează că entitatea contractantă a aplicat principiile transparenței
+și egalității de tratament în evaluarea ofertelor.
+De asemenea, se arată că un calcul eronat al costurilor de operare
+în faza de ofertă poate conduce la imposibilitatea asigurării garanției
+privind costul de operare și la creșterea acestuia pentru beneficiar, cost
+care  urmează  a  fi  suportat  de  entitatea  contractantă  în  calitate  de
+deținător și operator al stației de epurare.
+9. În legătură cu termenele de execuție , se arată că, comisia
+de  evaluare  nu  contestă  numărul  de  muncitori  pe  care  ofertanta  a
+declarat că îi mobilizează pentru realizarea lucrărilor, însă constată că
+planificarea  prezentată  nu  respectă  succesiunea  și  durata  minimă  a
+Pagina 20 din 36
+etapelor tehnologice necesare pentru executarea obiectivelor, conform
+reglementărilor tehnice în vigoare.
+Se  menționează  că  este  analizată  în  mod  particular  realizarea
+clădirii  administrative,  pentru  care  ofertanta  a  susținut  că  poate  fi
+executată într-un termen scurt de 12 zile. Sunt indicate cerințele din
+documentația  de  atribuire  privind  construcția  clădirii  administrative,
+prevăzute în Capitolul 2 – Secțiunea 2 – Lucrări civile – Cerințe specifice
+proiectului, la subsecțiunea 17.2.2.1 „Pavilion administrativ”.
+În acest context, se arată că documentația prevede realizarea unei
+clădiri de tip parter, din cadre de beton armat, cu zidărie din cărămidă,
+cu fundații continue din beton armat, cu respectarea adâncimii de îngheț
+la  realizarea  lor,  precum  și  un  acoperiș  tip  șarpantă  din  lemn  cu
+învelitoare ceramică sau tablă. Se menționează că imobilul trebuie să
+includă compartimentările necesare (laborator, cameră de odihnă, baie
+etc.), tâmplăria va fi din PVC cu geam termopan, lucrări de finisaje,
+precum și un trotuar perimetral cu lățimea de 1,0 m și pantă pentru
+scurgerea apelor pluviale.
+Se mai arată că, clădirea trebuie să fie complet echipată și mobilată
+și prevăzută cu sistem de încălzire și aer condiționat, cu cerințe privind
+temperaturile  minime  și  maxime  în  încăperi.  De  asemenea,  se
+menționează cerințele privind climatizarea, pardoselile (gresie cu sistem
+de colectare a scurgerilor, respectiv parchet în birouri) și asigurarea
+accesului facil la depozit.
+În final, se menționează că este indicat un extras din graficul Gantt,
+la pagina 1208 din oferta depusă.
+Se arată că, potrivit graficului Gantt din ofertă, ofertanta a alocat
+un  interval  de  12  zile,  în  perioada  22.10.2027–08.11.2027,  pentru
+execuția clădirii administrative. În același timp, în documentele privind
+alocarea resurselor, sunt indicate resursele umane și materiale aferente
+acestui obiect, pentru același interval de timp.
+În  acest  termen  de  12  zile,  ofertantul  prevede  realizarea  unui
+număr semnificativ de lucrări, respectiv: săpături, turnarea betonului de
+egalizare la cota de fundare, armarea și turnarea betonului în grinzile de
+fundare și a placă la cota ±0,00, armarea și cofrarea stâlpilor, cofrarea și
+armarea grinzilor și a plăcii peste parter, turnarea betonului în stâlpi,
+grinzi  și  placa  peste  parter,  închiderea  anvelopei  clădirii,  realizarea
+termosistemului,  execuția  instalațiilor  sanitare,  termice  și  electrice,
+realizarea  instalației  SCADA  pentru  dispecer,  precum  și  realizarea
+finisajelor interioare.
+Se  menționează  că  aceste  lucrări  presupun  respectarea  unor
+timpi  tehnologici  minimi  între  fazele  de  execuție,  impuși  de
+reglementările tehnice aplicabile construcțiilor din beton armat, în special
+pentru  clădiri cu fundații continue din beton armat,  cadre din beton
+armat  și  zidărie  de  cărămidă,  conform  cerințelor  documentației  de
+atribuire.
+Pagina 21 din 36
+Sunt citate prevederi din normativul NE 012/2 privind timpii minimi
+de decofrare a fețelor laterale, a fețelor inferioare cu menținerea popilor
+de siguranță și pentru îndepărtarea popilor de siguranță, în funcție de
+temperatura mediului, dimensiunile elementelor și evoluția rezistenței
+betonului. De asemenea, se arată că normativul prevede condiții stricte
+privind recepția lucrărilor din beton, beton armat și beton precomprimat,
+precum  și  faptul  că  acoperirea  elementelor  structurii  cu  alte  lucrări
+(zidărie,  tencuieli,  placaje,  finisaje)  este  permisă  doar după  recepția
+structurii de rezistență sau, în cazuri justificate, după recepția parțială.
+Se subliniază că, în intervalul de timp necesar întăririi betonului și
+menținerii cofrajelor și popilor de susținere, nu pot fi executate lucrări de
+finisaje sau instalații. De asemenea, lucrările de finisaje implică utilizarea
+materialelor umede, care necesită timpi suplimentari de uscare, precum
+în  cazul  șapelor,  placajelor  ceramice,  parchetului,  tencuielilor  și
+gletuirilor.
+Se mai arată că, pe durata execuției, este necesară întocmirea și
+semnarea  proceselor-verbale  de  control  al  calității  și  pentru  fazele
+determinante, precum și pentru lucrările care devin ascunse, activități
+care presupun timp suplimentar și care nu sunt reflectate în graficul
+Gantt prezentat de ofertant.
+În  concluzie,  se  apreciază  că  fazele  de  execuție  enumerate,
+împreună cu timpii tehnologici obligatorii și cu activitățile de control și
+recepție, nu pot fi realizate într-un interval de 12 zile pentru clădirea
+administrativă. Aceeași analiză este extinsă și asupra celorlalte obiecte
+din ofertă, pentru care sunt prevăzute termene similare reduse (stația de
+suflante - 12 zile, bazinele biologice și decantoarele secundare – 15 zile
+fiecare, pavilionul de nămol – 8 zile).
+Se menționează că, în aceste condiții, ofertanta ar fi trebuit să ia în
+considerare  succesiunea  etapelor  de  execuție  și timpii  necesari  între
+diferitele lucrări pentru fiecare obiect în parte, iar comisia de evaluare nu
+a putut ignora termenele reduse alocare și lipsa corelării acestora cu
+cerințele tehnice aplicabile.
+10.  În  legătură  cu  nesolicitarea  a  încă  unei  clarificări ,
+achizitoarea  a arătat  că art.  221 alin. (1) din Legea  nr.  99/2016 îi
+conferă dreptul, și nu obligația de a solicita clarificări sau completări.
+Comisia de evaluare dispune de o marjă de apreciere în acest sens,
+putând solicita clarificări doar atunci când apreciază că neclaritățile sunt
+susceptibile de remediere fără modificarea substanțială a ofertei.
+Se  precizează  că  solicitarea  de  clarificări  nu  poate  conduce  la
+modificarea substanțială a propunerii tehnice , ci doar la explicarea
+unor  elemente  deja  existente.  În  situația  analizată,  se  consideră  că
+eventualele completări ar fi presupus introducerea unor elemente noi
+direct  în  ofertă,  ceea  ce ar  fi echivalat  cu  o  modificare  a  acesteia,
+interzisă de lege, potrivit art. 221 alin. (2) coroborat cu art. 228 alin. (5)
+din Legea nr. 99/2016. În aceste condiții, se arată că decizia comisiei de
+Pagina 22 din 36
+evaluare de a nu transmite o nouă solicitare de clarificări a fost adoptată
+pentru  respectarea  cadrului  legal  și  pentru  evitarea  transformării
+procedurii de clarificări într-un mecanism de rescriere a ofertei.
+În  ceea  ce  privește  mențiunea  referitoare  la  „acceptarea
+condiționată” a unor răspunsuri, se arată că aceasta reflectă o evaluare
+internă a comisiei, în sensul că, deși anumite explicații au fost primite,
+ele nu s-au regăsit efectiv integrate în conținutul propunerii tehnice. Se
+susține că, comisia de evaluare nu avea obligația de a valida parțial
+aceste răspunsuri și de a acorda un nou termen de completare, întrucât
+o asemenea abordare ar fi depășit limitele legale ale clarificărilor.
+Se subliniază că, comisia de evaluare nu este obligată să formuleze
+solicitări succesive de clarificări până la momentul în care un ofertant ar
+ajunge la o ofertă conformă. Evaluarea s-a realizat pe baza propunerii
+tehnice în forma finală depusă, iar în situația în care aceasta nu a cuprins
+elementele necesare pentru demonstrarea conformității cu documentația
+de atribuire, respingerea ofertei este considerată justificată.
+Respingerea unei oferte care nu respectă cerințele documentației
+de atribuire nu reprezintă formalism excesiv, ci aplicarea strictă a art.
+228 alin. (5) din Legea nr. 99/2016. De asemenea, se arată că principiul
+proporționalității nu poate fi interpretat în sensul obligării comisiei să
+accepte  completări  succesive  care  să  conducă  la  modificarea  ofertei
+inițiale și la afectarea egalității de tratament între ofertanți.
+De asemenea, se arată că menținerea unui cadru procedural strict
+și a unor reguli uniforme pentru toți ofertanții reprezintă o expresie a
+respectării principiilor transparenței și tratamentului egal. Comisia de
+evaluare a acționat legal și justificat prin neemiterea unei noi solicitări de
+clarificări, consemnând caracterul insuficient al unor răspunsuri și lipsa
+integrării acestora în ofertă, concluzionând că propunerea tehnică nu
+respectă cerințele documentației de atribuire. În consecință, se solicită
+respingerea contestației ca nefondată.
+  Prin  adresa  înregistrată  la Consiliu cu nr.  73132/20.10.2025,
+contestatoarea  a  formulat  răspuns  la  punctul  de  vedere  al  entității
+contractante  (...),  prin  care  și-a  exprimat  poziția  față  de  susținerile
+acesteia și a solicitat, în temeiul art. 453 Cod procedură civilă, obligarea
+entității contractante la plata sumei de 6.050 lei cu titlu de cheltuieli de
+judecată.
+În ceea ce privește lipsa notelor de calcul hidraulic pentru linia
+de nămol , (...) SRL a arătat că entitatea contractantă a considerat
+neîndeplinită  cerința  privind  prezentarea  breviarului/profilelor
+hidraulice,  apreciind  că  paginile  indicate  din  propunerea  tehnică  ar
+conține numai calcule pentru linia apei. Contestatoarea a susținut că
+profilul hidraulic include atât linia apei, cât și linia nămolului, menționând
+planșa aferentă și afirmând că oferta conține atât breviarul de calcul, cât
+și  profilul  hidraulic.  A  fost  indicat  faptul  că,  pe  linia  de  tratare  a
+nămolului,  echipamentele  relevante  sunt  centrifuga  de  deshidratare
+Pagina 23 din 36
+nămol și pompa de alimentare a acesteia, iar parametrii finali ai pompei
+urmează  să  fie  stabiliți  în  etapele  ulterioare  de  proiectare,  fiind
+menționat că la faza de ofertare s-a apreciat parametrul - înălțime de
+pompare, ca fiind acoperitor în orice ipoteză. Contestatoarea a afirmat că
+pompa a fost corect dimensionată, iar eventualele optimizări putând fi
+realizate  în  faza  Proiectului  Tehnic  de  Execuție  fiind  asumate  fără
+modificarea prețului, a costurilor de operare și a termenelor din ofertă.
+De asemenea, a susținut că, dacă entitatea contractantă ar fi considerat
+informațiile insuficiente, ar fi trebuit să solicite clarificări suplimentare, și
+a arătat că entitatea contractantă a interpretat greșit situația, invocând
+un „precedent”, deși contestatoarea a afirmat că a prezentat calculele și
+că nu a contestat documentația de atribuire, ci rezultatul procedurii și
+evaluarea ofertei.
+În  legătură  cu  dimensionarea  pompelor  de  recirculare
+externă, contestatoarea a reiterat că, prin răspunsul la clarificări, a
+arătat că pompele acestea asigură debite variabile între 50% și 100%
+din debitul maxim orar influent (Qc), fiind echipate cu convertizoare de
+frecvență, astfel că debitul se poate regla fin în intervalul respectiv.
+Entitatea  contractantă  a  susținut  că,  raportat  la  cerințele  din
+documentația de atribuire și la numărul de pompe ale (2 active + 1
+rezervă), debitul per pompă ar trebui să fie mai mare, apreciind eronată
+alegerea  pompelor  ofertate  și  invocând  normativul  DWA-ATV-131E.
+Contestatoarea a indicat că, deși calculele comisiei sunt teoretice potrivit
+normativului invocat, trebuie avută în vedere și experiența practică în
+operare și a susținut că, din diagramele furnizorului, o pompă poate
+funcționa într-un interval mai larg de debite, astfel încât două pompe
+active pot acoperi inclusiv situația de 77 mc/h fără utilizarea rezervei. A
+afirmat  că  soluția  propusă  optimizează  funcționarea  și  costurile  de
+operare și că, dacă ulterior vor fi necesare optimizări în proiectul tehnic,
+acestea sunt asumate cu garantarea prețului, costurilor de operare și a
+termenelor.
+În ceea ce privește dimensionarea pompele pentru nămolul
+din fose septice , contestatoarea a arătat că entitatea contractantă a
+apreciat că debitele propuse nu sunt uzuale și că ar corespunde unor
+aplicații casnice. Contestatoarea a prezentat un extras din fișa tehnică a
+unei pompe submersibile Grundfos SL pentru ape uzate, menționând
+caracteristici privind tipul rotorului și pasajul liber, și a susținut că aceste
+date contrazic concluziile entității contractante. A indicat că breviarul de
+calcul aferent camerei de recepție pentru nămol septic este prezentat în
+ofertă, cu valori pentru volum, dimensiuni bazin, mixer și debite de
+pompare,  precum și caracteristicile pompelor. A susținut că pompele
+propuse au un interval mare de funcționare și pot opera cu convertizoare
+de frecvență, apreciind alegerea ca fiind corectă. A arătat că, pentru
+mentenanță, nu este necesară golirea bazinului datorită instalațiilor de
+ridicare, iar pentru cazuri rare de inspecție internă, golirea bazinului ar
+Pagina 24 din 36
+putea fi realizată în aproximativ o oră prin funcționarea pompelor la
+debit maxim. Contestatoarea a afirmat că montarea unor pompe cu debit
+mai mare ar conduce la costuri mai mari de exploatare și a menționat că,
+în faza Proiectului Tehnic de Execuție, vor fi corelate debitele, conductele
+și vitezele minime, sub controlul verificatorilor atestați.
+Referitor la dozarea clorurii ferice , contestatoarea a arătat că
+entitatea contractantă a invocat atât normativul ATV-DVWK-A 131, cât și
+NP 133/2013, susținând că metoda utilizată în evaluare ar fi corectă și că
+problema  ar  ține  de  cantitatea  de  clorură  ferică  utilizată  în  calculul
+costurilor  de  operare.  Contestatoarea  a  invocat  NP  133/2022,
+menționând prevederi privind reținerea fosforului, ecuația de bilanț și
+faptul că, potrivit formulei indicate, concentrația de fosfor din efluent ar
+fi considerată egală cu concentrația admisibilă. Contestatoarea a susținut
+că  oferta  respectă  cerința  din  caietul  de  sarcini  privind  reducerea
+fosforului la valori sub 5 mg/l și că unitatea de dozare este capabilă să
+asigure  reducerea  exclusiv  prin  precipitare  chimică.  A  arătat  că  a
+efectuat o verificare a costurilor de operare într-o ipoteză cu o valoare
+mai mare a fosforului precipitat, rezultând o creștere de 1,3% față de
+oferta depusă, și a menținut susținerea privind caracterul marginal al
+diferenței de 1,5 mg/l. De asemenea, a afirmat că entitatea contractantă
+nu a demonstrat incidența cazurilor prevăzute de art. 140 alin. 7 și 8 din
+HG nr. 394/2016 privind abaterile tehnice minore.
+În  privința  concentrației  de  oxigen  utilizate  în  calculul
+suflantelor, contestatoarea a arătat că normativul DWA-A 131 permite,
+în  operare,  utilizarea  unor  concentrații  diferite  față  de  baza  de
+dimensionare, inclusiv 1,5 mg/l. A susținut că fișa tehnică a suflantei și
+capacitățile ofertate (3 suflante, 2 active și 1 rezervă) demonstrează
+acoperirea necesarului inclusiv pentru ipoteza de 2 mg/l, cu aceleași
+costuri din ofertă. A reiterat că oferta nu poate fi declarată neconformă
+dacă respectă cerințele caietului de sarcini.
+În  legătură  cu  debitul  de  supernatant ,  contestatoarea  a
+susținut că, la nivel de ofertă, este vorba despre un debit estimat și că
+ofertanta  are  libertatea  de  a  estima  anumite  debite  necunoscute  la
+momentul proiectării, arătând că supernatantul este în mare măsură
+rezultatul  proceselor  de  îngroșare  și  deshidratare  a  nămolului.  A
+menționat că producția de nămol și, implicit, supernatantul variază în
+timp în funcție de încărcările din apa uzată menajeră și a afirmat că
+estimarea este acceptabilă la nivel de ofertă și nu influențează costurile
+de operare ofertate. A indicat că eventualele optimizări în faza Proiectului
+Tehnic de Execuție sunt asumate cu garantarea prețului, costurilor de
+operare și termenelor asumate prin ofertă.
+Cu privire la utilizarea normativelor , contestatoarea a susținut
+că NP 133/2022 este act oficial în vigoare, publicat în Monitorul Oficial și
+inclus  pe  lista  reglementărilor  MDLPA,  și  că  acesta  a  abrogat  NP
+133/2013 la data intrării în vigoare (12.02.2023), astfel încât, la data
+Pagina 25 din 36
+elaborării  ofertei,  NP  133/2022  era  singurul  normativ  aplicabil.  A
+argumentat că prevederile tranzitorii invocate de entitatea contractantă
+se referă la lucrări în execuție sau documentații recepționate anterior și
+că, în cazul în care documentațiile necesită actualizare, aceasta trebuie
+realizată  potrivit  normelor  în  vigoare.  Contestatoarea  a  indicat  că
+propunerea  tehnică  a  fost  elaborată  după  intrarea  în  vigoare  a  NP
+133/2022,  astfel  că  aplicarea  acestui  act  normativ  era  obligatorie
+conform dispozițiilor art. 30 din Legea nr. 10/1995 și art. 15 alin. (1) lit.
+d) din HG nr. 907/2016 privind aplicarea normelor în vigoare la data
+realizării  proiectării,  arătând  că  documentația  de  atribuire  nu  poate
+impune aplicarea unui normativ abrogat.
+În  privința  erorilor  din  tabelul  costurilor  de  operare ,
+contestatoarea a arătat că a răspuns clarificării, indicând existența unor
+erori de redactare/transcriere privind puterile electrice trecute în tabel și
+susținând că acestea constituie abateri tehnice minore în sensul art. 140
+alin. (7) și (8) din HG nr. 394/2016. A susținut că eroarea nu afectează
+calculul costului anual de operare și că prețul ofertat este corect, iar
+entitatea contractantă nu a indicat concret valoarea erorii și nici motivul
+pentru care aceasta depășește pragul de 1% din prețul total al ofertei.
+Contestatoarea a apreciat excesive așteptările comisiei privind detalierea
+proiectului tehnic în faza de ofertare, menționând durata estimată pentru
+proiectare (6 luni), prin comparație cu termenul de depunere a ofertelor
+(50 zile).
+Referitor la termenele de execuție, contestatoarea a susținut că
+entitatea contractantă a calificat nelegal că termenele de execuție sunt
+nerealiste,  transformând  durata  scurtă  de  execuție  într-un  motiv  de
+neconformitate,  deși  documentația  nu  impune  durate  minime  sau
+maxime.  A  arătat  că  durata  din  graficul  Gantt  reprezintă  perioada
+efectivă de execuție fizică în șantier , bazată pe mobilizare simultană
+a  mai  multor  echipe,  execuție  paralelă  și  resurse  asigurate,  fiind
+enumerate elemente de organizare precum execuția în sistem continuu,
+echipe  multiple,  montaj  prefabricat  și  lucrări  desfășurate  în  paralel.
+Contestatoarea a indicat că reglementările tehnice stabilesc durate de
+întărire/uscare,  dar  acestea  se  pot  reduce  sau  suprapune  parțial  în
+funcție  de  aditivi,  condiții  meteorologice  și  planificare  continuă.  A
+susținut  că  aprecierea  comisiei  este  subiectivă  și  că,  în  lipsa  unei
+demonstrații tehnice privind imposibilitatea execuției, aceasta nu poate
+conduce la respingere, reiterând încălcarea art. 228 alin. (5) din Legea
+nr. 99/2016 și art. 143 alin. (3) lit. a) din HG nr. 394/2016, precum și a
+principiilor egalității de tratament și proporționalității.
+În  privința  nesolicitării  unei  clarificări  suplimentare ,
+contestatoarea a susținut că atât practica CNSC, cât și jurisprudența
+susțin solicitarea de clarificări pentru obținerea unor informații certe,
+sens în care s-a amintit hotărârea din 10.12.2009 în cauza T-195/08,
+Antwerpse  Bouwwerken  NV  împotriva  CE,  precum  și  principiul
+Pagina 26 din 36
+proporționalității.  De  asemenea,  contestatoarea  a  susținut  că
+respingerea  ofertei  nu  este  justificată  de  argumentele  entității
+contractante și că evaluarea a înregistrat abateri de la cadrul legal, fiind
+necesară o nouă corespondență și o evaluare fundamentată pe probe
+concludente.
+Mai  mult,  având  în  vedere  poziția  procesuală  a  entității
+contractante,  contestatoarea  a  solicitat  ca,  în  situația  admiterii
+contestației, să se dispună obligarea (...) la plata sumei de 6.050 lei cu
+titlu de cheltuieli de judecată.
+Totodată, contestatoarea a depus factura fiscală nr. BBR-4045 din
+24.09.2025,  emisă  de  Societatea  Civilă  de  Avocați  Basarab,  Todor,
+Tămâian, în valoare de 6050,00 lei și ordinul de plată aferent. 
+Din înscrisurile aflate la dosarul cauzei, Consiliul constată
+următoarea situație de fapt:
+În  vederea  atribuirii  contractului  de  achiziție  publică  având  ca
+obiect „(...), (...), în calitate de entitate contractantă , a inițiat procedura
+de licitație deschisă, prin publicarea în SEAP a anunțului de participare
+nr. CN1079625/01.04.2025.
+Din cuprinsul anunțului de participare amintit, Consiliul a reținut că
+valoarea estimată a contractului de lucrări este de 14.577.613,51 lei
+criteriul  de  atribuire  este  „Cel  mai  bun  raport  calitate  -  cost”,  iar
+depunerea  ofertelor  a  fost  stabilită  pentru  data  de  19.05.2025,  ora
+15:00.
+Din  Declarația  de  participare  publicată  în  SEAP  la  data  de
+19.05.2025 rezultă că au depus ofertă doi operatori economici, inclusiv
+societatea contestatoare.
+Conform raportului procedurii nr. 14801/16.09.2025, ambele oferte
+depuse au fost respinse, iar procedura anulată, în temeiul art. 225 alin.
+(1) lit. a) din Legea nr. 99/2016.
+Nemulțumită fiind de rezultatul procedurii, respectiv de faptul că
+oferta sa a fost respinsă, iar procedura de atribuire a anulată, (...) SRL a
+depus contestația în analiză, solicitând următoarele:
+I.  anularea  comunicării  rezultatului  procedurii,  a  raportului
+procedurii nr. 14801/16.09.2025 și a proceselor-verbale de evaluare, în
+ceea ce privește decizia entității contractante de a declara neconformă
+oferta (...) SRL;
+II. anularea raportului procedurii nr. 14801/16.09.2025, în ceea ce
+privește  decizia  entității  contractante  de  anulare  a  procedurii  de
+atribuire;
+III. obligarea entității contractante la:
+– reluarea procedurii de atribuire prin reevaluarea ofertei depuse
+de (...) SRL, cu luarea în considerare a motivelor invocate în contestație
+și cu respectarea legislației aplicabile;
+Pagina 27 din 36
+– la stabilirea și comunicarea unui nou rezultat al procedurii prin
+emiterea unui nou raport al procedurii, în conformitate cu documentația
+de atribuire și cu decizia CNSC care urmează a fi pronunțată.
+IV. Obligarea entității contractante la plata cheltuielilor de judecată
+ocazionate de formularea contestației. 
+Totodată, cu respectarea prevederilor art. 61 1 alin. (1) lit. a) din
+Legea  nr.  101/2016,  (...)  SRL  a  făcut  dovada  constituirii  cauțiunii
+corespunzătoare,  în  valoare  de  88.000  lei,  conform  recipisei  de
+consemnare nr. 211703870/1 eliberată de CEC BANK Sucursala Victoria,
+la data de 26.09.2025, din care rezultă consemnarea cauțiunii pe seama
+și la dispoziția CNSC, corespunzătoare dosarului nr. 3770/2025.
+Recipisa de consemnare se va restitui în condițiile stipulate de art.
+1.064 din Codul de procedură civilă, coroborate cu dispozițiile art. 61 1
+alin.  (5),  (6)  și  (7)  din  Legea  nr.  101/2016,  cu  modificările  și
+completările ulterioare.
+Trecând la soluționarea, pe fond a contestației îndreptate împotriva
+respingerii ofertei depuse de (...) SRL, ca prim aspect, Consiliul a reținut
+faptul  că,  prin  adresa  nr.  14804/16.08.2025,  care  reprezintă
+comunicarea rezultatului procedurii, s-au comunicat motivele pentru care
+s-a ajuns la această finalitate: ”… Prin prezenta vă facem cunoscut că în
+urma evaluării ofertelor depuse în cadrul licitației deschisă online pentru
+atribuirea contractului de achiziție sectorială având ca obiect: GR-CL-11
+- Construcția stației de epurare Cosoba având anunțul de participare nr.
+CN1079625  din  data  de  01.04.2025,  oferta  dumneavoastră  a  fost
+declarată neconformă în conformitate cu prevederile art. 143 alin (3), lit.
+a) din HG 394/2016.
+Motivație:
+Prin adresa nr. 12590 din data de 18.08.2025 v-au fost solicitate
+clarificări cu privire la propunerea tehnica prezentată.
+În urma analizării răspunsurilor la solicitările de clarificări formulate
+de  comisia  de  evaluare,  s-au  constatat  mai  multe  neconformități  și
+lipsuri care afectează caracterul conform al propunerii tehnice, după cum
+urmează:
+- Lipsa notelor de calcul hidraulic pentru linia de nămol (au fost
+prezentate doar pentru linia apei);
+- Subdimensionarea  pompelor  de  recirculare  externă,  deoarece
+conform DWA-ATV-131E §6.4, debitul de recirculare externă  se
+raportează la QWW,h, rezultând QRS=0,75-1,0*QWW,h (până la
+1,5xQWW,h);
+- Subdimensionarea  pompelor  de  nămol  din  fose  septice
+deoarece debitul de pompare indicat pentru pompele de nămol fose
+septice  (Qp=  1,15  m3/h  ~  0,32  l/s)  este  foarte  mic  pentru  o
+conductă de refulare a apei uzate menajere;
+Pagina 28 din 36
+- Metodologie incorectă pentru calculul dozării clorurii ferice, cu
+impact  asupra  costurilor  de  operare,  deoarece,  conform  DWA
+A13IE,  pentru  balanța  fosforului  se  utilizează  CP,EST=0,6-
+0,7Xcp,ER; la CP,ER=5 mg/l rezultă CP,EST=3,5 mg/l. Valoarea ce
+trebuie  precipitată  (în  absența  BioP)  devine  21,82-3,5=  18,32
+mg/l, nu 16,82 mg/l cum este în ofertă;
+- Nedocumentarea concentrației de oxigen utilizate în calculul
+suflantelor;
+- Discrepanțe  între  debitele  de  supernatant  estimate și  cele
+utilizate în dimensionare, cu impact asupra bilanțului de intrare în
+treapta biologică;
+- Utilizarea unor normative neacceptate prin documentația de
+atribuire, fără clarificarea ierarhiei acestora;
+- Erori  în  tabelul  costurilor  de  operare  care  afectează
+transparența și comparabilitatea ofertelor;
+- Termene  de  execuție  nerealiste  raportat  la  complexitatea
+obiectivelor.
+Având  în  vedere  aceste  neconformități,  precum  şi  faptul  că
+observațiile de la întrebările 2.a, 2.b, 2.c, 2.l şi 4 au fost acceptate
+condiționat (necesitau completări în ofertă), însă aceste clarificări nu au
+fost  introduse  corespunzător  în  ofertă,  comisia  de  evaluare  a
+concluzionat  că  propunerea  tehnică  depusă  nu  respectă  cerințele
+documentației de atribuire.
+Având  în  vedere  faptul  că  prin  răspunsul  la  clarificări  nu
+demonstrați  îndeplinirea  cerințelor  oferta  este  NECONFORMĂ  în
+conformitate  cu  prevederile  art.  228  alin  (5)  din  Legea  99/2016
+coroborat cu prevederile art. 143 alin (3), lit. a) din HG 394/2016. „(3)
+În  condițiile  art.  228  alin.  (5)  din  Lege,  oferta  este  considerată
+neconformă în următoarele situații: a) nu satisface în mod corespunzător
+cerințele caietului de sarcini. (…)”.
+Procedând  la  verificarea  primului  motiv  de  respingere  a  ofertei
+depuse de asocierea (...) SRL – (...), privind ” Lipsa notelor de calcul
+hidraulic pentru linia de nămol (au fost prezentate doar pentru linia
+apei)”,  Consiliul  constată  că  este  corect  reținut,  critica  societății
+contestatoare din acest punct de vedere fiind nefondată, având în vedere
+următoarele aspecte:
+1. în fișa de date , la cap. IV.4.1 Modul de prezentare al propunerii
+tehnice, s-au precizat, printre altele că ”… Propunerea tehnică va include:
+- Formularul nr. 10 – Propunere tehnică, completat cu toate informațiile solicitate;
+În  vederea  aplicării  criteriului  de  atribuire  pentru  factorul  de  evaluare  tehnic
+“Durata  suplimentară  a  perioadei  de  garanție”  în  propunerea  tehnică  operatorii
+economici vor descrie modul în care planul de management al calității va asigura
+nivelul necesar de calitate al lucrărilor și al proceselor de lucru, prin prezentarea
+abordării generale și metodologiei pentru realizarea activităților din cadrul contractului
+(executarea  lucrărilor),  inclusiv  descrieri  detaliate  ale  metodelor  de  lucru  pentru
+Pagina 29 din 36
+componentele majore ale lucrărilor precum și materialele pe care le va pune în operă,
+astfel încât ofertarea unei garanții extinse a lucrărilor să nu se facă doar la nivel
+declarativ în vederea obținerii unui punctaj mare pentru acest factor de evaluare”;
+2. în  Formularul  nr.  10  –  Propunere  tehnică ,  cap.  A
+METODOLOGIA DE EXECUTARE A CONTRACTULUI, s-au precizat, printre
+altele: ” Ofertantul va descrie abordarea generală şi metodologia de proiectare și
+execuție  a  Lucrărilor,  prin  raportare  la  informațiile  tehnice  privind  lucrarea  de
+proiectat  și  executat  și  la  cerințele  tehnice,  economice  și  tehnologice  ale
+Beneficiarului, așa cum sunt acestea incluse în părțile scrise și părțile desenate ale
+Caietului de Sarcini. 
+Se  va  descrie  modul  în  care  Ofertantul  intenționează  să  desfășoare  toate
+activitățile  necesare  pentru  îndeplinirea  contractului,  astfel  încât  să  se  asigure
+condițiile ca Lucrările să fie proiectate și executate la parametrii calitativi solicitați și
+să fie finalizate în termenul contractual. 
+Se vor prezenta, ca minim, următoarele: … A2 CARACTERISTICI TEHNICE
+ALE  OFERTEI  PRIVIND  SERVICIILE  DE  PROIECTARE  A  LUCRĂRILOR
+CONTRACTULUI.
+Oferta tehnică trebuie să conțină:
+Profilul hidraulic
+Ofertantul va furniza un  breviar de calcule hidraulice  pentru debitele de
+calcul: debit maxim orar, debit mediu orar, și debit minim orar.  Ofertantul va furniza
+o planșă cu profilul hidraulic ce va indica direcția procesului de epurare și direcția
+procesului de tratare a nămolului.
+Profilele vor include nivelele hidraulice și cerințele de pompare.
+Procesul de epurare:
+Ofertantul va furniza următoarele:
+(a) O descriere a fiecărei etape din procesul de epurare propus;
+(b) Breviarul de calcul tehnologic de proces, justificând dimensiunile
+principalelor unități tehnologice propuse precum și caracteristicile principalelor
+utilaje și echipamente oferite.
+(c) Bilanț masic al principalilor indicatori de calitate;
+(d) Breviarul de calcul privind costurile de operare justificând valorile
+incluse in listele de garanții incluse;
+(e) O descriere a procesului critic din Stație ce va fi utilizată în toate
+etapele de epurare incluzând metoda sa de operare precum și argumentul
+pentru includerea sa;
+(f) O descriere a modalității de control pentru procesul de epurare
+propus, incluzând principalele bucle de reglare a procesului;
+(g) Detalii  legate  de  instrumentele  și  echipamentele  de  măsurare
+incluse în propunerea sa (ex. debite, parametrii de calitate, puteri, principiile de
+măsurare, etc);
+(h) Aspecte   legate  de  rețeaua  de  alimentare  cu  energie  electrică
+(inclusiv tablourile electrice și de comandă și control, respectiv alimentarea cu
+energie electrică pentru situații de urgență) incluse în propunerea sa.
+Ofertantul va demonstra că:
+(a) Etapele procesului de epurare din propunerea sa sunt capabile să
+atingă nivelul de epurare specificat în Cerințele Beneficiarului; 
+(b) Propunerea sa este potrivită pentru volumul și calitatea efluentului
+specificate în Cerințele Beneficiarului;
+Informațiile furnizate vor fi susținute prin intermediul textului descriptiv
+însoțit de breviare de calcule, planșe, diagrame de conducte și instrumente,
+programe și specificații de la Producător. 
+Pagina 30 din 36
+Orice  propunere  tehnică  elaborată  prin  copierea  caietului  de
+sarcini sau a documentațiilor/părți din documentațiile tehnice puse la
+dispoziție pe SICAP va fi respinsă ca neconformă.
+Procesul de tratare a Nămolului
+Ofertantul va furniza următoarele:
+(a) O descriere a fiecărei etape din procesul de tratare a nămolului în
+propunerea sa;
+(b) O descriere a procesului critic din Stație ce va fi utilizată în toate
+etapele de tratare a nămolului incluzând metoda sa de operare precum și
+argumentul pentru includerea sa;
+(c) O descriere a modalității de control pentru procesul de tratare
+propus;
+(d) Detalii  legate  de  instrumentele  și  echipamentele  de  măsurare
+incluse în propunerea sa (ex. Debit, soluții, putere, etc);
+(e) Aspecte   legate  de  rețeaua  de  alimentare  cu  energie  electrică
+(inclusiv tablourile electrice și de comandă și control, respectiv alimentarea cu
+energie electrică pentru situații de urgență) incluse în propunerea sa.
+Ofertantul va demonstra că:
+(f) Etapele procesului de tratare a nămolului din propunerea sa sunt
+capabile să atingă nivelul de epurare specificat în Cerințele pentru Contractor; 
+(g) Propunerea  sa  de  tratare  a  nămolului   este  potrivită  pentru
+volumul și calitatea nămolului rezultat în urma procesului de epurare;
+(h) Cele menționate de la punctele (a) la (g) vor fi demonstrate prin
+intermediul textului descriptiv însoțit de calcule, planșe, diagrame de conducte
+și instrumente, programe și specificații de la Producător.”;
+3. în caietul de sarcini , Capitolul 2 - Secțiunea 5 – Specificații de
+proces  –  Cerințe  Specifice  Proiectului  –  Apă  Uzată,  s-au  precizat
+următoarele: ”…  Împreună  cu  oferta,  Ofertantul  trebuie  să  prezinte  un  calcul
+hidraulic și un calcul al procesului pentru epurarea apelor uzate și nămolului, care să
+indice  clar  metoda de proiectare  folosită,  o balanță  a  maselor pentru  încărcarea
+proiectată pentru întreaga stație, precum și toți parametrii de proiectare relevanți.
+Aceste documente trebuie furnizate pentru încărcarea de proiectare și cerințele privind
+efluentul definite în acest document. Antreprenorul va elabora schema hidraulica si
+breviarul de calcule hidraulice care va stabili pierderile de sarcina dintre obiectele
+stației de epurare si dimensiunile conductelor de legătură cu precizarea vitezelor de
+curgere  și  ținând  cont  de  recirculările  externe.  Totodată  va  depune  și  calculele
+tehnologice cu stabilirea dimensiunilor obiectelor din SEAU. Se va avea în vedere
+corelarea  tuturor  valorilor  de  calcul  și  a  documentelor  aferente  ofertei  depuse.
+Antreprenorul  are  libertatea  de  a  amplasa  obiectele  tehnologice  astfel  încât  să
+eficientizeze profilul hidraulic și implicit costurile de operare.” (pag. 5);
+4. cu  adresa  nr.  12591/18.08.2025 ,  entitatea  contractantă  a
+solicitat clarificări ofertantei în referire la aspectul în discuție:
+Pagina 31 din 36
+5. cu  adresa  nr.  25269/22.08.2025 ,  ofertanta  a  prezentat
+următorul răspuns:
+6. în  cuprinsul  procesului  -  verbal  nr.  2  (nr.
+14399/11.09.2025)  privind  evaluarea  conformității  propunerilor
+tehnice cu prevederile caietului de sarcini și după caz cu factorii de
+evaluare, entitatea contractantă, prin comisia de evaluare a reținut cu
+privire  la  acest  aspect  următoarele:  ” Ofertantul  a  prezentat  caracteristici
+tehnice  ale  ofertei  privind  serviciile  de  proiectare  a  lucrărilor.  1  –  ofertantul  a
+prezentat breviar de calcul hidraulic pentru linia apei pag. 458 – pag. 462 din cadrul
+ofertei; 2 – ofertantul a prezentat profil hidraulic cu cote de nivel pentru linia apei și
+linia nămolului. 3 – ofertantul nu a prezentat breviar hidraulic linia nămolului. …
+Cerință minimă neîndeplinită ”, acesta fiind unul dintre motivele pentru care
+oferta  depusă  de  asocierea  (...)  SRL  –  (...)  a  fost  respinsă  ca
+inacceptabilă, în temeiul prevederilor art. 143 alin. (3) lit. a) din HG nr.
+394/2016;
+7. prin  punctul  de  vedere  față  de  contestație ,  în  referire  la
+aspectul în discuție achizitoarea a adus următoarele precizări: ”… Faptul
+că a fost prezentată reprezentarea grafică a profilului pe linia de nămol, nu este
+elocvent  deoarece  lipsesc  tocmai  elementele  din  care  să  rezulte  corectitudinea
+reprezentării grafice. Așa cum afirmă Ofertantul în contestație, parametrii de intrare
+(concentrație, vâscozitate, debit) sunt diferiți față de cei de pe linia apei. Astfel,
+aceștia nu pot fi asimilați, calculele având rezultate diferite față de cele de pe linia
+apei. Reprezentarea grafică a profilului de nămol nu garantează faptul că aceasta este
+corectă, neexistând elementele necesare (în acest caz calculele) pentru a fi verificată .
+În  fapt,  tocmai  acesta  este  scopul evaluării  tehnice, de  a  verifica  corectitudinea
+calculelor,  cu  corespondență  în  toate  celelalte  elemente  ale  ofertei,  urmărind
+trasabilitatea documentelor, în corelare cu bunele practici de proiectare și normativele
+menționate în documentația de atribuire.
+Ofertantul nu a prezentat calcule de dimensionare pentru conductele de nămol
+în exces, nu a prezentat modul în care acesta a calculat pierderile de sarcină pentru
+conductele de refulare nămol în exces și nămol de recirculare. În urma stabilirii
+diametrului, a  lungimii de traseu, a pierderilor de sarcina liniare, a pierderilor de
+sarcina  locale  și  a  cotei  geodezice  ar  trebui  să  rezulte  înălțimea  de  pompare  a
+pompelor  de  nămol  în  exces,  pompelor  de  recirculare  nămol  și  a  pompelor  de
+alimentare  cu  nămol  în  exces  a  centrifugei,  precum  și  caracteristicile  pompelor,
+puterea electrică consumată a acestora. Puterea electrica a echipamentului urmând să
+fie luată în calcul la stabilirea costurilor de operare.
+În plus față de cele prezentate, prin contestarea cerinței din documentația de
+atribuire referitoare la prezentarea breviarului de calcul hidraulic pentru linia de nămol
+și eventuala acceptare a acestei contestații, se creează un precedent prin aceea că în
+viitor există posibilitatea ca ofertanții să nu mai prezinte aceste calcule, împiedicând
+astfel evaluarea corectă a Propunerii tehnice.”;
+Pagina 32 din 36
+8. prin contestație, autoarea acesteia a susținut următoarele: ”…
+-comisia de evaluare a apreciat în mod eronat și nelegal … că lipsesc Notele de
+calcul hidraulic pentru linia de nămol … . Decizia entității contractante este
+nelegală întrucât:
+-  Există două tipuri de materiale cerute: „breviar de calcul” (rezultate,
+metodologie, ipoteze)  şi „profil hidraulic” (reprezentare grafică).  Oferta
+conține ambele: breviarul (pag. 458-462) și planșa cu profilul hidraulic
+(pag. 463).
+- Metodologia este  aplicabilă ambelor  linii:  calculele hidraulice folosesc
+aceleași principii (ecuații de scurgere,  pierderi  de sarcină, verificări de
+viteză, etc.); dacă breviarul conține metodologia şi ipotezele, acestea sunt
+aplicabile și la linia de nămol,  diferențele fiind doar parametrii de intrare
+(concentrație, viscozitate, debit).
+- Profilele grafice fac dovada calculului pentru linia nămolului:  Planșa
+SEAU-02  arată  explicit  ambele  profile  —  ceea  ce  dovedește  existența
+rezultatelor pentru linia nămolului, nu doar pentru linia apei.
+- Comisia de Evaluare se află într-o eroare de verificare, nu de conformitate a
+ofertei. Evaluarea trebuie realizată în baza probelor puse la dispoziție (pag. 458-463).
+În plus, evaluarea realizată de Comisie trebuie să fie obiectivă și motivată .
+Constatările  de  neconformitate  trebuie  să  indice  cu  claritate  și  concret  ce
+lipsește. Or, în acest caz declarația generală „lipsa notelor de calcul pentru linia
+nămol" fără trimitere la elemente concrete (ex.: „lipsă: verificarea vitezei în conducta
+P- X" sau „lipsă: calcul pierderi de sarcină conducta Y") nu satisface aceste cerințe,
+fiind deci neîntemeiată.
+De asemenea, dacă Entitatea Contractantă a apreciat că informațiilor nu erau
+suficiente, Comisia trebuia să indice exact ce informații suplimentare sunt necesare
+(ce anume din breviar lipsește) și să revină cu o nouă Solicitare de clarificări, nu să
+rețină automat neconformitatea.”;
+9. prin răspunsul din data de 20.10.2025 la punctul de vedere
+al  entității  contractante,  societatea  contestatoare  a  mai  precizat
+următoarele: «… entitatea contractantă consideră neîndeplinită cerința … privind
+prezentarea  breviarului/profilelor  hidraulice,  întrucât  apreciază  că,  deși  am
+indicat paginile 458 – 462 din cadrul Propunerii Tehnice, ca fiind secțiunea în care se
+regăsesc calculele hidraulice atât pentru linia apei, cât și a nămolului, în fapt la
+”paginile respective s-ar fi prezentat strict calculele pentru linia apei, nici măcar un
+paragraf în care să se regăsească calculele pentru linia nămolului”.
+În mod eronat a înțeles comisia că trebuie să fie prezentate profile hidraulice
+pentru nămol separat. Nămolul recirculat și în exces este parte a aceluiași profil
+hidraulic: la pagina 463 – Planșa SEAU – 02 – Profil hidraulic – SEAU Cosoba – Linia
+apei și Linia nămolului. … Există două tipuri de materiale cerute: „breviar de calcul ”
+(rezultate, metodologie, ipoteze) şi „profil hidraulic ” (reprezentare grafică).  Oferta
+conține ambele: breviarul (pag. 458-462) și planșa cu profilul hidraulic (pag. 463).
+Metodologia  este  aplicabilă  ambelor  linii:  calculele  hidraulice  folosesc
+aceleași principii (ecuații de scurgere, pierderi de sarcină, verificări de viteză etc.).
+Profilele grafice fac dovada calculului pentru linia nămolului. P e linia de tratare
+a nămolului există doar 2 echipamentele relevante: centrifuga de deshidratare nămol
+și pompa de alimentare a acesteia. Dimensionarea pompei de alimentare a centrifugii
+de  deshidratare  este  strâns  legată  de  echipamentul  de  deshidratare.  În  etapa
+următoare (Proiect Tehnologic și Proiect Tehnic de Execuție) se vor stabili parametrii
+acestei pompe. La faza de ofertare s-a apreciat parametrul - înălțime de pompare, ca
+Pagina 33 din 36
+fiind  acoperitor  în  orice  ipoteză.  Totuși,  în  situația  în  care,  la  faza  ulterioară  a
+Proiectului  Tehnic  de  Execuție,  se  vor  dovedi  necesare  anumite  optimizări  …  ne
+asumăm  aceste  optimizări,  garantând  Prețul,  Costurile  de  Operare  și  Termenele
+asumate prin Ofertă.
+Prin urmare, cerința din fișa de date, secțiunea IV.4.1 (Formular nr. 10 –
+Propunere  tehnică)  privind  prezentarea  breviarului/profilelor  hidraulice  a  fost
+îndeplinită  și  este  documentată  prin  trimiterea  la  paginile  menționate  din  oferta
+depusă. … dacă entitatea contractantă a apreciat că informațiile nu ar fi suficiente,
+Comisia trebuia să indice exact ce informații suplimentare sunt necesare (ce anume
+din breviar lipsește) și să revină cu o nouă solicitare de clarificări, nu să ne excludă
+din procedură. … »;
+10. din  verificarea  informațiilor  prezentate  în  propunerea
+tehnică de către societatea contestatoare, Consiliul a reținut că, la pag.
+458 – 462 a fost prezentat doar breviarul de calcul pentru linia apei, iar
+la pag. 463 a fost prezentată planșa Profil hidraulic – SEAU Cosoba, Linia
+apei și linia nămolului; se constată astfel că ofertanta nu a prezentat
+breviarul de calcul pentru linia nămolului astfel cum s-a solicitat.
+Din  ansamblul  informațiilor  reținute,  Consiliul  constată  că
+societatea contestatoare a recunoscut că trebuiau prezentate în cadrul
+propunerii tehnice două documente distincte,  breviarul de calcul  și
+profilul hidraulic , însă, pentru breviarul de calcul, în opinia sa ar fi
+trebuit prezentate ”rezultate, metodologie, ipoteze”.
+Cu toate acestea, din întreaga documentație de atribuire, din care
+s-a  reținut  în  paginile  anterioare  ale  deciziei,  rezultă  că  operatorii
+economici aveau obligația prezentării atât a breviarului de calcul pentru
+linia apei și pentru linia nămolului, cât și profilul hidraulic corespunzător
+pentru linia apei și linia nămolului.
+Documentația de atribuire este obligatorie atât pentru operatorii
+economici la întocmirea ofertei, conform art. 88 din Legea nr. 99/2016
+coroborat  cu  art.  129  alin.  (1)  din  HG  nr.  394/2016,  cât  și  pentru
+entitățile contractante, la evaluarea ofertelor, conform art. 139 din HG
+nr. 394/2016.
+Dacă  avea  neclarități  cu  privire  la  cerințele  documentației  de
+atribuire,  societatea  contestatoare avea dreptul  de a solicita entității
+contractante clarificări, în conformitate cu prevederile art. 172 alin. (1)
+din Legea nr. 99/2016. Mai mult, exista și posibilitatea de a formula
+contestație împotriva documentației de atribuire în condițiile prevăzute la
+capitolul III din Legea nr. 101/2016.
+Or,  în  condițiile  în  care  nu  a  uzat  de  niciuna  dintre  aceste
+posibilități, este de presupus ca societatea contestatoare și-a asumat
+cerințele documentației de atribuire, iar pentru faptul că a depus oferta
+fără respectarea în integralitate a cerințelor impuse de achizitoare, și-a
+asumat riscul ca oferta sa să fie respinsă
+Pe de altă parte, se consideră nefondată susținerea contestatoarei
+cu referire la faptul că ” Metodologia este  aplicabilă ambelor linii:  calculele
+hidraulice folosesc aceleași principii (ecuații de scurgere, pierderi de sarcină, verificări
+Pagina 34 din 36
+de  viteză  etc.).”,  câtă  vreme  rezultă  din  informațiile documentației  de
+atribuire, că breviarul de calcul trebuia prezentat atât pentru linia apei,
+cât și pentru linia de nămol.
+ Totodată, nefondată este și susținerea contestatoarei cu referire la
+faptul  că  ”Profilele  grafice  fac  dovada  calculului  pentru  linia  nămolului ”,  câtă
+vreme acest calcul trebuia prezentat pentru a se putea verifica dacă a
+fost  sau  nu  efectuat  în  mod  corect  și  cu  respectarea  cerințelor
+documentației de atribuire.
+Pe de altă marte, o solicitare de clarificare suplimentare, în sensul
+celor  invocate  de  autoarea  contestației,  nu  se  poate  accepta,  fără
+încălcarea principiului tratamentului egal și crearea astfel a unui avantaj
+asocierii ofertante, cu încălcarea prevederilor art. 221 alin. (2) din Legea
+nr. 99/2016.
+Determinând că motivul de respingere a ofertei, în referire la lipsa
+notelor/breviarului de calcul hidraulic pentru linia de nămol, a fost corect
+reținut  de  către  entitatea  contractantă,  prin  comisia  de  evaluare,
+Consiliul nu se va mai pronunța în privința și a celorlalte motive de
+respingere,  considerând  că  finalitatea  evaluării  ofertei  depuse  de
+asocierea din care face parte și contestatoarea nu poate fi modificată.
+Față de cele reținute, cu aplicarea prevederilor art. 26 alin. (6) din
+Legea  nr. 101/2016, Consiliul va respinge, ca nefondată, contestația
+depusă de (...) SRL, în contradictoriu cu (...), în calitate de entitate
+contractantă.
+Pe cale de consecință, se va respinge, ca nefondată și solicitarea
+contestatoarei de obligate a entității contractante la plata cheltuielilor de
+judecată, nefiind constatată vreo culpă procesuală a acesteia.
+Pentru aceste motive,
+în baza legii și a mijloacelor de probă aflate la dosar,
+CONSILIUL DECIDE:
+Respinge, ca nefondată, contestația formulată de către (...) SRL, cu
+sediul în localitatea (...), reprezentată convențional prin Societatea civilă
+de  avocați  (...),  în  contradictoriu  cu  (...),  în  calitate  de  entitate
+contractantă, cu sediul în (...).
+Respinge,  ca nefondată,  solicitarea  contestatoarei  de obligare  a
+entității contractante la plata cheltuielilor de judecată.  
+Prezenta decizie este obligatorie pentru părți, în conformitate cu
+dispozițiile art. 28 alin. (1) din Legea nr. 101/2016.
+Împotriva prezentei decizii se poate formula plângere, în termen de
+10 zile de la comunicare pentru părțile cauzei, respectiv de la data luării
+la cunoștință de către alte persoane vătămate.
+Pagina 35 din 36
+Redactat în 4 exemplare originale, conține 33 pagini.
+Pagina 36 din 36

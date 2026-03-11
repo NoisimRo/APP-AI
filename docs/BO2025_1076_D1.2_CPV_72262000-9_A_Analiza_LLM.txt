@@ -1,0 +1,57 @@
+D1
+Cerințe restrictive — experiență similară, calificare, specificații tehnice
+Argumente contestator
+Contestatorul critică nelegalitatea cerințelor referitoare la experiența generală solicitată pentru cei 10 experți cheie menționați în caietul de sarcini. Se susține că autoritatea contractantă a formulat aceste cerințe cu încălcarea dispozițiilor legale imperative, realizând o confuzie și un mix nelegal între experiența profesională generală și cea specifică. Deși se solicită o experiență generală de minim 5 ani, autoritatea impune ca această perioadă să fi fost petrecută într-o poziție cu responsabilități și sarcini identice cu cele solicitate pentru tipul de expert din caietul de sarcini. Contestatorul invocă încălcarea art. 5 alin. (1), art. 8 alin. (1) și (2), art. 9 alin. (1) și (2) din Instrucțiunea ANAP nr. 1/2017, precum și a Notei explicative aferente art. 9 alin. (7). Conform acestor prevederi, experiența generală vizează domeniul studiilor, în timp ce experiența specifică vizează activități similare obiectului contractului. Menținerea acestei cerințe, cumulată cu cerința de experiență specifică, duce la încălcarea art. 5 alin. (1) din Instrucțiunea 1/2017 și limitează artificial concurența, încălcând principiile de la art. 2 alin. (2) din Legea nr. 98/2016. Contestatorul solicită remedierea documentației prin reformularea cerinței în forma „minim 5 ani experiență în domeniul IT” sau într-o formă care să asigure participarea neîngrădită.
+
+Argumente AC
+Informația nu este disponibilă în extrasul de text furnizat, documentul întrerupându-se înainte de prezentarea punctului de vedere al autorității contractante.
+
+Elemente reținute CNSC
+Informația nu este disponibilă în extrasul de text furnizat, documentul întrerupându-se înainte de analiza pe fond a Consiliului Național de Soluționare a Contestațiilor.
+
+Argumentație CNSC
+Informația nu este disponibilă în extrasul de text furnizat, documentul întrerupându-se înainte de motivarea deciziei de către Consiliul Național de Soluționare a Contestațiilor.
+
+D1
+Cerințe restrictive — experiență similară, calificare, specificații tehnice
+Argumente contestator
+Contestatorul critică cerința de la punctul 8.2 din caietul de sarcini, care stipulează că „Cunoștințele principale ale experților vor fi dovedite prin prezentarea unei diplome / certificări recunoscute la nivel național / internațional (nu se vor lua în calcul diplome pentru cursuri)”. Se argumentează că această cerință este neclară, induce confuzie și restricționează participarea. Sintagma „cunoștințele principale” nu este definită nicăieri în documentație, lăsând loc de subiectivism în evaluare, ceea ce încalcă art. 20 din HG nr. 395/2016, care obligă autoritatea să asigure o informare completă, corectă și explicită. De asemenea, excluderea diplomelor pentru cursuri încalcă în mod direct prevederile art. 7 alin. (3) din Instrucțiunea ANAP nr. 1/2017, care permit explicit operatorilor economici să dovedească existența unei specializări sau deținerea unor competențe specifice inclusiv prin cursuri finalizate cu certificări recunoscute. Contestatorul solicită remedierea prin eliminarea interdicției referitoare la cursurile de specializare și clarificarea textului, propunând forma: „Cunoștințele experților vor fi dovedite prin prezentarea unei diplome / certificări recunoscute la nivel național / internațional.”
+
+Argumente AC
+Informația nu este disponibilă în extrasul de text furnizat, documentul întrerupându-se înainte de prezentarea punctului de vedere al autorității contractante.
+
+Elemente reținute CNSC
+Informația nu este disponibilă în extrasul de text furnizat, documentul întrerupându-se înainte de analiza pe fond a Consiliului Național de Soluționare a Contestațiilor.
+
+Argumentație CNSC
+Informația nu este disponibilă în extrasul de text furnizat, documentul întrerupându-se înainte de motivarea deciziei de către Consiliul Național de Soluționare a Contestațiilor.
+
+D1
+Cerințe restrictive — experiență similară, calificare, specificații tehnice
+Argumente contestator
+Contestatorul invocă nelegalitatea cerințelor minime privind experiența profesională specifică a experților cheie (Manager de proiect, UI/UX Designer, Backend Dev, Frontend Dev, Analist de business, Arhitect software, Specialist Integrare, Tester, Inginer DevOps, Expert securitate). Autoritatea contractantă solicită demonstrarea experienței specifice în contracte similare definite extrem de restrictiv: dezvoltare software pentru un sistem cu minim 4 module interconectate, cel puțin un modul tip portal și funcționalități de achiziție/prelucrare/stocare date biometrice. Contestatorul consideră aceste cerințe abuzive, disproporționate și concepute pentru a favoriza anumiți operatori, restrângând artificial concurența, cu încălcarea art. 50 din Legea nr. 98/2016. Se argumentează că relevantă este experiența în activități similare rolului propus, nu funcționalitățile specifice ale sistemului informatic anterior implementat (ex. date biometrice). Sunt invocate art. 6 alin. (2) și art. 9 alin. (1) din Instrucțiunea ANAP nr. 2/2017, subliniindu-se că experiența similară nu înseamnă experiență identică. Cerința are un efect discriminatoriu, încălcând principiile tratamentului egal și nediscriminării (art. 2 alin. (2) lit. a și b din Legea 98/2016) și intrând sub incidența art. 8 din Legea Concurenței nr. 21/1996. Se solicită modificarea cerințelor pentru toți experții, astfel încât experiența specifică să vizeze doar participarea în cel puțin un proiect de dezvoltare software în care expertul a deținut rolul solicitat sau a desfășurat activități similare.
+
+Jurisprudență: Hotărârea Curții din 05.05.1998, National Farmers' Union și alții, C157/96, Rec., p. 12211, pct. 60; Hotărârea Tribunalului din 10.12.2009, Cauza T-195/08, Antwerspe Bouwwerken NV; Decizia CNSC publicată în Buletinul Oficial 2375 din 2020; Decizia Curții de Apel Pitești nr. 1540/2015 din 22 septembrie 2015
+
+Argumente AC
+Informația nu este disponibilă în extrasul de text furnizat, documentul întrerupându-se înainte de prezentarea punctului de vedere al autorității contractante.
+
+Elemente reținute CNSC
+Informația nu este disponibilă în extrasul de text furnizat, documentul întrerupându-se înainte de analiza pe fond a Consiliului Național de Soluționare a Contestațiilor.
+
+Argumentație CNSC
+Informația nu este disponibilă în extrasul de text furnizat, documentul întrerupându-se înainte de motivarea deciziei de către Consiliul Național de Soluționare a Contestațiilor.
+
+D1
+Cerințe restrictive — experiență similară, calificare, specificații tehnice
+Argumente contestator
+Contestatorul reclamă nelegalitatea cerințelor referitoare la „abilitățile” solicitate pentru cei 10 experți cheie. Se susține că aceste abilități nu sunt corelate cu specificul rolului, sunt excesive, se suprapun între diferiți experți și sunt formulate subiectiv, fără a se preciza clar modul în care pot fi dovedite. Această situație încalcă art. 20 alin. (2) și art. 37 alin. (1) din HG 395/2016, art. 6 alin. (1) și (2) și art. 8 alin. (1) din Instrucțiunea ANAP 1/2017, art. 50 din Legea 98/2016 și art. 8 din Legea Concurenței 21/1996. Contestatorul detaliază criticile pentru fiecare expert: pentru Managerul de proiect se cer abilități de evaluare a riscurilor fără repere de demonstrare; pentru UI/UX Designer se cer cunoștințe de Technical SEO și HTML5/CSS3 care aparțin rolului de Frontend Dev; pentru Backend Dev se cer cunoștințe despre limbaje de programare nemenționate; pentru Analistul de business se cer aptitudini tehnice de UI/UX design; pentru Arhitectul Software se cer cunoștințe de networking și baze de date care aparțin altor roluri (arhitect hardware, expert baze de date); pentru Specialistul Integrare se cer capacități de planificare pe 2 centre de date (experiență similară, nu abilitate dovedibilă prin diplomă); pentru Tester se folosește sintagma ambiguă „etc.”; pentru Expertul Securitate se cer „cunoștințe aprofundate” nedefinite. Se solicită, în principal, eliminarea integrală a cerințelor referitoare la „abilități” pentru toți experții, iar în subsidiar, definirea clară, completă și fără ambiguități a modalității de demonstrare a acestora și eliminarea cerințelor care se suprapun sau nu sunt relevante pentru rolul respectiv.
+
+Argumente AC
+Informația nu este disponibilă în extrasul de text furnizat, documentul întrerupându-se înainte de prezentarea punctului de vedere al autorității contractante.
+
+Elemente reținute CNSC
+Informația nu este disponibilă în extrasul de text furnizat, documentul întrerupându-se înainte de analiza pe fond a Consiliului Național de Soluționare a Contestațiilor.
+
+Argumentație CNSC
+Informația nu este disponibilă în extrasul de text furnizat, documentul întrerupându-se înainte de motivarea deciziei de către Consiliul Național de Soluționare a Contestațiilor.

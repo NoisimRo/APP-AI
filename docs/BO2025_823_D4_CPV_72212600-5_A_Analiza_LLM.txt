@@ -1,0 +1,84 @@
+D4
+Lipsa răspuns clar la solicitările de clarificări
+Contestator
+Argumente contestator
+Contestatorul critică nelegalitatea noii definiții a „proiectului similar” prevăzută în Secțiunea III.1.3.a) „Capacitatea tehnică și/sau profesională” din Fișa de date, modificată printr-o clarificare generată automat. Autoritatea contractantă a definit produsele/serviciile similare ca fiind exclusiv „contracte de furnizare și/sau implementare platformă de tip smart/digital city și echipamente”. Contestatorul susține că această definiție prezintă un caracter nelegal, restrictiv și abuziv, deoarece transformă cerința de experiență „similară” într-o cerință de experiență „IDENTICĂ”. Conform legislației achizițiilor publice și Instrucțiunii ANAP nr. 1/2017 (art. 2), autoritatea contractantă nu poate solicita demonstrarea experienței prin furnizarea de produse sau prestarea de servicii identice cu cele care fac obiectul contractului, tocmai pentru a nu restrânge artificial competiția. Scopul cerinței de calificare este de a demonstra capacitatea tehnică a ofertantului de a gestiona proiecte de o complexitate comparabilă, nu de a fi implementat exact același tip de platformă (smart/digital city). Contestatorul arată că „similar” presupune un caracter asemănător, dar care conține în mod necesar și elemente de diferențiere. Impunerea unei experiențe identice încalcă principiul proporționalității și scopul fundamental al legislației achizițiilor publice de a asigura accesul larg al operatorilor economici și de a promova concurența (art. 2 din Legea nr. 98/2016). Se invocă din nou jurisprudența CJUE privind proporționalitatea măsurilor restrictive, precum și decizii ale CNSC și ale Curții de Apel Pitești care confirmă că experiența similară trebuie interpretată flexibil, raportat la complexitatea generală a serviciilor și nu la identitatea absolută a obiectului contractelor anterioare.
+
+Jurisprudență: Instrucțiunea ANAP nr. 1/2017 (art. 2); Hotărârea Curții din 12.07.2001, National Farmers' Union și alții, C-189/01; Hotărârea Tribunalului din 27.09.2006, Cauza T-319/05, Antwerspe Bouwwerken NV; Decizia CNSC publicată în Buletinul Oficial .... din .....; Decizia Curții de Apel Pitești nr. ..../.... din .. septembrie ....; Legea nr. 98/2016 (art. 2)
+
+Argumente AC
+Textul deciziei furnizat este incomplet și se oprește înainte de a prezenta argumentele autorității contractante pentru această critică.
+
+Elemente reținute CNSC
+Textul deciziei furnizat este incomplet și se oprește înainte de a prezenta elementele reținute de CNSC.
+
+Argumentație CNSC
+Textul deciziei furnizat este incomplet și se oprește înainte de a prezenta motivarea și raționamentul CNSC.
+
+D4
+Lipsa răspuns clar la solicitările de clarificări
+Contestator
+Argumente contestator
+Contestatorul invocă nelegalitatea răspunsului nr. 14 din cadrul răspunsului consolidat la clarificări, referitor la definiția „proiectului similar” utilizată pentru evaluarea experților cheie (factor de evaluare). Autoritatea contractantă a definit proiectul similar ca fiind „implementarea unui sistem informatic integrat care include cel puțin o componentă de digitalizare a fluxurilor de lucru și un portal”. Contestatorul argumentează că această definiție este extrem de restrictivă și nelegală, deoarece pentru rolurile experților solicitați nu este relevant conținutul specific al sistemului informatic implementat anterior (ex. să aibă neapărat un portal și digitalizare de fluxuri), ci experiența profesională și competențele dobândite în proiecte IT complexe, în care expertul a desfășurat activități similare. Solicitarea unei experiențe specifice într-un domeniu identic cu cel al contractului ce urmează a fi atribuit contravine art. 9 din Instrucțiunea ANAP nr. 1/2017, care interzice solicitarea demonstrării experienței prin prestarea de servicii identice, pentru a nu restrânge competiția. Contestatorul subliniază că „experiență similară” nu înseamnă „experiență identică”, iar proiectele superioare ca nivel de complexitate trebuie acceptate. Se invocă jurisprudența CJUE privind principiul proporționalității, arătând că măsura impusă de autoritate depășește ceea ce este adecvat și necesar. De asemenea, se face trimitere la jurisprudența constantă a CNSC și a Curților de Apel (ex. Curtea de Apel Pitești), care au statuat că experiența similară trebuie să se raporteze la tipul de servicii (ex. asistență tehnică, dezvoltare software) și nu la domeniul strict sau la funcționalitățile identice ale sistemului. Cerința încalcă principiile tratamentului egal, nediscriminării și proporționalității (art. 2 alin. 2 lit. a, b, e din Legea nr. 98/2016) și art. 9 din Legea Concurenței.
+
+Jurisprudență: Instrucțiunea ANAP nr. 1/2017 (art. 9, art. 24); Hotărârea Curții din 12.07.2001, National Farmers' Union și alții, C-189/01; Hotărârea Tribunalului din 27.09.2006, Cauza T-319/05, Antwerspe Bouwwerken NV; Decizia CNSC publicată în Buletinul Oficial .... din .....; Decizia Curții de Apel Pitești nr. ..../.... din .. septembrie ....; Legea nr. 98/2016 (art. 2 alin. 2 lit. a, b, e, art. 20); Legea Concurenței nr. 21/1996 (art. 9)
+
+Argumente AC
+Textul deciziei furnizat este incomplet și se oprește înainte de a prezenta argumentele autorității contractante pentru această critică.
+
+Elemente reținute CNSC
+Textul deciziei furnizat este incomplet și se oprește înainte de a prezenta elementele reținute de CNSC.
+
+Argumentație CNSC
+Textul deciziei furnizat este incomplet și se oprește înainte de a prezenta motivarea și raționamentul CNSC.
+
+D4
+Lipsa răspuns clar la solicitările de clarificări
+Contestator
+Argumente contestator
+Contestatorul contestă nelegalitatea cerințelor privind calificarea educațională și/sau profesională pentru Expertul cheie nr. 1: Analist Business, astfel cum au fost modificate prin răspunsul nr. 15. Autoritatea contractantă a solicitat ca acest expert să dețină „cunoștințe în domeniul gestiunii informatice a documentelor, a structurilor și bazelor de date dovedite prin diplomă de absolvire/certificat sau echivalent, recunoscută la nivel național/internațional”. Contestatorul arată că a solicitat inițial eliminarea acestei cerințe deoarece dubla o altă cerință referitoare la analiza de business, sau clarificarea tipului de certificare recunoscută care ar îndeplini cumulativ aceste condiții. Autoritatea a modificat cerința eliminând doar sintagma „în domeniul analizei de business”, dar a păstrat obligativitatea prezentării unei diplome recunoscute național/internațional care să ateste cumulativ cunoștințe în gestiunea documentelor și în baze de date. Contestatorul argumentează că această cerință este excesivă, restrictivă și nelegală raportat la responsabilitățile Analistului Business descrise în caietul de sarcini, care nu includ activități de gestiune a documentelor sau a bazelor de date. Mai mult, impunerea unei singure diplome/certificări care să acopere ambele domenii și să aibă recunoaștere națională/internațională este abuzivă, deoarece astfel de certificări sunt emise de regulă de producătorii de software (ex. IBM, Oracle) și nu beneficiază de recunoașterea formală națională/internațională în sensul legislației educaționale. Cerința încalcă art. 17 alin. (1) din HG nr. 395/2016, care interzice restricționarea participării prin criterii minime nerelevante pentru natura contractului, precum și principiile tratamentului egal, nediscriminării și proporționalității (art. 2 alin. 2 din Legea nr. 98/2016). De asemenea, autoritatea a încălcat art. 160 alin. (1) din Normele de aplicare ale Legii nr. 98/2016 prin omisiunea de a răspunde clar la solicitarea de a indica o certificare concretă care să îndeplinească această cerință cumulativă.
+
+Jurisprudență: Legea nr. 98/2016 (art. 2 alin. 2 lit. a, b, e, art. 20); Legea Concurenței nr. 21/1996 (art. 9); HG nr. 395/2016 (art. 17 alin. 1); Instrucțiunea ANAP nr. 1/2017 (art. 8, art. 9); Normele de aplicare ale Legii nr. 98/2016 (art. 160 alin. 1)
+
+Argumente AC
+Textul deciziei furnizat este incomplet și se oprește înainte de a prezenta argumentele autorității contractante pentru această critică.
+
+Elemente reținute CNSC
+Textul deciziei furnizat este incomplet și se oprește înainte de a prezenta elementele reținute de CNSC.
+
+Argumentație CNSC
+Textul deciziei furnizat este incomplet și se oprește înainte de a prezenta motivarea și raționamentul CNSC.
+
+D4
+Lipsa răspuns clar la solicitările de clarificări
+Contestator
+Argumente contestator
+Contestatorul critică cerințele minime privind calificarea educațională și/sau profesională pentru Expertul cheie nr. 2: Programator, modificate prin răspunsul nr. 16. Similar cu situația Analistului Business, autoritatea contractantă a impus ca Programatorul să dețină „cunoștințe în domeniul gestiunii informatice a documentelor, a structurilor și bazelor de date dovedite prin diplomă de absolvire/certificat sau echivalent, recunoscută la nivel național/internațional”. Contestatorul susține că această cerință este disproporționată, excesivă și nelegală în raport cu atribuțiile reale ale Programatorului stabilite în caietul de sarcini (implementarea specificațiilor funcționale, instalarea, dezvoltarea, configurarea și testarea soluției). Aceste responsabilități nu implică în mod direct activități de gestiune informatică a documentelor sau administrarea bazelor de date la nivelul care să justifice o certificare specifică cumulativă. Contestatorul reiterează imposibilitatea practică de a prezenta o singură diplomă sau certificare cu recunoaștere națională/internațională care să ateste simultan cunoștințe în ambele domenii distincte, subliniind că certificările existente pe piață sunt specifice producătorilor (vendor-specific, ex. IBM, Oracle) și nu au recunoașterea formală solicitată. Prin menținerea acestei cerințe și refuzul de a indica o certificare concretă care să o îndeplinească, autoritatea contractantă a încălcat obligația de a răspunde clar și complet la clarificări, conform art. 160 alin. (1) din Normele de aplicare ale Legii nr. 98/2016. Această conduită favorizează nejustificat anumiți operatori economici, restrânge artificial concurența și încalcă dispozițiile art. 20 din Legea nr. 98/2016, art. 17 alin. (1) din HG nr. 395/2016 (care interzice criterii nerelevante pentru complexitatea contractului) și art. 9 din Legea Concurenței nr. 21/1996.
+
+Jurisprudență: Legea nr. 98/2016 (art. 20); Legea Concurenței nr. 21/1996 (art. 9); HG nr. 395/2016 (art. 17 alin. 1); Normele de aplicare ale Legii nr. 98/2016 (art. 160 alin. 1)
+
+Argumente AC
+Textul deciziei furnizat este incomplet și se oprește înainte de a prezenta argumentele autorității contractante pentru această critică.
+
+Elemente reținute CNSC
+Textul deciziei furnizat este incomplet și se oprește înainte de a prezenta elementele reținute de CNSC.
+
+Argumentație CNSC
+Textul deciziei furnizat este incomplet și se oprește înainte de a prezenta motivarea și raționamentul CNSC.
+
+D4
+Lipsa răspuns clar la solicitările de clarificări
+Contestator
+Argumente contestator
+Contestatorul critică nelegalitatea răspunsurilor nr. 12 și parțial nr. 13 din cadrul răspunsului consolidat la solicitările de clarificări, prin care autoritatea contractantă a modificat cerința referitoare la documentele suport necesare pentru demonstrarea experienței specifice a experților. Inițial, documentația de atribuire permitea probarea experienței prin scrisori de recomandare de la beneficiari SAU fișa de post/contract de muncă sau „orice alte documente similare/edificatoare”. Prin răspunsurile la clarificări, autoritatea a impus ca recomandările/documentele să fie emise sau contrasemnate exclusiv de „beneficiarul final”, eliminând practic posibilitatea prezentării altor documente edificatoare (precum recomandări de la angajatori/colaboratori). Contestatorul argumentează că această modificare este nelegală, abuzivă și restrânge nejustificat accesul la procedură. Se subliniază că noțiunea de „beneficiar final” include și angajatorii sau colaboratorii unei persoane, nu doar clienții finali ai proiectului. De asemenea, entitățile publice emit doar documente constatatoare privind îndeplinirea obligațiilor contractuale de către operatorul economic, documente care nu conțin detaliile specifice solicitate pentru experți (rol, responsabilități, evaluarea activității) și nu sunt eliberate direct experților. Contestatorul invocă prevederile Instrucțiunii ANAP nr. 1/2017, care stipulează clar că documentele suport pot fi fișa de post, contractul de muncă sau orice alte documente similare. Modificarea cerinței încalcă principiul proporționalității, fiind o măsură disproporționată în raport cu scopul urmărit, și are un efect discriminatoriu, favorizând doar operatorii care dețin recomandări specifice semnate de beneficiarii finali. Această conduită încalcă legislația achizițiilor publice și art. 9 din Legea Concurenței nr. 21/1996, care interzice stabilirea de condiții discriminatorii ce restrâng sau denaturează concurența.
+
+Jurisprudență: Decizia nr. .../R-CONT în dosarul nr. ..../../...., Curtea de Apel .., Secția a II-a civilă, de contencios administrativ și fiscal; Decizia civilă nr. .../.... pronunțată de către Curtea de Apel, Secția a IX-a contencios administrativ și fiscal; Instrucțiunea ANAP nr. 1/2017 (art. 22 lit. g, art. 27 alin. 1 lit. a); Hotărârea Curții din 12.07.2001, National Farmers' Union și alții, C-189/01; Hotărârea Tribunalului din 27.09.2006, Cauza T-319/05, Antwerspe Bouwwerken NV; Legea nr. 98/2016; Legea Concurenței nr. 21/1996 (art. 9)
+
+Argumente AC
+Textul deciziei furnizat este incomplet și se oprește înainte de a prezenta argumentele autorității contractante pentru această critică.
+
+Elemente reținute CNSC
+Textul deciziei furnizat este incomplet și se oprește înainte de a prezenta elementele reținute de CNSC.
+
+Argumentație CNSC
+Textul deciziei furnizat este incomplet și se oprește înainte de a prezenta motivarea și raționamentul CNSC.

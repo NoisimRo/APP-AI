@@ -1,0 +1,70 @@
+C1
+Autoritate
+Argumente contestator
+Contestatorul susține că înlocuirea singurului membru al comisiei de evaluare care a formulat o opinie separată s-a realizat cu nerespectarea dispozițiilor art. 126 alin. (1) din HG nr. 395/2016. Conform principiului simetriei actelor juridice, înlocuirea unui membru ar fi trebuit realizată prin același tip de act prin care a fost numit, respectiv o Dispoziție a Președintelui Consiliului Județean. În speță, comisia de evaluare, formată din 4 din cei 5 membri desemnați, a decis să își înlocuiască propriul membru, substituindu-se astfel autorității contractante. Această procedură este considerată nelegală și viciază actele ulterioare ale comisiei.
+
+Argumente AC
+Autoritatea contractantă respinge critica, arătând că înlocuirea s-a făcut la cererea expresă și motivată a membrului respectiv, domnul .........., prin adresa nr. 10930/24.09.2025. Motivul invocat a fost desemnarea sa într-o altă comisie de recepție care îi impunea prezența zilnică pe un alt șantier. Comisia de evaluare a luat act de această solicitare și a cooptat membrul de rezervă, domnul .........., conform minutei ședinței nr. 11133/29.09.2025. Autoritatea consideră tendențioasă legătura făcută de contestator între opinia separată a membrului și înlocuirea sa, subliniind că opinia separată viza doar un singur aspect din șapte ale propunerii tehnice (graficul de execuție), restul de șase fiind considerate conforme de către membrul respectiv. Procedura de înlocuire a respectat prevederile legale.
+
+Intervenient #1
+Intervenientul susține că critica ce vizează înlocuirea membrului comisiei este neîntemeiată.
+
+Elemente reținute CNSC
+Consiliul reține că un membru al comisiei de evaluare a fost înlocuit după ce a formulat o opinie separată. Contestatorul reclamă că înlocuirea nu s-a făcut printr-o dispoziție a Președintelui Consiliului Județean. Autoritatea contractantă susține că înlocuirea a avut loc ca urmare a unei cereri motivate a membrului respectiv, cerere înaintată și Președintelui Consiliului Județean, respectându-se prevederile art. 126 alin. (10) din HG nr. 395/2016.
+
+Argumentație CNSC
+Consiliul apreciază că situația descrisă de contestator nu este de natură să conducă la nulitatea actelor întocmite de comisia de evaluare. Legiuitorul nu a prevăzut o astfel de sancțiune pentru o eventuală neregulă procedurală de acest tip. Argumentele contestatorului se bazează pe interpretări proprii, care sunt insuficiente pentru a justifica anularea actelor procedurii. Prin urmare, critica este considerată nefondată și este respinsă.
+
+C2
+Autoritate
+Argumente contestator
+Contestatorul (ofertantul declarat câștigător) critică faptul că autoritatea contractantă i-a acordat un punctaj de 0 pentru factorul de evaluare „Gestionarea deșeurilor de pe șantier”, deși a prezentat un Plan de Management de Mediu și de Gestionare a Deșeurilor detaliat. Autoritatea a motivat că ofertantul nu a demonstrat cum va atinge procentul de reciclare de peste 70%. Contestatorul susține că documentația de atribuire nu a impus o formă anume pentru aceste dovezi și nici nu a solicitat documente suplimentare. Planul său a prevăzut un procent de cel puțin 77% pentru valorificarea deșeurilor, spre deosebire de oferta clasată pe locul doi. Prin urmare, consideră că îndeplinea toate condițiile pentru a primi punctajul maxim de 5 puncte și a obține un total de 100 de puncte.
+
+Argumente AC
+Autoritatea contractantă susține că nu a acordat punctaj pentru acest factor de evaluare deoarece angajamentul ofertantului de a atinge un procent de 77% de reciclare a fost doar la nivel declarativ. Ofertantul nu a prezentat o detaliere a metodelor de lucru specifice prin care să demonstreze că va atinge procentul declarat. Prin urmare, comisia a considerat oferta doar conformă cu cerința minimă, dar neeligibilă pentru punctaj suplimentar.
+
+Intervenient #1
+Intervenientul invocă excepția lipsei de interes, argumentând că obținerea a 5 puncte suplimentare de către contestator nu ar schimba clasamentul. Pe fond, susține că critica este neîntemeiată, deoarece fișa de date solicita un plan detaliat care să includă metode specifice de colectare, sortare, reciclare, precum și procedurile și echipamentele utilizate, cerințe pe care contestatorul nu le-ar fi îndeplinit.
+
+Elemente reținute CNSC
+Consiliul reține că această critică vizează punctajul obținut de ofertantul declarat inițial câștigător la factorul de evaluare privind gestionarea deșeurilor. Având în vedere soluția adoptată la critica anterioară, prin care oferta acestui operator economic a fost considerată neconformă, se pune problema interesului de a mai analiza acest aspect.
+
+Argumentație CNSC
+Consiliul constată că această critică este lipsită de interes. Criteriul de atribuire și punctajul aferent se aplică doar ofertelor considerate admisibile. Deoarece, în urma analizei criticii anterioare, s-a stabilit că oferta contestatorului este neconformă (și deci inadmisibilă), analiza punctajului acordat acesteia devine inutilă. Indiferent de rezultat, statutul ofertei nu se poate schimba. Prin urmare, solicitările privind reevaluarea propriei oferte din perspectiva punctajului sunt respinse ca fiind lipsite de interes.
+
+C3
+Parțial
+Argumente contestator
+Contestatorul (ofertantul declarat inițial câștigător) susține că oferta clasată pe locul doi este neconformă, deoarece Programul de lucrări sub formă de grafic nu conține „programul de lucrări perioada de timp friguros”, contrar dispozițiilor exprese ale fișei de date. Oferta contestată indică o durată totală de 782 de zile, fără a include în acest interval perioadele cu condiții meteorologice nefavorabile, ceea ce denotă o planificare nerealistă. În contrast, propria sa ofertă a inclus o perioadă de 121 de zile considerate nefavorabile. Nerespectarea acestei cerințe tehnice obligatorii ar fi trebuit să conducă la respingerea ofertei ca neconformă.
+
+Argumente AC
+Autoritatea contractantă consideră că cerința privind programul de lucrări a fost îndeplinită. Chiar dacă perioada de timp friguros nu a fost evidențiată distinct în grafic, ofertantul a precizat în cadrul propunerii tehnice (la pag. 6) că va lua măsurile speciale prevăzute în „Normativul pentru executarea lucrărilor pe timp friguros”, indicativ C16-84, atunci când activitățile se vor desfășura în astfel de condiții. Această declarație a fost considerată suficientă de către comisia de evaluare.
+
+Intervenient #1
+Intervenientul (ofertantul de pe locul 2) arată că a prevăzut 782 de zile lucrătoare, ceea ce echivalează cu 1094 de zile calendaristice, adică aceeași perioadă propusă de contestator. Referitor la perioada de timp friguros, susține că lucrările sunt în esență de interior și nu sunt afectate de condițiile meteo. Mai mult, documentația nu a impus un număr minim de zile de timp friguros, iar în ofertă a specificat explicit respectarea normativului C16-84.
+
+Elemente reținute CNSC
+Consiliul reține că fișa de date a achiziției, la cap. IV.4.1, a solicitat expres ca „Ofertantul va identifica și consemna în programul de lucrări perioada de timp friguros”. Procesul-verbal de evaluare tehnică al autorității menționează că această cerință este îndeplinită, dar justificarea este una generală, fără a se referi specific la modul în care a fost tratată perioada de timp friguros. Graficul Gantt al ofertei contestate nu are evidențiată această perioadă.
+
+Argumentație CNSC
+Consiliul stabilește mai întâi că, deși oferta sa a fost găsită neconformă, contestatorul are un interes legitim în a critica oferta concurentului, conform jurisprudenței CJUE (cauzele Fastweb, Archus și Gama), deoarece ar putea duce la anularea procedurii. Pe fond, Consiliul constată că evaluarea autorității contractante a fost incompletă. Cerința de a „identifica și consemna” perioada de timp friguros în grafic era clară și expresă. O simplă mențiune a respectării normativului C16-84 în altă parte a ofertei nu este suficientă pentru a îndeplini această cerință specifică. Argumentul că lucrările sunt de interior nu este pe deplin valid, deoarece există și lucrări exterioare (ex: acoperiș). Totuși, o respingere automată a ofertei, așa cum solicită contestatorul, nu este proporțională. Această inadvertență ar fi putut fi clarificată. Comisia de evaluare ar fi trebuit să solicite lămuriri ofertantului și, în funcție de răspuns, să decidă asupra conformității. Deoarece o evaluare concretă a acestui aspect nu a fost efectuată, se impune reevaluarea ofertei pe acest punct.
+
+Jurisprudență: C-100/12 Fastweb; C-131/16 Archus și Gama
+
+R4
+Documente calificare alți ofertanți / mod de evaluare
+Contestator
+Argumente contestator
+Contestatorul susține că oferta asocierii câștigătoare este inacceptabilă și neconformă, deoarece nu satisface cerințele caietului de sarcini. În urma unei solicitări de clarificări, ofertantul a modificat substanțial propunerea tehnică, ceea ce este interzis. Inițial, graficul Gantt depus conținea erori grave de planificare: un timp nerealist de 33 de zile pentru lucrări structurale complexe și o succesiune tehnologică ilogică (ex: încălzirea în pardoseală programată la un an după finalizarea pardoselilor). Ca răspuns la clarificări, ofertantul a transmis un nou grafic, complet modificat: activitățile critice au fost schimbate, termenele au fost devansate cu un an, iar ordinea lucrărilor a fost schimbată. Noul grafic conține, la rândul său, neconcordanțe tehnologice grave: lucrările de instalații (cabluri, doze) sunt programate mult după finalizarea pereților; instalațiile îngropate sunt programate după lucrările de finisaje interioare; activitatea „CABLURI” este programată înaintea activității „TUBURI DE PROTECTIE”, deși cablurile se montează în tuburi. De asemenea, după montajul îngropat al instalațiilor, nu sunt prevăzute lucrări de refacere a finisajelor, lăsând practic lucrările neterminate. Această modificare substanțială a ofertei, coroborată cu un răspuns neconcludent la clarificări, ar fi trebuit să ducă la respingerea ofertei ca inacceptabilă, conform art. 209 din Legea 98/2016.
+
+Argumente AC
+Autoritatea contractantă susține că, în urma solicitării de clarificări nr. 10320/08.09.2025, ofertantul a justificat timpul de 33 de zile alocat lucrărilor structurale și a corectat succesiunea tehnologică a lucrărilor. Comisia de evaluare a considerat că noul grafic demonstrează o derulare a lucrărilor de instalații în paralel cu cele de amenajări interioare, într-o manieră logică. Autoritatea a catalogat corectarea graficului drept o „abatere tehnică minoră”, argumentând că această îndreptare nu poate fi asimilată depunerii unei noi oferte. S-a considerat că în grafic au fost cuprinse toate activitățile necesare, iar informațiile detaliate privind etapele contractului se regăseau deja în alte secțiuni ale ofertei tehnice (pag. 36-55, 79, 610-681). Prin urmare, comisia a concluzionat că oferta îndeplinește cerințele.
+
+Intervenient #1
+Intervenientul susține că modificarea graficului Gantt pe calea răspunsului la clarificări reprezintă corectarea unei abateri tehnice minore, un viciu de formă, deoarece nu a fost modificat clasamentul ofertanților participanți și nici durata totală a graficului.
+
+Elemente reținute CNSC
+Consiliul reține că autoritatea contractantă a solicitat clarificări ofertantului declarat câștigător cu privire la nerealismul duratei de 33 de zile pentru lucrările structurale și la succesiunea ilogică a lucrărilor de instalații (planificate după finisaje). Ca răspuns, ofertantul a recunoscut o eroare și a transmis un grafic Gantt „corectat”. Acest nou grafic a operat modificări substanțiale față de cel inițial: activitățile critice au fost modificate, termenele de execuție au fost schimbate, iar ordinea lucrărilor a fost alterată. Autoritatea a acceptat aceste modificări, considerându-le o abatere tehnică minoră.
+
+Argumentație CNSC
+Consiliul nu este de acord cu concluzia comisiei de evaluare. Modificarea unei oferte după deschidere este o excepție strict reglementată de art. 134 din HG nr. 395/2016, fiind permisă doar pentru vicii de formă sau abateri tehnice minore. O abatere tehnică minoră este o omisiune ce poate fi corectată fără a depune o nouă ofertă, iar un viciu de formă este o eroare a cărei corectare este susținută neechivoc de alte informații existente inițial în ofertă. În acest caz, modificările aduse graficului sunt substanțiale, transformându-l, din punct de vedere al termenelor și succesiunii lucrărilor, într-o nouă ofertă. Afirmația autorității că alte pagini din ofertă susțineau aceste modificări este falsă; paginile respective descriu proceduri de execuție, nu termene sau succesiuni. Informația transmisă prin clarificare a fost nouă și diferită. Mai mult, noul grafic conține în continuare erori tehnologice, cum ar fi planificarea cablurilor înaintea tuburilor de protecție. Prin urmare, răspunsul ofertantului nu putea fi acceptat, fiind o modificare substanțială a propunerii tehnice, ceea ce atrage incidența art. 134 alin. (6) din HG nr. 395/2016, conform căruia oferta devine inacceptabilă. Critica este întemeiată.
