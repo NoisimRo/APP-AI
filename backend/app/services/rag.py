@@ -1405,35 +1405,41 @@ class RAGService:
 
         return contexts
 
-    def _extract_citations(
+    def _build_citations(
         self,
-        response: str,
         decisions: list[DecizieCNSC],
         matched_chunks: list[tuple[ArgumentareCritica, float]],
     ) -> list[Citation]:
-        """Extract and verify citations from LLM response."""
+        """Build citations from ALL matched decisions, ordered by relevance.
+
+        Order follows vector search distance (first = most relevant).
+        Includes every decision that has matched chunks, not just those
+        mentioned in the LLM response.
+        """
         citations = []
+        decision_map = {d.id: d for d in decisions}
+        seen_dec_ids = set()
 
-        for dec in decisions:
-            decision_ref = dec.external_id
+        # matched_chunks is sorted by distance (relevance)
+        # First occurrence of each decision determines its rank
+        for arg, _dist in matched_chunks:
+            if arg.decizie_id in seen_dec_ids:
+                continue
+            seen_dec_ids.add(arg.decizie_id)
+            dec = decision_map.get(arg.decizie_id)
+            if not dec:
+                continue
 
-            if decision_ref in response or str(dec.numar_decizie or '') in response:
-                # Use matched chunk text if available, otherwise fallback
-                citation_text = ""
-                if matched_chunks:
-                    for arg, _dist in matched_chunks:
-                        if arg.decizie_id == dec.id and arg.argumentatie_cnsc:
-                            citation_text = arg.argumentatie_cnsc[:300] + "..."
-                            break
-
-                if not citation_text:
-                    citation_text = f"Decizia {dec.external_id} — {dec.solutie_contestatie or 'N/A'}"
-
-                citations.append(Citation(
-                    decision_id=dec.external_id,
-                    text=citation_text,
-                    verified=True,
-                ))
+            citation_text = (
+                arg.argumentatie_cnsc[:300] + "..."
+                if arg.argumentatie_cnsc
+                else f"Decizia {dec.external_id} — {dec.solutie_contestatie or 'N/A'}"
+            )
+            citations.append(Citation(
+                decision_id=dec.external_id,
+                text=citation_text,
+                verified=True,
+            ))
 
         return citations
 
@@ -1563,7 +1569,7 @@ class RAGService:
         system_prompt = self._build_system_prompt(
             bool(legislation_fragments), bool(decisions)
         )
-        citations = self._extract_citations("", decisions, matched_chunks)
+        citations = self._build_citations(decisions, matched_chunks)
         confidence = self._calculate_confidence(decisions, matched_chunks, max_decisions)
         if legislation_fragments and not decisions:
             confidence = max(confidence, 0.9)
