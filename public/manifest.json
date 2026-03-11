@@ -1,14 +1,14 @@
 {
-  "name": "ExpertAP - Business Intelligence Achiziții Publice",
+  "name": "ExpertAP",
   "short_name": "ExpertAP",
-  "description": "Platformă de Business Intelligence pentru Achiziții Publice - Jurisprudență CNSC",
+  "description": "Business Intelligence pentru Achiziții Publice",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#f8fafc",
   "theme_color": "#2563EB",
   "icons": [
     {
-      "src": "/public/logo.svg",
+      "src": "/logo.svg",
       "sizes": "any",
       "type": "image/svg+xml",
       "purpose": "any maskable"

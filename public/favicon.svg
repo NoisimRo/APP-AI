@@ -6,15 +6,15 @@
     </linearGradient>
   </defs>
   <rect width="32" height="32" rx="7" fill="url(#bg)"/>
-  <g transform="translate(16,7)">
-    <rect x="-1" y="0" width="2" height="16" rx="1" fill="white" opacity="0.95"/>
-    <rect x="-5" y="15" width="10" height="2" rx="1" fill="white" opacity="0.85"/>
-    <rect x="-10" y="-0.5" width="20" height="2" rx="1" fill="white" opacity="0.95"/>
-    <line x1="-9" y1="1.5" x2="-7" y2="8" stroke="white" stroke-width="1.2" stroke-linecap="round" opacity="0.8"/>
-    <line x1="-9" y1="1.5" x2="-11" y2="8" stroke="white" stroke-width="1.2" stroke-linecap="round" opacity="0.8"/>
-    <path d="M-12,8 Q-9,11 -6,8" stroke="white" stroke-width="1.5" fill="none" stroke-linecap="round" opacity="0.85"/>
-    <line x1="9" y1="1.5" x2="7" y2="6.5" stroke="white" stroke-width="1.2" stroke-linecap="round" opacity="0.8"/>
-    <line x1="9" y1="1.5" x2="11" y2="6.5" stroke="white" stroke-width="1.2" stroke-linecap="round" opacity="0.8"/>
-    <path d="M6,6.5 Q9,9.5 12,6.5" stroke="white" stroke-width="1.5" fill="none" stroke-linecap="round" opacity="0.85"/>
+  <g stroke="white" stroke-linecap="round" stroke-linejoin="round" fill="none">
+    <line x1="16" y1="6" x2="16" y2="24" stroke-width="2"/>
+    <line x1="11" y1="24" x2="21" y2="24" stroke-width="2"/>
+    <line x1="6" y1="9" x2="26" y2="8" stroke-width="2"/>
+    <line x1="6" y1="9" x2="5" y2="15" stroke-width="1.2"/>
+    <line x1="6" y1="9" x2="7" y2="15" stroke-width="1.2"/>
+    <path d="M4,15 Q6,18.5 8,15" stroke-width="1.5"/>
+    <line x1="26" y1="8" x2="25" y2="13" stroke-width="1.2"/>
+    <line x1="26" y1="8" x2="27" y2="13" stroke-width="1.2"/>
+    <path d="M24,13 Q26,16.5 28,13" stroke-width="1.5"/>
   </g>
 </svg>

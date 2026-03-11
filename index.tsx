@@ -250,6 +250,7 @@ const CharCounter = ({ value, maxLength }: { value: string; maxLength: number })
 
 // Critique codes legend (CNSC standard)
 const CRITIQUE_LEGEND: Record<string, string> = {
+  // Documentație (D)
   D1: "Cerințe restrictive — experiență similară, calificare, specificații tehnice",
   D2: "Criterii de atribuire / factori de evaluare netransparenți sau subiectivi",
   D3: 'Denumiri de produse/mărci fără sintagma \u201Esau echivalent\u201D',
@@ -259,6 +260,7 @@ const CRITIQUE_LEGEND: Record<string, string> = {
   D7: "Nedivizarea achiziției pe loturi",
   D8: "Alte critici documentație",
   DAL: "Alte critici documentație",
+  // Rezultat (R)
   R1: "Contestații proces-verbal ședință deschidere oferte",
   R2: "Respingerea ofertei ca neconformă sau inacceptabilă",
   R3: "Prețul neobișnuit de scăzut al altor ofertanți",
@@ -268,6 +270,17 @@ const CRITIQUE_LEGEND: Record<string, string> = {
   R7: "Anularea fără temei legal a procedurii",
   R8: "Alte critici rezultat",
   RAL: "Alte critici rezultat",
+  // Neclasificate (C) — generate automat de LLM când codul D/R nu e explicit
+  C1: "Critică neclasificată #1",
+  C2: "Critică neclasificată #2",
+  C3: "Critică neclasificată #3",
+  C4: "Critică neclasificată #4",
+  C5: "Critică neclasificată #5",
+  C6: "Critică neclasificată #6",
+  C7: "Critică neclasificată #7",
+  C8: "Critică neclasificată #8",
+  C9: "Critică neclasificată #9",
+  C10: "Critică neclasificată #10",
 };
 
 // --- Components ---
@@ -1217,7 +1230,7 @@ const App = () => {
           <Menu size={22} />
         </button>
         <div className="flex items-center gap-2">
-          <img src="/public/favicon.svg" alt="ExpertAP" className="w-6 h-6 rounded" />
+          <img src="/favicon.svg" alt="ExpertAP" className="w-6 h-6 rounded" />
           <span className="text-white font-bold text-sm">ExpertAP</span>
         </div>
         <div className="flex items-center gap-1.5 ml-auto">
@@ -1242,7 +1255,7 @@ const App = () => {
       `}>
       <div className="p-6 border-b border-slate-800 flex items-center justify-between">
         <h1 className="text-2xl font-bold text-white flex items-center gap-2.5 tracking-tight">
-          <img src="/public/logo.svg" alt="ExpertAP" className="w-9 h-9 rounded-lg" />
+          <img src="/logo.svg" alt="ExpertAP" className="w-9 h-9 rounded-lg" />
           ExpertAP
         </h1>
         <div className="flex items-center gap-2">
@@ -1342,7 +1355,7 @@ const App = () => {
       {/* Header */}
       <header className="mb-6 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
         <div className="flex items-center gap-3">
-          <img src="/public/logo.svg" alt="ExpertAP" className="w-10 h-10 rounded-xl hidden sm:block" />
+          <img src="/logo.svg" alt="ExpertAP" className="w-10 h-10 rounded-xl hidden sm:block" />
           <div>
             <h2 className="text-2xl md:text-3xl font-bold text-slate-900">Dashboard</h2>
             <p className="text-sm text-slate-500">Centrul de comandă ExpertAP</p>
@@ -1465,13 +1478,14 @@ const App = () => {
         </div>
       </div>
 
-      {/* Row 2: Top CPV Codes (horizontal bar chart with win rate indicators) */}
+      {/* Row 2: Top CPV Groups (3-digit prefix, horizontal bar chart with win rate) */}
       {cpvTopGrouped.length > 0 && (
       <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm mb-6">
-        <h3 className="font-bold text-slate-800 mb-4 flex items-center gap-2">
+        <h3 className="font-bold text-slate-800 mb-1 flex items-center gap-2">
           <BarChart3 size={18} className="text-purple-500" />
-          Top Coduri CPV — Volume și Rata de Admisibilitate
+          Top Grupuri CPV — Volume și Rata de Admisibilitate
         </h3>
+        <p className="text-[10px] text-slate-400 mb-4">Coduri CPV grupate pe primele 3 cifre (ex: 331 = Medical, 555 = Catering)</p>
         <div className="space-y-2">
           {cpvTopGrouped.map((cpv: any) => {
             const maxCount = cpvTopGrouped[0]?.total || 1;
@@ -1480,15 +1494,15 @@ const App = () => {
             const catColor = cpv.categorie === 'Servicii' ? 'bg-blue-100 text-blue-700' : cpv.categorie === 'Furnizare' ? 'bg-orange-100 text-orange-700' : cpv.categorie === 'Lucrări' ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-700';
             const winColor = cpv.win_rate >= 60 ? 'text-emerald-600' : cpv.win_rate >= 40 ? 'text-amber-600' : 'text-red-600';
             return (
-              <button
+              <div
                 key={cpv.code}
-                onClick={() => { setFilterCpv([cpv.code]); setMode('datalake'); }}
                 className="w-full text-left group hover:bg-slate-50 rounded-lg px-2 py-2 transition"
               >
                 <div className="flex items-center gap-2 mb-1">
                   <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${catColor}`}>{catLabel}</span>
-                  <span className="text-xs font-mono font-bold text-slate-600 w-24 shrink-0">{cpv.code}</span>
-                  <span className="text-xs text-slate-400 truncate flex-1">{cpv.description || ''}</span>
+                  <span className="text-xs font-mono font-bold text-slate-600 w-12 shrink-0">{cpv.code}*</span>
+                  <span className="text-xs text-slate-500 truncate flex-1" title={cpv.description}>{cpv.description || ''}</span>
+                  {cpv.cpv_count > 1 && <span className="text-[9px] text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded shrink-0">{cpv.cpv_count} coduri</span>}
                   <span className={`text-xs font-bold ${winColor} tabular-nums shrink-0`}>{cpv.win_rate}%</span>
                   <span className="text-xs text-slate-500 tabular-nums shrink-0 w-10 text-right">{cpv.total}</span>
                 </div>
@@ -1496,13 +1510,14 @@ const App = () => {
                   <div className="bg-slate-300 h-2 rounded-full transition-all duration-500" style={{ width: `${barPct}%` }}></div>
                   <div className="bg-emerald-500 h-2 rounded-l-full absolute top-0 left-0 transition-all duration-500" style={{ width: `${barPct * (cpv.win_rate / 100)}%` }}></div>
                 </div>
-              </button>
+              </div>
             );
           })}
         </div>
         <div className="flex gap-4 mt-3 text-[10px] text-slate-400 border-t border-slate-100 pt-2">
           <span className="flex items-center gap-1"><div className="w-3 h-1.5 rounded bg-emerald-500"></div> Admise/Parțial admise</span>
           <span className="flex items-center gap-1"><div className="w-3 h-1.5 rounded bg-slate-300"></div> Total decizii (scală relativă)</span>
+          <span className="ml-auto">* = grupare pe primele 3 cifre CPV</span>
         </div>
       </div>
       )}
@@ -1535,49 +1550,88 @@ const App = () => {
       </div>
       )}
 
-      {/* Row 3: Win rate by criticism code */}
-      {winRateByCritici.length > 0 && (
-      <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm mb-6">
-        <h3 className="font-bold text-slate-800 mb-4 flex items-center gap-2">
-          <Shield size={18} className="text-indigo-500" />
-          Rata de Succes pe Critici (sortare după volum)
-        </h3>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-          {winRateByCritici.slice(0, 12).map((cr: any) => {
-            const legend = CRITIQUE_LEGEND[cr.code] || cr.code;
-            const isDoc = cr.code.startsWith('D');
-            const tagColor = isDoc ? 'bg-purple-100 text-purple-700' : 'bg-orange-100 text-orange-700';
-            const winPct = cr.contestator_win_rate;
-            const ringColor = winPct >= 60 ? 'text-emerald-500' : winPct >= 40 ? 'text-amber-500' : 'text-red-500';
-            const ringBg = winPct >= 60 ? 'bg-emerald-50' : winPct >= 40 ? 'bg-amber-50' : 'bg-red-50';
-            return (
-              <button
-                key={cr.code}
-                onClick={() => { setFilterCritici([cr.code]); setMode('datalake'); }}
-                className={`${ringBg} border border-slate-100 rounded-xl p-3 text-left hover:shadow-md transition group`}
-              >
-                <div className="flex items-center justify-between mb-2">
-                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${tagColor}`}>{cr.code}</span>
-                  <span className="text-xs text-slate-400">{cr.total} cazuri</span>
+      {/* Row 3: Win rate by criticism code — two columns: DOC vs REZ */}
+      {winRateByCritici.length > 0 && (() => {
+        const docCritici = winRateByCritici.filter((cr: any) => cr.code.startsWith('D'));
+        const rezCritici = winRateByCritici.filter((cr: any) => cr.code.startsWith('R'));
+        const alteCritici = winRateByCritici.filter((cr: any) => !cr.code.startsWith('D') && !cr.code.startsWith('R'));
+
+        const CriticaCard = ({ cr }: { cr: any }) => {
+          const legend = CRITIQUE_LEGEND[cr.code] || `Critică ${cr.code}`;
+          const winPct = cr.contestator_win_rate;
+          const winColor = winPct >= 60 ? 'text-emerald-600' : winPct >= 40 ? 'text-amber-600' : 'text-red-600';
+          const barColor = winPct >= 60 ? 'bg-emerald-500' : winPct >= 40 ? 'bg-amber-500' : 'bg-red-500';
+          const bgColor = winPct >= 60 ? 'bg-emerald-50' : winPct >= 40 ? 'bg-amber-50' : 'bg-red-50';
+          return (
+            <button
+              key={cr.code}
+              onClick={() => { setFilterCritici([cr.code]); setMode('datalake'); }}
+              className={`${bgColor} border border-slate-100 rounded-lg p-3 text-left hover:shadow-md transition w-full`}
+            >
+              <div className="flex items-center justify-between mb-1.5">
+                <span className="text-xs font-bold text-slate-700">{cr.code}</span>
+                <span className="text-[10px] text-slate-400">{cr.total} cazuri</span>
+              </div>
+              <p className="text-[11px] text-slate-600 line-clamp-2 mb-2 leading-relaxed" title={legend}>{legend}</p>
+              <div className="flex items-center gap-2">
+                <div className="flex-1 bg-white/60 rounded-full h-1.5">
+                  <div className={`${barColor} h-1.5 rounded-full transition-all duration-500`} style={{ width: `${winPct}%` }}></div>
                 </div>
-                <p className="text-[11px] text-slate-600 line-clamp-2 mb-2 leading-relaxed" title={legend}>{legend}</p>
-                <div className="flex items-center gap-2">
-                  <div className="flex-1 bg-white/60 rounded-full h-1.5">
-                    <div className={`h-1.5 rounded-full transition-all duration-500 ${winPct >= 60 ? 'bg-emerald-500' : winPct >= 40 ? 'bg-amber-500' : 'bg-red-500'}`} style={{ width: `${winPct}%` }}></div>
-                  </div>
-                  <span className={`text-xs font-bold ${ringColor} tabular-nums`}>{winPct}%</span>
-                </div>
-              </button>
-            );
-          })}
+                <span className={`text-xs font-bold ${winColor} tabular-nums`}>{winPct}%</span>
+              </div>
+            </button>
+          );
+        };
+
+        return (
+        <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm mb-6">
+          <h3 className="font-bold text-slate-800 mb-4 flex items-center gap-2">
+            <Shield size={18} className="text-indigo-500" />
+            Rata de Succes pe Critici (sortare după volum)
+          </h3>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* DOCUMENTAȚIE column */}
+            <div>
+              <div className="flex items-center gap-2 mb-3 pb-2 border-b border-purple-200">
+                <span className="bg-purple-100 text-purple-700 px-2.5 py-1 rounded-md text-xs font-bold">D</span>
+                <span className="text-sm font-bold text-purple-800">DOCUMENTAȚIE</span>
+                <span className="text-[10px] text-slate-400 ml-auto">{docCritici.reduce((s: number, c: any) => s + c.total, 0)} total</span>
+              </div>
+              <div className="space-y-2">
+                {docCritici.map((cr: any) => <CriticaCard key={cr.code} cr={cr} />)}
+              </div>
+            </div>
+            {/* REZULTAT column */}
+            <div>
+              <div className="flex items-center gap-2 mb-3 pb-2 border-b border-orange-200">
+                <span className="bg-orange-100 text-orange-700 px-2.5 py-1 rounded-md text-xs font-bold">R</span>
+                <span className="text-sm font-bold text-orange-800">REZULTAT</span>
+                <span className="text-[10px] text-slate-400 ml-auto">{rezCritici.reduce((s: number, c: any) => s + c.total, 0)} total</span>
+              </div>
+              <div className="space-y-2">
+                {rezCritici.map((cr: any) => <CriticaCard key={cr.code} cr={cr} />)}
+              </div>
+            </div>
+          </div>
+          {/* Neclasificate - if any C-prefix codes exist */}
+          {alteCritici.length > 0 && (
+            <div className="mt-4 pt-4 border-t border-slate-100">
+              <div className="flex items-center gap-2 mb-3">
+                <span className="bg-slate-100 text-slate-600 px-2.5 py-1 rounded-md text-xs font-bold">C</span>
+                <span className="text-sm font-bold text-slate-600">NECLASIFICATE</span>
+                <span className="text-[10px] text-slate-400 ml-auto">{alteCritici.reduce((s: number, c: any) => s + c.total, 0)} total</span>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+                {alteCritici.map((cr: any) => <CriticaCard key={cr.code} cr={cr} />)}
+              </div>
+            </div>
+          )}
+          <div className="mt-3 text-[10px] text-slate-400 border-t border-slate-100 pt-2 text-right">
+            % = rata de admitere contestator (admis + parțial)
+          </div>
         </div>
-        <div className="flex gap-4 mt-3 text-[10px] text-slate-400 border-t border-slate-100 pt-2">
-          <span className="flex items-center gap-1"><span className="bg-purple-100 text-purple-700 px-1.5 py-0.5 rounded text-[9px] font-bold">D</span> Documentație</span>
-          <span className="flex items-center gap-1"><span className="bg-orange-100 text-orange-700 px-1.5 py-0.5 rounded text-[9px] font-bold">R</span> Rezultat</span>
-          <span className="ml-auto">% = rata de admitere contestator</span>
-        </div>
-      </div>
-      )}
+        );
+      })()}
 
       {/* Quick navigation */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -3126,22 +3180,40 @@ const App = () => {
     );
   };
 
-  const renderChat = () => (
+  const renderChat = () => {
+    const handleTextareaInput = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+      setChatInput(e.target.value);
+      // Auto-resize: reset to 1 row then grow up to 3 rows (max ~96px)
+      const ta = e.target;
+      ta.style.height = 'auto';
+      ta.style.height = Math.min(ta.scrollHeight, 96) + 'px';
+    };
+
+    const handleTextareaKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        handleChat();
+      }
+    };
+
+    return (
     <div className="flex flex-col h-full bg-white">
-      <div className="border-b border-slate-100 p-4 bg-white">
+      {/* Header */}
+      <div className="border-b border-slate-100 p-4 bg-white shrink-0">
         <div className="flex justify-between items-center">
            <h2 className="font-bold text-slate-800 flex items-center gap-2">
               <MessageSquare className="text-blue-500" size={18} />
-              ExpertAP Chat
+              Asistent AP
            </h2>
            <span className="text-xs text-slate-500 bg-slate-100 px-2 py-1 rounded">Conectat la baza de date CNSC</span>
         </div>
-        {/* Active scope indicator */}
         {activeScopeId && (
           <div className="mt-2"><ActiveScopeIndicator /></div>
         )}
       </div>
-      <div className="flex-1 overflow-y-auto p-6 space-y-6 bg-slate-50/50">
+
+      {/* Messages area - scrollable */}
+      <div className="flex-1 overflow-y-auto p-6 space-y-6 bg-slate-50/50 min-h-0">
         {chatMessages.length === 0 && (
            <div className="text-center text-slate-400 mt-20">
              <div className="w-16 h-16 bg-white rounded-2xl shadow-sm flex items-center justify-center mx-auto mb-6">
@@ -3174,9 +3246,11 @@ const App = () => {
         )}
         <div ref={chatEndRef} />
       </div>
-      <div className="p-4 bg-white border-t border-slate-200">
-        <div className="max-w-4xl mx-auto">
-          {/* Scope selector + expansion/reranking toggles */}
+
+      {/* Sticky input area at bottom */}
+      <div className="shrink-0 bg-white border-t border-slate-200 shadow-[0_-2px_8px_rgba(0,0,0,0.04)]">
+        <div className="max-w-4xl mx-auto p-4 pb-3">
+          {/* Scope selector + toggles */}
           <div className="flex items-center gap-4 mb-3">
             <div className="flex-1"><ScopeSelector compact /></div>
             <label className="flex items-center gap-1.5 text-xs text-slate-400 cursor-pointer select-none whitespace-nowrap">
@@ -3198,29 +3272,32 @@ const App = () => {
               Reranking
             </label>
           </div>
-          <div className="flex gap-2 relative">
-            <input
-              type="text"
-              className={`flex-1 border rounded-xl pl-5 pr-12 py-4 focus:ring-2 focus:ring-blue-500 outline-none shadow-sm ${chatInput.length > 100000 ? 'border-red-400 bg-red-50' : 'border-slate-300'}`}
-              placeholder={activeScopeId ? `Caută în scope-ul selectat...` : "Scrie mesajul tău..."}
+          {/* Textarea with send button */}
+          <div className="relative">
+            <textarea
+              rows={1}
+              className={`w-full border rounded-xl pl-5 pr-14 py-3.5 focus:ring-2 focus:ring-blue-500 outline-none shadow-sm resize-none overflow-y-auto leading-relaxed ${chatInput.length > 100000 ? 'border-red-400 bg-red-50' : 'border-slate-300'}`}
+              style={{ maxHeight: '96px', minHeight: '48px' }}
+              placeholder={activeScopeId ? `Caută în scope-ul selectat...` : "Scrie mesajul tău... (Shift+Enter = linie nouă)"}
               value={chatInput}
-              onChange={(e) => setChatInput(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && handleChat()}
+              onChange={handleTextareaInput}
+              onKeyDown={handleTextareaKeyDown}
             />
             <button
               onClick={handleChat}
               disabled={isLoading || !chatInput.trim()}
-              className="absolute right-2 top-2 bottom-2 bg-blue-600 text-white px-4 rounded-lg hover:bg-blue-700 disabled:opacity-50 transition flex items-center justify-center"
+              className="absolute right-3 bottom-3 bg-blue-600 text-white p-2.5 rounded-lg hover:bg-blue-700 disabled:opacity-50 transition flex items-center justify-center"
             >
-              <Send size={18} />
+              <Send size={16} />
             </button>
           </div>
           {chatInput.length > 1000 && <CharCounter value={chatInput} maxLength={100000} />}
         </div>
-        <p className="text-center text-xs text-slate-400 mt-2">AI-ul poate face greșeli. Verifică informațiile importante.</p>
+        <p className="text-center text-xs text-slate-400 pb-2">AI-ul poate face greșeli. Verifică informațiile importante.</p>
       </div>
     </div>
-  );
+    );
+  };
 
   return (
     <div className="flex h-screen bg-slate-50 font-sans text-slate-900">
