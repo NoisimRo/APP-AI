@@ -3,9 +3,11 @@
 Uses RAG vector search to ground clarifications in actual CNSC jurisprudence.
 """
 
+import time
+
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field
-from sqlalchemy import select, func
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.logging import get_logger
@@ -37,6 +39,7 @@ async def generate_clarification(
     session: AsyncSession = Depends(get_session),
 ) -> ClarificationResponse:
     """Generate a formal clarification request with RAG jurisprudence."""
+    t0 = time.monotonic()
     logger.info("clarification_request", clause_length=len(request.clause))
 
     llm = await get_active_llm_provider(session)
@@ -47,73 +50,70 @@ async def generate_clarification(
     decision_refs: list[str] = []
 
     try:
-        has_embeddings = await session.scalar(
-            select(func.count())
-            .select_from(ArgumentareCritica)
+        query_vector = await embedding_service.embed_query(request.clause[:3000])
+        t_embed = time.monotonic()
+        logger.info("timing_clarification_embed", duration_s=round(t_embed - t0, 2))
+
+        stmt = (
+            select(
+                ArgumentareCritica,
+                ArgumentareCritica.embedding.cosine_distance(query_vector).label("distance"),
+            )
             .where(ArgumentareCritica.embedding.isnot(None))
+            .order_by("distance")
+            .limit(6)
         )
 
-        if has_embeddings and has_embeddings > 0:
-            query_vector = await embedding_service.embed_query(request.clause[:3000])
+        result = await session.execute(stmt)
+        rows = result.all()
 
-            stmt = (
-                select(
-                    ArgumentareCritica,
-                    ArgumentareCritica.embedding.cosine_distance(query_vector).label("distance"),
-                )
-                .where(ArgumentareCritica.embedding.isnot(None))
-                .order_by("distance")
-                .limit(6)
+        # Filter by relevance
+        relevant_chunks = [
+            (row.ArgumentareCritica, row.distance)
+            for row in rows
+            if row.distance < 0.5
+        ]
+
+        if relevant_chunks:
+            dec_ids = list({arg.decizie_id for arg, _ in relevant_chunks})
+            dec_result = await session.execute(
+                select(DecizieCNSC).where(DecizieCNSC.id.in_(dec_ids))
             )
+            decisions = {d.id: d for d in dec_result.scalars().all()}
+            decision_refs = [d.external_id for d in decisions.values()]
 
-            result = await session.execute(stmt)
-            rows = result.all()
+            context_parts = []
+            for arg, dist in relevant_chunks:
+                dec = decisions.get(arg.decizie_id)
+                if not dec:
+                    continue
+                similarity = 1.0 - dist
+                part = f"Decizia {dec.external_id} (relevanță: {similarity:.2f}):\n"
+                part += f"  Soluție: {dec.solutie_contestatie or 'N/A'}\n"
+                if arg.argumente_contestator:
+                    part += f"  Argumente contestator: {arg.argumente_contestator[:300]}\n"
+                if arg.jurisprudenta_contestator:
+                    part += f"  Jurisprudență contestator: {'; '.join(arg.jurisprudenta_contestator)}\n"
+                if arg.argumentatie_cnsc:
+                    part += f"  Argumentație CNSC: {arg.argumentatie_cnsc[:400]}\n"
+                if arg.jurisprudenta_cnsc:
+                    part += f"  Jurisprudență CNSC: {'; '.join(arg.jurisprudenta_cnsc)}\n"
+                if arg.castigator_critica and arg.castigator_critica != "unknown":
+                    part += f"  Câștigător: {arg.castigator_critica}\n"
+                context_parts.append(part)
 
-            # Filter by relevance
-            relevant_chunks = [
-                (row.ArgumentareCritica, row.distance)
-                for row in rows
-                if row.distance < 0.5
-            ]
+            jurisprudence_context = "\n---\n".join(context_parts)
 
-            if relevant_chunks:
-                dec_ids = list({arg.decizie_id for arg, _ in relevant_chunks})
-                dec_result = await session.execute(
-                    select(DecizieCNSC).where(DecizieCNSC.id.in_(dec_ids))
-                )
-                decisions = {d.id: d for d in dec_result.scalars().all()}
-                decision_refs = [d.external_id for d in decisions.values()]
-
-                context_parts = []
-                for arg, dist in relevant_chunks:
-                    dec = decisions.get(arg.decizie_id)
-                    if not dec:
-                        continue
-                    similarity = 1.0 - dist
-                    part = f"Decizia {dec.external_id} (relevanță: {similarity:.2f}):\n"
-                    part += f"  Soluție: {dec.solutie_contestatie or 'N/A'}\n"
-                    if arg.argumente_contestator:
-                        part += f"  Argumente contestator: {arg.argumente_contestator[:300]}\n"
-                    if arg.jurisprudenta_contestator:
-                        part += f"  Jurisprudență contestator: {'; '.join(arg.jurisprudenta_contestator)}\n"
-                    if arg.argumentatie_cnsc:
-                        part += f"  Argumentație CNSC: {arg.argumentatie_cnsc[:400]}\n"
-                    if arg.jurisprudenta_cnsc:
-                        part += f"  Jurisprudență CNSC: {'; '.join(arg.jurisprudenta_cnsc)}\n"
-                    if arg.castigator_critica and arg.castigator_critica != "unknown":
-                        part += f"  Câștigător: {arg.castigator_critica}\n"
-                    context_parts.append(part)
-
-                jurisprudence_context = "\n---\n".join(context_parts)
-
-                logger.info(
-                    "clarification_jurisprudence_found",
-                    decisions=len(decisions),
-                    chunks=len(relevant_chunks),
-                )
+            logger.info(
+                "clarification_jurisprudence_found",
+                decisions=len(decisions),
+                chunks=len(relevant_chunks),
+            )
 
     except Exception as e:
         logger.warning("clarification_jurisprudence_search_failed", error=str(e))
+
+    logger.info("timing_clarification_search", duration_s=round(time.monotonic() - t0, 2))
 
     # Step 2: Build prompt with jurisprudence
     jurisprudence_section = ""
@@ -166,6 +166,7 @@ Redactează în limba română, limbaj formal și profesionist."""
             length=len(response_text),
             decision_refs=decision_refs,
         )
+        logger.info("timing_clarification_total", duration_s=round(time.monotonic() - t0, 2))
         return ClarificationResponse(content=response_text, decision_refs=decision_refs)
 
     except Exception as e:

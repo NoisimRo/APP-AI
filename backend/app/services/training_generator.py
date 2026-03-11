@@ -5,8 +5,9 @@ grounded in real legislation (legislatie_fragmente) and CNSC
 jurisprudence (argumentare_critica) via RAG.
 """
 
+import time
 from typing import Optional
-from sqlalchemy import select, func
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.logging import get_logger
@@ -377,137 +378,128 @@ class TrainingGenerator:
         legislation_refs: list[str] = []
 
         try:
-            # Check if embeddings exist
-            has_embeddings = await session.scalar(
-                select(func.count())
-                .select_from(ArgumentareCritica)
+            t0 = time.monotonic()
+            query_vector = await self.embedding_service.embed_query(tema)
+            t_embed = time.monotonic()
+            logger.info("timing_training_embed", duration_s=round(t_embed - t0, 2))
+
+            # Search jurisprudence
+            stmt = (
+                select(
+                    ArgumentareCritica,
+                    ArgumentareCritica.embedding.cosine_distance(query_vector).label("distance"),
+                )
                 .where(ArgumentareCritica.embedding.isnot(None))
+                .order_by("distance")
+                .limit(max_jurisprudenta)
             )
 
-            if has_embeddings and has_embeddings > 0:
-                query_vector = await self.embedding_service.embed_query(tema)
+            # Scope pre-filter
+            if scope_decision_ids is not None:
+                stmt = stmt.where(ArgumentareCritica.decizie_id.in_(scope_decision_ids))
 
-                # Search jurisprudence
-                stmt = (
-                    select(
-                        ArgumentareCritica,
-                        ArgumentareCritica.embedding.cosine_distance(query_vector).label("distance"),
-                    )
-                    .where(ArgumentareCritica.embedding.isnot(None))
-                    .order_by("distance")
-                    .limit(max_jurisprudenta)
+            result = await session.execute(stmt)
+            rows = result.all()
+
+            relevant = [
+                (row.ArgumentareCritica, row.distance)
+                for row in rows
+                if row.distance < 0.6
+            ]
+
+            if relevant:
+                dec_ids = list({arg.decizie_id for arg, _ in relevant})
+                dec_result = await session.execute(
+                    select(DecizieCNSC).where(DecizieCNSC.id.in_(dec_ids))
                 )
+                decisions = {d.id: d for d in dec_result.scalars().all()}
+                decision_refs = [d.external_id for d in decisions.values()]
 
-                # Scope pre-filter
-                if scope_decision_ids is not None:
-                    stmt = stmt.where(ArgumentareCritica.decizie_id.in_(scope_decision_ids))
+                parts = []
+                for arg, dist in relevant:
+                    dec = decisions.get(arg.decizie_id)
+                    if not dec:
+                        continue
+                    part = f"Decizia {dec.external_id} (soluție: {dec.solutie_contestatie or 'N/A'}):\n"
+                    if arg.argumente_contestator:
+                        part += f"  Argumente contestator: {arg.argumente_contestator[:500]}\n"
+                    if arg.argumentatie_cnsc:
+                        part += f"  Argumentație CNSC: {arg.argumentatie_cnsc[:500]}\n"
+                    if arg.castigator_critica and arg.castigator_critica != "unknown":
+                        part += f"  Câștigător: {arg.castigator_critica}\n"
+                    if arg.jurisprudenta_cnsc:
+                        part += f"  Jurisprudență CNSC: {'; '.join(arg.jurisprudenta_cnsc[:3])}\n"
+                    parts.append(part)
 
-                result = await session.execute(stmt)
-                rows = result.all()
+                jurisprudence_context = "\n---\n".join(parts)
 
-                relevant = [
-                    (row.ArgumentareCritica, row.distance)
-                    for row in rows
-                    if row.distance < 0.6
-                ]
+            t_juris = time.monotonic()
+            logger.info("timing_training_jurisprudence", duration_s=round(t_juris - t_embed, 2))
 
-                if relevant:
-                    dec_ids = list({arg.decizie_id for arg, _ in relevant})
-                    dec_result = await session.execute(
-                        select(DecizieCNSC).where(DecizieCNSC.id.in_(dec_ids))
-                    )
-                    decisions = {d.id: d for d in dec_result.scalars().all()}
-                    decision_refs = [d.external_id for d in decisions.values()]
+            # Search legislation
+            leg_parts: list[str] = []
+            leg_found_ids: set[str] = set()
 
-                    parts = []
-                    for arg, dist in relevant:
-                        dec = decisions.get(arg.decizie_id)
-                        if not dec:
-                            continue
-                        part = f"Decizia {dec.external_id} (soluție: {dec.solutie_contestatie or 'N/A'}):\n"
-                        if arg.argumente_contestator:
-                            part += f"  Argumente contestator: {arg.argumente_contestator[:500]}\n"
-                        if arg.argumentatie_cnsc:
-                            part += f"  Argumentație CNSC: {arg.argumentatie_cnsc[:500]}\n"
-                        if arg.castigator_critica and arg.castigator_critica != "unknown":
-                            part += f"  Câștigător: {arg.castigator_critica}\n"
-                        if arg.jurisprudenta_cnsc:
-                            part += f"  Jurisprudență CNSC: {'; '.join(arg.jurisprudenta_cnsc[:3])}\n"
-                        parts.append(part)
-
-                    jurisprudence_context = "\n---\n".join(parts)
-
-                # Search legislation
-                leg_parts: list[str] = []
-                leg_found_ids: set[str] = set()
-
-                has_leg_embeddings = await session.scalar(
-                    select(func.count())
-                    .select_from(LegislatieFragment)
-                    .where(LegislatieFragment.embedding.isnot(None))
+            leg_stmt = (
+                select(
+                    LegislatieFragment,
+                    LegislatieFragment.embedding.cosine_distance(query_vector).label("distance"),
                 )
+                .where(LegislatieFragment.embedding.isnot(None))
+                .order_by("distance")
+                .limit(max_legislatie)
+            )
 
-                if has_leg_embeddings and has_leg_embeddings > 0:
-                    leg_stmt = (
-                        select(
-                            LegislatieFragment,
-                            LegislatieFragment.embedding.cosine_distance(query_vector).label("distance"),
-                        )
-                        .where(LegislatieFragment.embedding.isnot(None))
-                        .order_by("distance")
-                        .limit(max_legislatie)
+            leg_result = await session.execute(leg_stmt)
+            leg_rows = leg_result.all()
+
+            act_ids = list({row.LegislatieFragment.act_id for row in leg_rows if row.distance < 0.6})
+
+            acts = {}
+            if act_ids:
+                act_result = await session.execute(
+                    select(ActNormativ).where(ActNormativ.id.in_(act_ids))
+                )
+                acts = {a.id: a for a in act_result.scalars().all()}
+
+            for row in leg_rows:
+                frag = row.LegislatieFragment
+                if row.distance >= 0.6:
+                    continue
+                leg_found_ids.add(frag.id)
+                act = acts.get(frag.act_id)
+                act_name = act.denumire if act else "Act necunoscut"
+                citation = f"{frag.citare} din {act_name}" if frag.citare else act_name
+                legislation_refs.append(citation)
+                leg_parts.append(f"{citation}:\n{frag.text_fragment}")
+
+            legislation_context = "\n---\n".join(leg_parts)
+
+            # Legislation Linking: find legal provisions referenced by jurisprudence chunks
+            if relevant:
+                try:
+                    rag_service = RAGService()
+                    linked_frags = await rag_service._find_legislation_for_chunks(
+                        relevant, session,
+                        already_found_ids=leg_found_ids,
+                        limit=6,
                     )
-
-                    leg_result = await session.execute(leg_stmt)
-                    leg_rows = leg_result.all()
-
-                    act_ids = list({row.LegislatieFragment.act_id for row in leg_rows if row.distance < 0.6})
-
-                    acts = {}
-                    if act_ids:
-                        act_result = await session.execute(
-                            select(ActNormativ).where(ActNormativ.id.in_(act_ids))
+                    if linked_frags:
+                        for frag, act_name in linked_frags:
+                            citation = f"{frag.citare} din {act_name}" if frag.citare else act_name
+                            legislation_refs.append(citation)
+                            leg_parts.append(f"{citation}:\n{frag.text_fragment}")
+                        legislation_context = "\n---\n".join(leg_parts)
+                        logger.info(
+                            "training_legislation_linked",
+                            linked_fragments=len(linked_frags),
                         )
-                        acts = {a.id: a for a in act_result.scalars().all()}
+                except Exception as e:
+                    logger.warning("training_legislation_linking_failed", error=str(e))
 
-                    for row in leg_rows:
-                        frag = row.LegislatieFragment
-                        if row.distance >= 0.6:
-                            continue
-                        leg_found_ids.add(frag.id)
-                        act = acts.get(frag.act_id)
-                        act_name = act.denumire if act else "Act necunoscut"
-                        citation = f"{frag.citare} din {act_name}" if frag.citare else act_name
-                        legislation_refs.append(citation)
-                        leg_parts.append(f"{citation}:\n{frag.text_fragment}")
-
-                    legislation_context = "\n---\n".join(leg_parts)
-
-                # Legislation Linking: find legal provisions referenced by jurisprudence chunks
-                # (provides actual article text when a decision cites "art. X din Legea Y"
-                # without explaining it, or paraphrases a provision without citing it)
-                # Runs regardless of whether legislation embeddings exist (explicit refs
-                # don't need embeddings, only the semantic fallback does)
-                if relevant:
-                    try:
-                        rag_service = RAGService()
-                        linked_frags = await rag_service._find_legislation_for_chunks(
-                            relevant, session,
-                            already_found_ids=leg_found_ids,
-                            limit=6,
-                        )
-                        if linked_frags:
-                            for frag, act_name in linked_frags:
-                                citation = f"{frag.citare} din {act_name}" if frag.citare else act_name
-                                legislation_refs.append(citation)
-                                leg_parts.append(f"{citation}:\n{frag.text_fragment}")
-                            legislation_context = "\n---\n".join(leg_parts)
-                            logger.info(
-                                "training_legislation_linked",
-                                linked_fragments=len(linked_frags),
-                            )
-                    except Exception as e:
-                        logger.warning("training_legislation_linking_failed", error=str(e))
+            t_legis = time.monotonic()
+            logger.info("timing_training_legislation", duration_s=round(t_legis - t_juris, 2))
+            logger.info("timing_training_context_total", duration_s=round(t_legis - t0, 2))
 
             logger.info(
                 "training_context_search",
