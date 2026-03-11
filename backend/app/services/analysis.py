@@ -115,7 +115,7 @@ class DecisionAnalysisService:
             Tuple of (list of argumentation dicts, list of warning messages).
         """
         text_len = len(decision.text_integral) if decision.text_integral else 0
-        was_truncated = text_len > 500000
+        was_truncated = text_len > 3500000
 
         logger.info(
             "analyzing_decision",
@@ -129,7 +129,7 @@ class DecisionAnalysisService:
             coduri_critici=", ".join(decision.coduri_critici) if decision.coduri_critici else "N/A",
             tip_contestatie=decision.tip_contestatie,
             solutie=decision.solutie_contestatie or "N/A",
-            text_integral=decision.text_integral[:500000],  # Gemini 2.5 Pro: 1M tokens (~4M chars), 500K chars ≈ 125K tokens
+            text_integral=decision.text_integral[:3500000],  # Gemini 2.5 Pro: 1M tokens, 3.5M chars ≈ 875K tokens (leaves room for prompt + output)
         )
 
         try:
