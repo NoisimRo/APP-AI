@@ -59,6 +59,7 @@ class RAGService:
         session: AsyncSession,
         limit: int = 10,
         scope_decision_ids: list[str] | None = None,
+        query_vector: list[float] | None = None,
     ) -> list[tuple[ArgumentareCritica, float]]:
         """Search ArgumentareCritica by vector cosine similarity.
 
@@ -67,12 +68,14 @@ class RAGService:
             session: Database session.
             limit: Maximum number of results.
             scope_decision_ids: If provided, restrict search to these decision IDs only.
+            query_vector: Pre-computed embedding vector. If None, will embed the query.
 
         Returns:
             List of (ArgumentareCritica, distance) tuples ordered by similarity.
         """
-        # Embed the query with retrieval_query task type (asymmetric search)
-        query_vector = await self.embedding_service.embed_query(query)
+        # Use pre-computed vector or embed the query
+        if query_vector is None:
+            query_vector = await self.embedding_service.embed_query(query)
 
         # Cosine distance search on ArgumentareCritica embeddings
         stmt = (
@@ -389,6 +392,7 @@ class RAGService:
         query: str,
         session: AsyncSession,
         limit: int = 5,
+        query_vector: list[float] | None = None,
     ) -> list[tuple[LegislatieFragment, str]]:
         """Search legislatie_fragmente for relevant legal text.
 
@@ -400,6 +404,7 @@ class RAGService:
             query: User's query.
             session: Database session.
             limit: Maximum fragments to return.
+            query_vector: Pre-computed embedding vector. If None, will embed the query.
 
         Returns:
             List of (LegislatieFragment, act_name) tuples.
@@ -471,7 +476,9 @@ class RAGService:
 
         # 2. Vector search fallback on legislatie_fragmente
         try:
-            query_vector = await self.embedding_service.embed_query(query)
+            # Use pre-computed vector or embed the query
+            if query_vector is None:
+                query_vector = await self.embedding_service.embed_query(query)
 
             stmt = (
                 select(
@@ -740,53 +747,14 @@ class RAGService:
                     act_name = act_map.get(str(frag.act_id), "N/A")
                     fragments.append((frag, act_name))
 
-        explicit_count = len(fragments)
-
-        # --- Strategy 2: Semantic matching for paraphrased/anonymized provisions ---
-        # Uses CNSC argumentation text to find semantically related legal provisions
-        # (catches cases like "art. ... alin. (xx) lit. b din HG xxx" or
-        #  "comisia trebuie să respingă ofertele cu preț neobișnuit de scăzut" → art. 210)
-        if semantic_parts and len(fragments) < limit:
-            try:
-                semantic_query = "\n".join(semantic_parts)[:2000]
-                query_vector = await self.embedding_service.embed_query(semantic_query)
-
-                remaining = limit - len(fragments)
-                stmt = (
-                    select(
-                        LegislatieFragment,
-                        LegislatieFragment.embedding.cosine_distance(query_vector).label("distance"),
-                    )
-                    .where(LegislatieFragment.embedding.isnot(None))
-                    .order_by("distance")
-                    .limit(remaining + len(found_ids) + 5)
-                )
-                result = await session.execute(stmt)
-
-                # Collect matching fragments first, then batch-load act names
-                semantic_frags = []
-                for row in result.all():
-                    if row.distance < 0.45 and row[0].id not in found_ids:
-                        semantic_frags.append(row[0])
-                        found_ids.add(row[0].id)
-                        if len(fragments) + len(semantic_frags) >= limit:
-                            break
-
-                if semantic_frags:
-                    act_map = await self._batch_load_act_names(
-                        [f.act_id for f in semantic_frags if f.act_id], session
-                    )
-                    for frag in semantic_frags:
-                        act_name = act_map.get(str(frag.act_id), "N/A")
-                        fragments.append((frag, act_name))
-            except Exception as e:
-                logger.warning("legislation_semantic_linking_failed", error=str(e))
+        # Strategy 2 (semantic embedding) was removed for performance:
+        # It required an additional Gemini API call (30-60s) with marginal benefit.
+        # Explicit reference parsing (Strategy 1) catches the important cases.
 
         if fragments:
             logger.info(
                 "legislation_linking_complete",
-                explicit=explicit_count,
-                semantic=len(fragments) - explicit_count,
+                explicit=len(fragments),
                 total=len(fragments),
             )
 
@@ -1037,6 +1005,7 @@ class RAGService:
         scope_decision_ids: list[str] | None = None,
         enable_expansion: bool = False,
         enable_rerank: bool = False,
+        query_vector: list[float] | None = None,
     ) -> tuple[list[DecizieCNSC], list[tuple[ArgumentareCritica, float]]]:
         """Search for relevant decisions based on query.
 
@@ -1112,11 +1081,13 @@ class RAGService:
             queries = await self._expand_query(query)
 
         # Vector search for each query variant
+        # Pass pre-computed vector for the original query; expanded queries get their own embedding
         all_vector: list[tuple[ArgumentareCritica, float]] = []
-        for q in queries:
+        for i, q in enumerate(queries):
             v_results = await self.search_by_vector(
                 q, session, limit=limit * 3,
                 scope_decision_ids=scope_decision_ids,
+                query_vector=query_vector if i == 0 else None,
             )
             all_vector.extend(v_results)
 
@@ -1577,19 +1548,38 @@ class RAGService:
             Tuple of (contexts, system_prompt, citations, confidence, suggested_questions).
             Returns None for contexts/system_prompt if no results found.
         """
+        import time
+        t0 = time.monotonic()
+
+        # EMBED QUERY ONCE — reuse the vector in all sub-functions
+        # This eliminates 2 redundant Gemini API calls (each 1-60s)
+        query_vector = await self.embedding_service.embed_query(query)
+        t_embed = time.monotonic()
+        logger.info("timing_embed_query", duration_s=round(t_embed - t0, 2))
+
         legislation_fragments = await self._search_legislation_fragments(
-            query, session, limit=5
+            query, session, limit=5, query_vector=query_vector
         )
+        t_legis = time.monotonic()
+        logger.info("timing_legislation_search",
+                     duration_s=round(t_legis - t_embed, 2),
+                     results=len(legislation_fragments))
+
         decisions, matched_chunks = await self.search_decisions(
             query, session, limit=max_decisions,
             scope_decision_ids=scope_decision_ids,
             enable_expansion=enable_expansion,
             enable_rerank=enable_rerank,
+            query_vector=query_vector,
         )
+        t_decisions = time.monotonic()
+        logger.info("timing_decision_search",
+                     duration_s=round(t_decisions - t_legis, 2),
+                     decisions=len(decisions),
+                     chunks=len(matched_chunks))
 
         # Legislation Linking: find legal provisions referenced by matched chunks
-        # (provides actual legal text when a decision cites "art. X din Legea Y"
-        # without explaining the article, or paraphrases a provision without citing it)
+        # (uses explicit reference parsing only — no additional embedding calls)
         if matched_chunks:
             already_found = {frag.id for frag, _ in legislation_fragments}
             chunk_legislation = await self._find_legislation_for_chunks(
@@ -1604,6 +1594,17 @@ class RAGService:
                     from_query=len(legislation_fragments) - len(chunk_legislation),
                     from_chunks=len(chunk_legislation),
                 )
+
+        t_linking = time.monotonic()
+        logger.info("timing_legislation_linking",
+                     duration_s=round(t_linking - t_decisions, 2))
+
+        logger.info("timing_prepare_context_total",
+                     duration_s=round(t_linking - t0, 2),
+                     embedding_s=round(t_embed - t0, 2),
+                     legislation_s=round(t_legis - t_embed, 2),
+                     decisions_s=round(t_decisions - t_legis, 2),
+                     linking_s=round(t_linking - t_decisions, 2))
 
         if not decisions and not legislation_fragments:
             return None, None, [], 0.0, ["Ce decizii CNSC sunt disponibile?", "Arată-mi toate deciziile"]
