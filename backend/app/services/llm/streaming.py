@@ -37,6 +37,10 @@ async def create_sse_response(
     """
 
     async def event_generator():
+        import time
+        t_stream_start = time.monotonic()
+        first_token_logged = False
+
         try:
             # Buffer to strip preamble text before first ## heading
             preamble_buffer = ""
@@ -49,6 +53,11 @@ async def create_sse_response(
                 temperature=temperature,
                 max_tokens=max_tokens,
             ):
+                if not first_token_logged:
+                    logger.info("timing_llm_first_token",
+                                duration_s=round(time.monotonic() - t_stream_start, 2))
+                    first_token_logged = True
+
                 if not preamble_passed:
                     preamble_buffer += chunk
                     # Check if we've reached the first ## heading
@@ -66,6 +75,9 @@ async def create_sse_response(
                     continue
 
                 yield f"data: {json.dumps({'text': chunk})}\n\n"
+
+            logger.info("timing_llm_stream_total",
+                         duration_s=round(time.monotonic() - t_stream_start, 2))
 
             # Send final event with metadata
             done_payload = {"done": True}
