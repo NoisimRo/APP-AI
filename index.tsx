@@ -1704,8 +1704,8 @@ const App = () => {
               </div>
             </div>
 
-            {/* Stats Cards — inline on same row */}
-            <div className="flex items-center gap-2 flex-1 min-w-0 overflow-x-auto">
+            {/* Stats Cards — pushed to right */}
+            <div className="flex items-center gap-2 ml-auto min-w-0 overflow-x-auto">
               <div className="bg-gradient-to-br from-blue-50 to-blue-100/50 rounded-lg px-3 py-1.5 md:px-4 md:py-3 border border-blue-200/60 shrink-0">
                 <div className="text-sm md:text-2xl font-extrabold text-blue-700 tracking-tight">{totalDecisions.toLocaleString()}</div>
                 <div className="text-[9px] md:text-[11px] text-blue-600/80 font-medium">Total Decizii</div>
@@ -1744,10 +1744,10 @@ const App = () => {
         <div className="px-4 md:px-6 py-2 border-b border-slate-200 bg-white shrink-0">
           <div className="flex items-center gap-2 flex-wrap">
               {/* Soluție Multi-select Dropdown */}
-              <div className="relative">
+              <div className="relative flex-1 min-w-[100px]">
                 <button
                   onClick={(e) => { e.stopPropagation(); setShowRulingDropdown(!showRulingDropdown); setShowYearDropdown(false); setShowCriticiDropdown(false); setShowCpvDropdown(false); setShowCategorieDropdown(false); setShowClasaDropdown(false); }}
-                  className={`text-xs border rounded-lg px-3 py-2 bg-white text-slate-700 focus:ring-2 focus:ring-blue-500/40 outline-none transition min-w-[110px] cursor-pointer flex items-center gap-1.5 ${filterRuling.length > 0 ? 'border-green-400 bg-green-50 text-green-700' : 'border-slate-300'}`}
+                  className={`text-xs border rounded-lg px-3 py-2 bg-white text-slate-700 focus:ring-2 focus:ring-blue-500/40 outline-none transition w-full cursor-pointer flex items-center gap-1.5 ${filterRuling.length > 0 ? 'border-green-400 bg-green-50 text-green-700' : 'border-slate-300'}`}
                 >
                   Soluție{filterRuling.length > 0 ? ` (${filterRuling.length})` : ': Toate'}
                   <ChevronDown size={12} className="ml-auto" />
@@ -1785,8 +1785,8 @@ const App = () => {
                   </div>
                 )}
               </div>
-              <div className="relative">
-                <select value={filterType} onChange={(e) => setFilterType(e.target.value)} className="appearance-none text-xs border border-slate-300 rounded-lg pl-3 pr-7 py-2 bg-white text-slate-700 focus:ring-2 focus:ring-blue-500/40 focus:border-blue-400 outline-none transition min-w-[110px] cursor-pointer">
+              <div className="relative flex-1 min-w-[100px]">
+                <select value={filterType} onChange={(e) => setFilterType(e.target.value)} className="appearance-none text-xs border border-slate-300 rounded-lg pl-3 pr-7 py-2 bg-white text-slate-700 focus:ring-2 focus:ring-blue-500/40 focus:border-blue-400 outline-none transition w-full cursor-pointer">
                   <option value="">Tip: Toate</option>
                   <option value="documentatie">Documentație</option>
                   <option value="rezultat">Rezultat</option>
@@ -1794,10 +1794,10 @@ const App = () => {
                 <ChevronDown size={13} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
               </div>
               {/* Categorie Dropdown (Furnizare/Servicii/Lucrări) */}
-              <div className="relative">
+              <div className="relative flex-1 min-w-[100px]">
                 <button
                   onClick={(e) => { e.stopPropagation(); setShowCategorieDropdown(!showCategorieDropdown); setShowRulingDropdown(false); setShowYearDropdown(false); setShowCriticiDropdown(false); setShowCpvDropdown(false); setShowClasaDropdown(false); }}
-                  className={`text-xs border rounded-lg px-3 py-2 bg-white text-slate-700 focus:ring-2 focus:ring-blue-500/40 outline-none transition min-w-[110px] cursor-pointer flex items-center gap-1.5 ${filterCategorie ? 'border-orange-400 bg-orange-50 text-orange-700' : 'border-slate-300'}`}
+                  className={`text-xs border rounded-lg px-3 py-2 bg-white text-slate-700 focus:ring-2 focus:ring-blue-500/40 outline-none transition w-full cursor-pointer flex items-center gap-1.5 ${filterCategorie ? 'border-orange-400 bg-orange-50 text-orange-700' : 'border-slate-300'}`}
                 >
                   <Package size={12} />
                   {filterCategorie || 'Categorie'}
@@ -1827,10 +1827,10 @@ const App = () => {
 
               {/* Clasă Produse Dropdown (depends on Categorie) */}
               {(filterCategorie || claseOptions.length > 0) && (
-              <div className="relative">
+              <div className="relative flex-1 min-w-[100px]">
                 <button
                   onClick={(e) => { e.stopPropagation(); setShowClasaDropdown(!showClasaDropdown); setShowRulingDropdown(false); setShowYearDropdown(false); setShowCriticiDropdown(false); setShowCpvDropdown(false); setShowCategorieDropdown(false); }}
-                  className={`text-xs border rounded-lg px-3 py-2 bg-white text-slate-700 focus:ring-2 focus:ring-blue-500/40 outline-none transition min-w-[100px] max-w-[200px] cursor-pointer flex items-center gap-1.5 ${filterClasa ? 'border-teal-400 bg-teal-50 text-teal-700' : 'border-slate-300'}`}
+                  className={`text-xs border rounded-lg px-3 py-2 bg-white text-slate-700 focus:ring-2 focus:ring-blue-500/40 outline-none transition w-full cursor-pointer flex items-center gap-1.5 ${filterClasa ? 'border-teal-400 bg-teal-50 text-teal-700' : 'border-slate-300'}`}
                 >
                   <Layers size={12} />
                   <span className="truncate">{filterClasa || 'Clasă'}</span>
@@ -1860,10 +1860,10 @@ const App = () => {
               )}
 
               {/* Year Multi-select Dropdown */}
-              <div className="relative">
+              <div className="relative flex-1 min-w-[100px]">
                 <button
                   onClick={(e) => { e.stopPropagation(); setShowYearDropdown(!showYearDropdown); setShowRulingDropdown(false); setShowCriticiDropdown(false); setShowCpvDropdown(false); setShowCategorieDropdown(false); setShowClasaDropdown(false); }}
-                  className={`text-xs border rounded-lg px-3 py-2 bg-white text-slate-700 focus:ring-2 focus:ring-blue-500/40 outline-none transition min-w-[100px] cursor-pointer flex items-center gap-1.5 ${filterYears.length > 0 ? 'border-blue-400 bg-blue-50 text-blue-700' : 'border-slate-300'}`}
+                  className={`text-xs border rounded-lg px-3 py-2 bg-white text-slate-700 focus:ring-2 focus:ring-blue-500/40 outline-none transition w-full cursor-pointer flex items-center gap-1.5 ${filterYears.length > 0 ? 'border-blue-400 bg-blue-50 text-blue-700' : 'border-slate-300'}`}
                 >
                   An{filterYears.length > 0 ? `: ${filterYears.join(', ')}` : ': Toate'}
                   <ChevronDown size={12} className="ml-auto" />
@@ -1898,10 +1898,10 @@ const App = () => {
               </div>
 
               {/* Critici Multi-select Dropdown */}
-              <div className="relative">
+              <div className="relative flex-1 min-w-[100px]">
                 <button
                   onClick={(e) => { e.stopPropagation(); setShowCriticiDropdown(!showCriticiDropdown); setShowRulingDropdown(false); setShowYearDropdown(false); setShowCpvDropdown(false); setShowCategorieDropdown(false); setShowClasaDropdown(false); }}
-                  className={`text-xs border rounded-lg px-3 py-2 bg-white text-slate-700 focus:ring-2 focus:ring-blue-500/40 outline-none transition min-w-[110px] cursor-pointer flex items-center gap-1.5 ${filterCritici.length > 0 ? 'border-blue-400 bg-blue-50 text-blue-700' : 'border-slate-300'}`}
+                  className={`text-xs border rounded-lg px-3 py-2 bg-white text-slate-700 focus:ring-2 focus:ring-blue-500/40 outline-none transition w-full cursor-pointer flex items-center gap-1.5 ${filterCritici.length > 0 ? 'border-blue-400 bg-blue-50 text-blue-700' : 'border-slate-300'}`}
                 >
                   <Filter size={12} />
                   Critici{filterCritici.length > 0 && ` (${filterCritici.length})`}
@@ -1940,10 +1940,10 @@ const App = () => {
               </div>
 
               {/* CPV Multi-select Dropdown with Search */}
-              <div className="relative">
+              <div className="relative flex-1 min-w-[100px]">
                 <button
                   onClick={(e) => { e.stopPropagation(); setShowCpvDropdown(!showCpvDropdown); setShowRulingDropdown(false); setShowYearDropdown(false); setShowCriticiDropdown(false); setShowCategorieDropdown(false); setShowClasaDropdown(false); }}
-                  className={`text-xs border rounded-lg px-3 py-2 bg-white text-slate-700 focus:ring-2 focus:ring-blue-500/40 outline-none transition min-w-[100px] cursor-pointer flex items-center gap-1.5 ${filterCpv.length > 0 ? 'border-blue-400 bg-blue-50 text-blue-700' : 'border-slate-300'}`}
+                  className={`text-xs border rounded-lg px-3 py-2 bg-white text-slate-700 focus:ring-2 focus:ring-blue-500/40 outline-none transition w-full cursor-pointer flex items-center gap-1.5 ${filterCpv.length > 0 ? 'border-blue-400 bg-blue-50 text-blue-700' : 'border-slate-300'}`}
                 >
                   <Filter size={12} />
                   CPV{filterCpv.length > 0 && ` (${filterCpv.length})`}
@@ -2050,31 +2050,31 @@ const App = () => {
                   </div>
                 )}
               </div>
+              {(filterRuling.length > 0 || filterType || filterYears.length > 0 || fileSearch || filterCritici.length > 0 || filterCpv.length > 0 || filterCategorie || filterClasa) && (
+                <button onClick={() => { setFilterRuling([]); setFilterType(""); setFilterYears([]); setFileSearch(""); setFilterCritici([]); setFilterCpv([]); setFilterCategorie(""); setFilterClasa(""); setEditingScopeFilters(null); }}
+                  className="text-xs text-blue-600 hover:text-blue-800 font-medium whitespace-nowrap flex items-center gap-1 transition shrink-0">
+                  <X size={13} /> Resetează
+                </button>
+              )}
+              {/* Save scope button */}
+              {(filterRuling.length > 0 || filterType || filterYears.length > 0 || filterCritici.length > 0 || filterCpv.length > 0 || filterCategorie || filterClasa || fileSearch) && (
+                <button
+                  onClick={() => setShowScopeModal(true)}
+                  className="text-xs bg-blue-600 text-white hover:bg-blue-700 font-medium whitespace-nowrap flex items-center gap-1.5 transition px-3 py-1.5 rounded-lg shadow-sm shrink-0"
+                >
+                  <Bookmark size={13} /> Salvează
+                </button>
+              )}
+              {/* Edit scope filters / manage scopes */}
+              {scopes.length > 0 && (
+                <button
+                  onClick={() => setShowScopeManager(true)}
+                  className="text-xs border border-slate-300 text-slate-600 hover:border-blue-400 hover:text-blue-600 font-medium whitespace-nowrap flex items-center gap-1.5 transition px-3 py-1.5 rounded-lg shrink-0"
+                >
+                  <Pencil size={12} /> Editează filtre
+                </button>
+              )}
             </div>
-            {(filterRuling.length > 0 || filterType || filterYears.length > 0 || fileSearch || filterCritici.length > 0 || filterCpv.length > 0 || filterCategorie || filterClasa) && (
-              <button onClick={() => { setFilterRuling([]); setFilterType(""); setFilterYears([]); setFileSearch(""); setFilterCritici([]); setFilterCpv([]); setFilterCategorie(""); setFilterClasa(""); setEditingScopeFilters(null); }}
-                className="text-xs text-blue-600 hover:text-blue-800 font-medium whitespace-nowrap flex items-center gap-1 transition">
-                <X size={13} /> Resetează
-              </button>
-            )}
-            {/* Save scope button */}
-            {(filterRuling.length > 0 || filterType || filterYears.length > 0 || filterCritici.length > 0 || filterCpv.length > 0 || filterCategorie || filterClasa || fileSearch) && (
-              <button
-                onClick={() => setShowScopeModal(true)}
-                className="text-xs bg-blue-600 text-white hover:bg-blue-700 font-medium whitespace-nowrap flex items-center gap-1.5 transition px-3 py-1.5 rounded-lg shadow-sm"
-              >
-                <Bookmark size={13} /> Salvează
-              </button>
-            )}
-            {/* Edit scope filters / manage scopes */}
-            {scopes.length > 0 && (
-              <button
-                onClick={() => setShowScopeManager(true)}
-                className="text-xs border border-slate-300 text-slate-600 hover:border-blue-400 hover:text-blue-600 font-medium whitespace-nowrap flex items-center gap-1.5 transition px-3 py-1.5 rounded-lg"
-              >
-                <Pencil size={12} /> Editează filtre
-              </button>
-            )}
           {/* Active filter pills */}
           {(filterCritici.length > 0 || filterCpv.length > 0 || filterYears.length > 0 || filterCategorie || filterClasa) && (
             <div className="flex items-center gap-1.5 mt-2 flex-wrap">
