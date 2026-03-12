@@ -2075,7 +2075,6 @@ const App = () => {
                 <Pencil size={12} /> Editează filtre
               </button>
             )}
-          </div>
           {/* Active filter pills */}
           {(filterCritici.length > 0 || filterCpv.length > 0 || filterYears.length > 0 || filterCategorie || filterClasa) && (
             <div className="flex items-center gap-1.5 mt-2 flex-wrap">
