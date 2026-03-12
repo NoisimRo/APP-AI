@@ -376,7 +376,9 @@ const App = () => {
   const [winRateByCategory, setWinRateByCategory] = useState<any[]>([]);
   const [winRateByCritici, setWinRateByCritici] = useState<any[]>([]);
   const [cpvTopGrouped, setCpvTopGrouped] = useState<any[]>([]);
-  const [showInstallBanner, setShowInstallBanner] = useState(true);
+  const [showInstallBanner, setShowInstallBanner] = useState(() => {
+    try { return localStorage.getItem('expertap-install-dismissed') !== '1'; } catch { return true; }
+  });
   const [showRulingDropdown, setShowRulingDropdown] = useState(false);
   const [showCriticiDropdown, setShowCriticiDropdown] = useState(false);
   const [showCpvDropdown, setShowCpvDropdown] = useState(false);
@@ -1684,10 +1686,10 @@ const App = () => {
 
     return (
       <div className="h-full flex flex-col bg-slate-50/80">
-        {/* Header */}
+        {/* Header + Stats row */}
         <div className="px-4 md:px-6 pt-4 md:pt-5 pb-3 md:pb-4 bg-white border-b border-slate-200 shrink-0">
-          <div className="flex justify-between items-center mb-4">
-            <div>
+          <div className="flex items-center gap-3 md:gap-4 flex-wrap">
+            <div className="shrink-0">
               <h2 className="text-xl font-bold text-slate-800 flex items-center gap-2">
                 <Filter className="text-blue-600" size={22}/> Filtrare date
               </h2>
@@ -1701,46 +1703,46 @@ const App = () => {
                 </span>
               </div>
             </div>
-          </div>
 
-          {/* Stats Cards */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            <div className="bg-gradient-to-br from-blue-50 to-blue-100/50 rounded-xl p-3.5 border border-blue-200/60">
-              <div className="text-2xl font-extrabold text-blue-700 tracking-tight">{totalDecisions.toLocaleString()}</div>
-              <div className="text-[11px] text-blue-600/80 font-medium mt-0.5">Total Decizii</div>
-            </div>
-            <div className="bg-gradient-to-br from-purple-50 to-purple-100/50 rounded-xl p-3.5 border border-purple-200/60">
-              <div className="text-2xl font-extrabold text-purple-700 tracking-tight">{documentatieCount.toLocaleString()}</div>
-              <div className="text-[11px] text-purple-600/80 font-medium mt-0.5">Documentație</div>
-            </div>
-            <div className="bg-gradient-to-br from-orange-50 to-orange-100/50 rounded-xl p-3.5 border border-orange-200/60">
-              <div className="text-2xl font-extrabold text-orange-700 tracking-tight">{rezultatCount.toLocaleString()}</div>
-              <div className="text-[11px] text-orange-600/80 font-medium mt-0.5">Rezultat</div>
-            </div>
-            <div className="bg-gradient-to-br from-emerald-50 to-emerald-100/50 rounded-xl p-3.5 border border-emerald-200/60">
-              <div className="text-2xl font-extrabold text-emerald-700 tracking-tight">{dbStats?.last_updated ? new Date(dbStats.last_updated).toLocaleDateString('ro-RO') : '-'}</div>
-              <div className="text-[11px] text-emerald-600/80 font-medium mt-0.5">Ultima actualizare</div>
+            {/* Stats Cards — inline on same row */}
+            <div className="flex items-center gap-2 flex-1 min-w-0 overflow-x-auto">
+              <div className="bg-gradient-to-br from-blue-50 to-blue-100/50 rounded-lg px-3 py-1.5 md:px-4 md:py-3 border border-blue-200/60 shrink-0">
+                <div className="text-sm md:text-2xl font-extrabold text-blue-700 tracking-tight">{totalDecisions.toLocaleString()}</div>
+                <div className="text-[9px] md:text-[11px] text-blue-600/80 font-medium">Total Decizii</div>
+              </div>
+              <div className="bg-gradient-to-br from-purple-50 to-purple-100/50 rounded-lg px-3 py-1.5 md:px-4 md:py-3 border border-purple-200/60 shrink-0">
+                <div className="text-sm md:text-2xl font-extrabold text-purple-700 tracking-tight">{documentatieCount.toLocaleString()}</div>
+                <div className="text-[9px] md:text-[11px] text-purple-600/80 font-medium">Documentație</div>
+              </div>
+              <div className="bg-gradient-to-br from-orange-50 to-orange-100/50 rounded-lg px-3 py-1.5 md:px-4 md:py-3 border border-orange-200/60 shrink-0">
+                <div className="text-sm md:text-2xl font-extrabold text-orange-700 tracking-tight">{rezultatCount.toLocaleString()}</div>
+                <div className="text-[9px] md:text-[11px] text-orange-600/80 font-medium">Rezultat</div>
+              </div>
+              <div className="bg-gradient-to-br from-emerald-50 to-emerald-100/50 rounded-lg px-3 py-1.5 md:px-4 md:py-3 border border-emerald-200/60 shrink-0">
+                <div className="text-sm md:text-2xl font-extrabold text-emerald-700 tracking-tight">{dbStats?.last_updated ? new Date(dbStats.last_updated).toLocaleDateString('ro-RO') : '-'}</div>
+                <div className="text-[9px] md:text-[11px] text-emerald-600/80 font-medium">Ultima actualizare</div>
+              </div>
             </div>
           </div>
         </div>
 
-        {/* Search + Filters Bar */}
-        <div className="px-4 md:px-6 py-3 border-b border-slate-200 bg-white shrink-0">
-          {/* Row 1: Search + basic dropdowns */}
-          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 flex-wrap">
-            {/* Search */}
-            <div className="relative flex-1 min-w-0">
-              <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
-              <input
-                type="text"
-                className="w-full pl-10 pr-4 py-2 border border-slate-300 rounded-lg text-sm bg-white focus:ring-2 focus:ring-blue-500/40 focus:border-blue-400 focus:shadow-inner outline-none transition placeholder:text-slate-400"
-                placeholder="Caută după număr decizie, autoritate, CPV..."
-                value={fileSearch}
-                onChange={(e) => setFileSearch(e.target.value)}
-              />
-            </div>
-            {/* Basic Dropdowns */}
-            <div className="flex items-center gap-2 flex-wrap">
+        {/* Search Bar — prominent, own row */}
+        <div className="px-4 md:px-6 pt-3 pb-2 bg-white shrink-0">
+          <div className="relative">
+            <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+            <input
+              type="text"
+              className="w-full pl-12 pr-4 py-3 md:py-2.5 border-2 border-slate-300 rounded-xl text-base md:text-sm bg-white focus:ring-2 focus:ring-blue-500/40 focus:border-blue-400 focus:shadow-inner outline-none transition placeholder:text-slate-400"
+              placeholder="Caută după număr decizie, autoritate, CPV..."
+              value={fileSearch}
+              onChange={(e) => setFileSearch(e.target.value)}
+            />
+          </div>
+        </div>
+
+        {/* Filters Bar */}
+        <div className="px-4 md:px-6 py-2 border-b border-slate-200 bg-white shrink-0">
+          <div className="flex items-center gap-2 flex-wrap">
               {/* Soluție Multi-select Dropdown */}
               <div className="relative">
                 <button
@@ -2073,7 +2075,6 @@ const App = () => {
                 <Pencil size={12} /> Editează filtre
               </button>
             )}
-          </div>
           {/* Active filter pills */}
           {(filterCritici.length > 0 || filterCpv.length > 0 || filterYears.length > 0 || filterCategorie || filterClasa) && (
             <div className="flex items-center gap-1.5 mt-2 flex-wrap">
@@ -3253,8 +3254,8 @@ const App = () => {
       <div className="shrink-0 bg-white border-t border-slate-200 shadow-[0_-2px_8px_rgba(0,0,0,0.04)]">
         <div className="max-w-4xl mx-auto p-4 pb-3">
           {/* Scope selector + toggles */}
-          <div className="flex items-center gap-4 mb-3">
-            <div className="flex-1"><ScopeSelector compact /></div>
+          <div className="flex items-center gap-3 md:gap-4 mb-3 flex-wrap">
+            <div className="flex-1 min-w-0"><ScopeSelector compact /></div>
             <label className="flex items-center gap-1.5 text-xs text-slate-400 cursor-pointer select-none whitespace-nowrap">
               <input
                 type="checkbox"
@@ -3275,20 +3276,22 @@ const App = () => {
             </label>
           </div>
           {/* Textarea with send button */}
-          <div className="relative">
-            <textarea
-              rows={1}
-              className={`w-full border rounded-xl pl-5 pr-14 py-3.5 focus:ring-2 focus:ring-blue-500 outline-none shadow-sm resize-none overflow-y-auto leading-relaxed ${chatInput.length > 100000 ? 'border-red-400 bg-red-50' : 'border-slate-300'}`}
-              style={{ maxHeight: '96px', minHeight: '48px' }}
-              placeholder={activeScopeId ? `Caută în scope-ul selectat...` : "Scrie mesajul tău... (Shift+Enter = linie nouă)"}
-              value={chatInput}
-              onChange={handleTextareaInput}
-              onKeyDown={handleTextareaKeyDown}
-            />
+          <div className="flex items-center gap-2">
+            <div className="relative flex-1 min-w-0">
+              <textarea
+                rows={1}
+                className={`w-full border rounded-xl pl-5 pr-4 py-3.5 focus:ring-2 focus:ring-blue-500 outline-none shadow-sm resize-none overflow-y-auto leading-relaxed ${chatInput.length > 100000 ? 'border-red-400 bg-red-50' : 'border-slate-300'}`}
+                style={{ maxHeight: '96px', minHeight: '48px' }}
+                placeholder={activeScopeId ? "Caută în scope-ul selectat..." : "Scrie mesajul tău... (Shift+Enter = linie nouă)"}
+                value={chatInput}
+                onChange={handleTextareaInput}
+                onKeyDown={handleTextareaKeyDown}
+              />
+            </div>
             <button
               onClick={handleChat}
               disabled={isLoading || !chatInput.trim()}
-              className="absolute right-3 bottom-3 bg-blue-600 text-white p-2.5 rounded-lg hover:bg-blue-700 disabled:opacity-50 transition flex items-center justify-center"
+              className="shrink-0 self-center bg-blue-600 text-white p-2.5 rounded-lg hover:bg-blue-700 disabled:opacity-50 transition flex items-center justify-center"
             >
               <Send size={16} />
             </button>
@@ -3712,7 +3715,7 @@ const App = () => {
           >
             Instalează
           </button>
-          <button onClick={() => setShowInstallBanner(false)} className="shrink-0 text-white/70 hover:text-white">
+          <button onClick={() => { setShowInstallBanner(false); try { localStorage.setItem('expertap-install-dismissed', '1'); } catch {} }} className="shrink-0 text-white/70 hover:text-white">
             <X size={14} />
           </button>
         </div>
