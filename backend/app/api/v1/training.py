@@ -4,6 +4,9 @@ Generates didactic materials for public procurement training,
 grounded in real legislation and CNSC jurisprudence via RAG.
 """
 
+import unicodedata
+import re
+
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import Response
 from pydantic import BaseModel, Field
@@ -25,6 +28,18 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 router = APIRouter()
 logger = get_logger(__name__)
+
+
+def _safe_filename(name: str) -> str:
+    """Convert a Unicode string to an ASCII-safe filename for Content-Disposition."""
+    # Normalize Unicode (e.g., ă→a, ț→t, î→i via NFKD decomposition)
+    nfkd = unicodedata.normalize("NFKD", name)
+    ascii_name = nfkd.encode("ascii", "ignore").decode("ascii")
+    # Replace any remaining non-alphanumeric chars (except . - _ space) with _
+    ascii_name = re.sub(r"[^\w.\- ]", "_", ascii_name)
+    # Collapse multiple underscores/spaces
+    ascii_name = re.sub(r"[_ ]{2,}", " ", ascii_name)
+    return ascii_name.strip() or "export"
 
 
 class TrainingGenerateRequest(BaseModel):
@@ -209,13 +224,15 @@ async def export_material(request: TrainingExportRequest):
     )
 
     try:
+        safe_name = _safe_filename(request.titlu)
+
         if request.format == "md":
             data = export_markdown(request.content, request.titlu)
             return Response(
                 content=data,
                 media_type="text/markdown",
                 headers={
-                    "Content-Disposition": f'attachment; filename="{request.titlu}.md"',
+                    "Content-Disposition": f'attachment; filename="{safe_name}.md"',
                 },
             )
 
@@ -225,7 +242,7 @@ async def export_material(request: TrainingExportRequest):
                 content=data,
                 media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
                 headers={
-                    "Content-Disposition": f'attachment; filename="{request.titlu}.docx"',
+                    "Content-Disposition": f'attachment; filename="{safe_name}.docx"',
                 },
             )
 
@@ -235,7 +252,7 @@ async def export_material(request: TrainingExportRequest):
                 content=data,
                 media_type="application/pdf",
                 headers={
-                    "Content-Disposition": f'attachment; filename="{request.titlu}.pdf"',
+                    "Content-Disposition": f'attachment; filename="{safe_name}.pdf"',
                 },
             )
 

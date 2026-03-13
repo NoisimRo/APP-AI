@@ -3639,12 +3639,14 @@ const App = () => {
                             <p className="font-semibold text-slate-700 mb-1">Jurisprudenta CNSC:</p>
                             <div className="flex gap-2 flex-wrap">
                               {flag.decision_refs.map((ref: string) => (
-                                <span
+                                <button
                                   key={ref}
-                                  className="text-xs bg-blue-50 text-blue-700 px-2 py-1 rounded border border-blue-200 font-mono"
+                                  onClick={() => openDecision(ref)}
+                                  className="text-xs bg-blue-50 text-blue-700 px-2 py-1 rounded border border-blue-200 font-mono hover:bg-blue-100 hover:border-blue-400 cursor-pointer transition"
+                                  title="Click pentru a vizualiza decizia"
                                 >
                                   {ref}
-                                </span>
+                                </button>
                               ))}
                             </div>
                           </div>
