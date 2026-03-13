@@ -1101,7 +1101,7 @@ const App = () => {
     setIsLoading(true);
     setRedFlagsResults([]);
     setSelectedRedFlags([]);
-    setRedFlagsClarification("");
+    setEditedClarifications({});
     setRedFlagsProgress("Se trimite documentul pentru analiză...");
 
     // Progress simulation — shows user what's happening during long analysis
