@@ -1,0 +1,78 @@
+Anexa - propunere set de cerințe și algoritm de calcul pentru evaluarea experților-cheie în ACB.
+
+Categorii     Cerințe                                              Observații
+Calificare                                                         Rolul de expert în ACB nu este încadrat într-o profesie sau ocupație reglementată
+              cerință minimă
+educațional                                                        conform COR, astfel că nu se consideră necesară impunerea unor cerințe specifice
+              studii superioare absolvite cu diplomă de licență
+ă                                                                  minime aferente studiilor superioare (într-un anumit domeniu specific).
+              cerință minimă                                       Cerința este aliniată prevederilor din Instrucțiunea nr. 1/2017, în cadrul căreia la art. 8
+              5 ani de experiență profesională generală în analize alin. (2) se precizează faptul că experiența generală poate fi solicitată în ceea ce
+              financiare și/ sau economice                         priveşte domeniul studiilor absolvite sau, după caz, în specializarea necesară și poate
+Experiența
+profesional   Notă Cerința privind experiența profesională fi de până la 5 ani, ca regulă generală. (este un domeniu mult mai larg decât cel al
+ă generală    generală este cerință minimă și nu i se asociază ACB).
+              punctaj. Neîndeplinirea acesteia conduce la Cerința privind experiența profesională este opțională, în contextul formulării cerinței
+              declararea ofertei ca neconformă.                    privind experiența specifică.
+
+              Realizarea de ACB în proiecte de investiții în        Experiența acumulată de un expert în ACB realizată într-un anumit domeniu
+              domeniul proiectului.                                 (transport, mediu, energie, infrastructură socială etc.) este importantă și poate
+              AC/EC va prezenta, în documentația de atribuire,      deveni relevantă în maximizarea beneficiilor obținute de o AC/EC. Este un avantaj în
+              domeniul (sau domeniile specifice investiției în      primul rând pentru AC/EC ca experții alocați în proiect să aibă experiență în domeniul
+              cazul unei investiții complexe).                      respectiv, pe care să o fructifice în cadrul proiectului.
+              De ex., se pot lua în considerare domeniile           (în funcție de complexitatea/ mărimea proiectului AC/EC poate decide stabilirea
+              menționate în cuprinsul prezentei Îndrumări,          unei cerințe minime privind experiența specifică a mai mult de 1 proiect –
+Experiența                                                          recomandarea ar fi ca, în funcție de piața pe care operează și nivelul de
+              domenii care se regăsesc in Ghidul CE privind
+profesional                                                         concurență, cerința minimă să nu depășească pragul de 3 proiecte ).
+              realizarea ACB):
+ă specifică                                                         Împărțirea pe domenii este bazată pe faptul că, în cadrul Ghidului CE pentru ACB a
+              1. transport;                                         proiectelor de investiții 2014-2020, pentru fiecare din primele 5 domenii sunt prezentate
+              2. mediu - (i) alimentarea cu apă și tratarea apei    abordări specifice ale ACB, fiind introduse unele diferențe între cerințele privind
+                 uzate, (ii) managementul deșeurilor, (iii)         metodologia de realizare a ACB de la un domeniu la altul. Cel de-al șaselea domeniu a
+                 remedieri, protecție și prevenirea riscurilor de   fost adăugat având în vedere specificitatea unor proiecte recente din România
+                 mediu;                                             (construcția de spitale regionale, proiectele majore ale IGSU, etc.).
+              3. energie;
+              4. comunicații în bandă largă;
+              5. cercetare, dezvoltare și inovare;
+        6. infrastructură socială (ex.: spitale, clădiri      Proiectele aduse ca referințe privind experiența profesională generală pot fi prezentate
+           etc.).                                             ca referințe și în legătură cu experiența profesională specifică. Pentru modul de
+                                                              îndeplinire a acestei cerințe se acordă punctaj conform algoritmului prezentat mai jos.
+
+
+
+
+Algoritm punctaj p= (includem mai jos o simulare de algoritm de calcul în condițiile în care AC/EC stabilește cerința minimă aferentă
+experienței similare specifice de 1 proiect):
+
+      PTM = punctajul tehnic maxim asociat experienței profesionale specifice a expertului (stabilit în documentația de atribuire);
+
+      PT = punctajul tehnic obținut în legătură cu experiența profesională specifică a expertului.
+Algoritm punctaj expert ACB
+
+
+ Nr. de ACB pentru investiții     Punctaj propus (PT)              Justificare
+ diferite în domeniul
+ proiectului
+
+ 1                                0                                Propunerea ponderilor în cadrul punctajului are la bază următoarea argumentație:
+                                                                   Așa cum am prezentat anterior, este un avantaj pentru AC/EC ca experții alocați în
+                                                                   proiect să aibă experiență în domeniul respectiv, pe care să o fructifice în cadrul
+                                                                   proiectului.
+                                                                   Astfel, dacă un expert are experiență în domeniul respectiv, pentru cel 1 (un) proiect
+                                                                   acesta va îndeplini cerințele minime (stabilite de AC/EC privind experiența specifică).
+                                                                   Pentru orice proiect în plus pe care un expert îl prezintă în domeniul proiectului i se
+                                                                   va aloca un punctaj, conform algoritmului de calcul.
+ 2                                25% din PTM
+
+ 3                                50% din PTM
+
+ 4                                75% din PTM
+
+ Cel puțin 5                      PTM
+
+
+Este de menționat și faptul că niciuna dintre cerințele legate de evaluare prezentate mai sus nu trebuie să se regăsească printre cerințele
+privind calificarea ofertanților. O astfel de cerință de calificare poate fi experiența similară a ofertantului în realizarea, în ultimii „n” ani, de
+documentații tehnico –economice care să fi inclus și ACB, conform cerințelor legislației române și/sau europene.
+
