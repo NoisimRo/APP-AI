@@ -1588,6 +1588,7 @@ async def main():
     embedding_service = EmbeddingService(llm_provider=llm)
 
     totals = {"inserted": 0, "updated": 0, "removed": 0, "unchanged": 0}
+    failed_files: list[tuple[str, str]] = []  # (filename, error_message)
     start = time.time()
 
     for blob_name in blob_names:
@@ -1596,15 +1597,24 @@ async def main():
         try:
             file_text = download_file(bucket, blob_name)
         except Exception as e:
-            print(f"Warning: Failed to download {blob_name}: {e}, skipping")
+            msg = f"Download failed: {e}"
+            print(f"  ⚠ {msg}, skipping")
+            failed_files.append((filename, msg))
             continue
 
-        result = await import_file(
-            filename, file_text, embedding_service,
-            force=args.force, update=args.update, dry_run=args.dry_run,
-        )
-        for k in totals:
-            totals[k] += result[k]
+        try:
+            result = await import_file(
+                filename, file_text, embedding_service,
+                force=args.force, update=args.update, dry_run=args.dry_run,
+            )
+            for k in totals:
+                totals[k] += result[k]
+        except Exception as e:
+            msg = f"{type(e).__name__}: {e}"
+            print(f"  ⚠ Import failed for {filename}: {msg}, skipping")
+            logger.error("import_file_failed", file=filename, error=msg)
+            failed_files.append((filename, msg))
+            continue
 
     elapsed = time.time() - start
     print(
@@ -1614,6 +1624,12 @@ async def main():
         f"Removed: {totals['removed']}, "
         f"Unchanged: {totals['unchanged']}"
     )
+
+    if failed_files:
+        print(f"\n⚠ {len(failed_files)} file(s) could not be imported:")
+        for fname, err in failed_files:
+            print(f"  - {fname}: {err}")
+        sys.exit(1)
 
 
 if __name__ == "__main__":
