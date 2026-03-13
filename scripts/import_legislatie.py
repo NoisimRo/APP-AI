@@ -104,10 +104,11 @@ def detect_act_info(filename: str) -> tuple[str, int, int, str]:
             return tip, numar, an, titlu
 
     # Fallback: try to parse from filename
-    m = re.search(r'(LEGE|HG|OUG|ORDIN|NORME)\s*(?:NR\.?\s*)?(\d+)', name)
+    # Support thousands separator: "1.171" → 1171, "nr. 395" → 395
+    m = re.search(r'(LEGE|HG|OUG|ORDIN|NORME)\s*(?:NR\.?\s*)?(\d[\d.]*\d|\d+)', name)
     if m:
         act_type = m.group(1)
-        act_num = int(m.group(2))
+        act_num = int(m.group(2).replace('.', ''))
         y = re.search(r'(\d{4})', name)
         year = int(y.group(1)) if y else 2016
         tip_map = {"LEGE": "Lege", "ORDIN": "Ordin"}
