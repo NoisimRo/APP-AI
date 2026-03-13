@@ -104,14 +104,38 @@ def detect_act_info(filename: str) -> tuple[str, int, int, str]:
             return tip, numar, an, titlu
 
     # Fallback: try to parse from filename
-    m = re.search(r'(LEGE|HG|OUG|NORME)\s*(?:nr\.?\s*)?(\d+)', name)
+    m = re.search(r'(LEGE|HG|OUG|ORDIN|NORME)\s*(?:NR\.?\s*)?(\d+)', name)
     if m:
         act_type = m.group(1)
         act_num = int(m.group(2))
         y = re.search(r'(\d{4})', name)
         year = int(y.group(1)) if y else 2016
-        tip = "Lege" if act_type == "LEGE" else act_type
-        return tip, act_num, year, f"{tip} {act_num}/{year}"
+        tip_map = {"LEGE": "Lege", "ORDIN": "Ordin"}
+        tip = tip_map.get(act_type, act_type)
+        return tip, act_num, year, f"{tip} nr. {act_num}/{year}"
+
+    # ANAP instructions/guidance documents
+    m = re.search(r'INSTRUC[TȚ]IUN[EĂ]\s*(?:NR\.?\s*)?(\d+)', name, re.IGNORECASE)
+    if not m:
+        m = re.search(r'INSTRUC[TȚ]IUN[EĂ][_\s]+(\d+)', name, re.IGNORECASE)
+    if m:
+        act_num = int(m.group(1))
+        y = re.search(r'(\d{4})', name)
+        year = int(y.group(1)) if y else 2020
+        return "Instrucțiune ANAP", act_num, year, f"Instrucțiune ANAP nr. {act_num}/{year}"
+
+    # Anexa to guidance documents (must check BEFORE Îndrumare, since filename contains both)
+    if 'ANEXA' in name and ('INDRUMARE' in name or 'ÎNDRUMARE' in name):
+        y = re.search(r'(\d{4})', name)
+        year = int(y.group(1)) if y else 2020
+        return "Anexă Îndrumare ANAP", year, year, f"Anexă Îndrumare ANAP/{year}"
+
+    # ANAP guidance documents (Îndrumare) — may not have a number
+    if 'INDRUMARE' in name or 'ÎNDRUMARE' in name or 'INDRUMARE' in name.replace('Î', 'I'):
+        y = re.search(r'(\d{4})', name)
+        year = int(y.group(1)) if y else 2020
+        # Use year as act_num since Îndrumare typically don't have numbers
+        return "Îndrumare ANAP", year, year, f"Îndrumare ANAP/{year}"
 
     raise ValueError(f"Cannot detect act normativ from filename: {filename}")
 
@@ -264,16 +288,501 @@ def parse_alineats(article_text: str) -> list[dict]:
     return alineats
 
 
+def _parse_annex_sections(annex_text: str, annex_num: int, annex_label: str) -> list[dict]:
+    """Parse an annex into logical sections for import as fragments.
+
+    Splits annex content by:
+    - Sub-annexes (e.g., "Anexa nr. 3A", "Anexa nr. 3B")
+    - Lettered sections (e.g., a)Fructe, b)Cereale)
+    - Numbered points (e.g., 1. Caracteristici, 2. Principii)
+    - Table-like groups (consecutive data lines grouped with their headers)
+
+    Returns fragment dicts compatible with the regular article fragments.
+    """
+    lines = annex_text.split('\n')
+    sections: list[tuple[str, list[str]]] = []
+    current_heading = annex_label
+    current_lines: list[str] = []
+
+    # Patterns for section boundaries within annexes
+    sub_annex_re = re.compile(
+        r'^Anexa\s+nr\.\s*(\d+[A-Z]?)\.\s*(.*)', re.IGNORECASE,
+    )
+    lettered_section_re = re.compile(
+        r'^([a-z](?:\.\d+)?)\)(.*)', re.IGNORECASE,
+    )
+    numbered_point_re = re.compile(
+        r'^(\d+(?:\^\d+)?)\.\s+(.*)',
+    )
+    # Table category headers that repeat in the food tables
+    table_category_re = re.compile(
+        r'^(Nr\.\s*crt\.|Grupa alimentar[ăa]|Grupa de v[âa]rst[ăa]|V[âa]rst[ăa])',
+        re.IGNORECASE,
+    )
+
+    def flush_section():
+        nonlocal current_lines
+        text = '\n'.join(current_lines).strip()
+        if text and len(text) > 5:
+            sections.append((current_heading, current_lines[:]))
+        current_lines = []
+
+    for line in lines:
+        stripped = line.strip()
+        if not stripped:
+            continue
+
+        # Sub-annex header (e.g., "Anexa nr. 3A. Necesarul zilnic...")
+        m = sub_annex_re.match(stripped)
+        if m:
+            flush_section()
+            sub_id = m.group(1).strip()
+            sub_title = m.group(2).strip()
+            current_heading = f"Anexa nr. {sub_id}" + (f" - {sub_title}" if sub_title else "")
+            continue
+
+        # Numbered point (e.g., "1. Caracteristici în alimentaţia copilului")
+        # Check BEFORE lettered sections — numbered points take priority
+        m = numbered_point_re.match(stripped)
+        if m:
+            point_num = m.group(1)
+            point_text = m.group(2).strip()
+            # Only split if the text after the number looks like a title (>10 chars, not pure data)
+            if point_text and len(point_text) > 10 and not re.match(r'^[\d,.\-\s]+$', point_text):
+                flush_section()
+                current_heading = f"pct. {point_num} - {point_text}"
+                continue
+
+        # Lettered section (e.g., "a)Fructe și legume")
+        # Only treat as section boundary if the text is heading-like:
+        # short (≤60 chars) and doesn't end with a period (not a full sentence)
+        m = lettered_section_re.match(stripped)
+        if m:
+            letter = m.group(1)
+            rest = m.group(2).strip()
+            is_heading = (
+                rest
+                and len(rest) > 3
+                and len(rest) <= 60
+                and not rest.endswith('.')
+                and not rest.endswith(';')
+            )
+            if is_heading:
+                flush_section()
+                current_heading = f"lit. {letter}) {rest}"
+                continue
+
+        # Table category header restart (signals a new logical table)
+        if table_category_re.match(stripped):
+            flush_section()
+            current_heading = current_heading.split(' / ')[0]  # keep base heading
+
+        current_lines.append(stripped)
+
+    flush_section()
+
+    # Convert sections to fragment records
+    records = []
+    base_num = annex_num * 10000  # e.g., Annexa 1 → 10000, Annexa 3 → 30000
+    annex_full_text = annex_text.strip()
+
+    for idx, (heading, section_lines) in enumerate(sections, 1):
+        section_text = '\n'.join(section_lines).strip()
+        if not section_text:
+            continue
+
+        fragment_num = base_num + idx
+        art_label = f"Anexa nr. {annex_num}"
+
+        # Build citare
+        if heading == annex_label:
+            citare = f"Anexa nr. {annex_num}"
+        else:
+            citare = f"Anexa nr. {annex_num} - {heading}"
+
+        records.append({
+            "numar_articol": fragment_num,
+            "articol": art_label,
+            "alineat": idx,
+            "alineat_text": heading,
+            "litera": None,
+            "text_fragment": section_text,
+            "articol_complet": annex_full_text[:10000],  # cap to prevent huge texts
+            "citare": citare[:150],
+            "capitol": f"Anexa nr. {annex_num}",
+            "sectiune": heading[:500] if heading != annex_label else None,
+        })
+
+    return records
+
+
+def _detect_document_type(raw_text: str) -> str:
+    """Detect the type of document for choosing the right parser.
+
+    Returns:
+        'standard' — regular law/HG with Capitolul/Articolul structure
+        'numbered_sections' — ANAP guidance with numbered sections (1., 2., 3.)
+        'modification_act' — Instrucțiune that modifies another act (Art. I/II + numbered points)
+        'table_only' — document with no structural markers (pure table/text)
+    """
+    lines = raw_text.split('\n')
+    clean_lines = [l.strip() for l in lines if l.strip()]
+
+    # Check for standard structural articles (Articolul X or Art. X where X is a number)
+    # Must be a standalone article header, NOT an inline reference like
+    # "Art. 115 alin. (1) din Legea nr. 98/2016"
+    standard_art_re = re.compile(
+        r'^(?:#{1,4}\s+)?(?:Articolul|Art\.?)\s+(\d+(?:\^\d+)?)\s*$', re.IGNORECASE
+    )
+    # Also match "Art. 5 se modifică" or "Articolul 6se modifică" (article headers with trailing text)
+    # but NOT "Art. 115 alin. (1) din Legea" (inline legal references)
+    standard_art_with_text_re = re.compile(
+        r'^(?:#{1,4}\s+)?(?:Articolul|Art\.?)\s+(\d+(?:\^\d+)?)\s*[-–(]', re.IGNORECASE
+    )
+    inline_ref_re = re.compile(
+        r'Art\.\s+\d+\s+(?:alin|din|și|,|lit\.)', re.IGNORECASE
+    )
+    structural_article_count = 0
+    for l in clean_lines:
+        if standard_art_re.match(l) or standard_art_with_text_re.match(l):
+            # Make sure it's not an inline reference
+            if not inline_ref_re.match(l):
+                structural_article_count += 1
+    has_standard_articles = structural_article_count >= 2
+
+    # Check for Roman numeral articles (Art. I., Art. II.) — modification acts
+    roman_art_re = re.compile(
+        r'^Art\.\s+([IVX]+)[\.\s\-]', re.IGNORECASE
+    )
+    has_roman_articles = any(roman_art_re.match(l) for l in clean_lines)
+
+    # Check for numbered sections at start of line (e.g., "   1. Modificarea duratei")
+    numbered_section_re = re.compile(r'^\s*(\d+)\.\s+[A-ZĂÂÎȘȚ]')
+    numbered_sections = [l for l in clean_lines if numbered_section_re.match(l)]
+
+    if has_standard_articles:
+        return 'standard'
+    elif has_roman_articles:
+        return 'modification_act'
+    elif len(numbered_sections) >= 2:
+        return 'numbered_sections'
+    else:
+        return 'table_only'
+
+
+def _parse_numbered_sections_document(raw_text: str) -> list[dict]:
+    """Parse a document structured with numbered sections (1., 2., 3.).
+
+    Used for ANAP guidance documents (Îndrumare) that don't have standard
+    Articolul/Capitolul structure but use numbered sections.
+
+    Also handles sub-sections with letters: a), b), c).
+    """
+    clean_text = preprocess_text(raw_text)
+    lines = clean_text.split('\n')
+    records = []
+
+    # Find numbered sections: "   1. Title text" or "1. Title text"
+    section_re = re.compile(r'^\s*(\d+)\.\s+(.*)')
+
+    sections: list[tuple[int, str, list[str]]] = []
+    current_num = None
+    current_title = None
+    current_lines: list[str] = []
+
+    # Collect preamble (text before first numbered section)
+    preamble_lines: list[str] = []
+    found_first_section = False
+
+    for line in lines:
+        stripped = line.strip()
+
+        m = section_re.match(stripped)
+        if m:
+            num = int(m.group(1))
+            title = m.group(2).strip()
+
+            # Only treat as section if the number follows sequence
+            # (avoid matching "10 % din valoare" or similar)
+            is_likely_section = (
+                len(title) > 5
+                and title[0].isupper()
+                and (current_num is None or num == current_num + 1 or num == 1)
+            )
+
+            if is_likely_section:
+                if not found_first_section:
+                    found_first_section = True
+                if current_num is not None:
+                    sections.append((current_num, current_title, current_lines))
+                current_num = num
+                current_title = title
+                current_lines = []
+                continue
+
+        if found_first_section and current_num is not None:
+            current_lines.append(line)
+        elif not found_first_section:
+            preamble_lines.append(line)
+
+    # Flush last section
+    if current_num is not None:
+        sections.append((current_num, current_title, current_lines))
+
+    # Build preamble fragment
+    preamble_text = '\n'.join(preamble_lines).strip()
+    full_doc_text = clean_text.strip()
+
+    if preamble_text and len(preamble_text) > 20:
+        records.append({
+            "numar_articol": 0,
+            "articol": "Preambul",
+            "alineat": None,
+            "alineat_text": None,
+            "litera": None,
+            "text_fragment": preamble_text,
+            "articol_complet": preamble_text,
+            "citare": "Preambul",
+            "capitol": None,
+            "sectiune": None,
+        })
+
+    # Build section fragments
+    for sec_num, sec_title, sec_lines in sections:
+        section_text = '\n'.join(sec_lines).strip()
+        full_section = f"{sec_num}. {sec_title}\n{section_text}".strip()
+
+        # Try to split into sub-sections by letter (a), b), c))
+        sub_sections = _split_section_by_letters(full_section)
+
+        if sub_sections and len(sub_sections) > 1:
+            for lit, lit_text in sub_sections:
+                citare = f"pct. {sec_num} lit. {lit})"
+                records.append({
+                    "numar_articol": sec_num,
+                    "articol": f"pct. {sec_num}",
+                    "alineat": None,
+                    "alineat_text": f"pct. {sec_num} - {sec_title[:80]}",
+                    "litera": lit,
+                    "text_fragment": lit_text,
+                    "articol_complet": full_section,
+                    "citare": citare,
+                    "capitol": None,
+                    "sectiune": f"pct. {sec_num} - {sec_title[:80]}",
+                })
+        else:
+            # Single fragment for the whole section
+            records.append({
+                "numar_articol": sec_num,
+                "articol": f"pct. {sec_num}",
+                "alineat": None,
+                "alineat_text": None,
+                "litera": None,
+                "text_fragment": full_section,
+                "articol_complet": full_section,
+                "citare": f"pct. {sec_num}",
+                "capitol": None,
+                "sectiune": f"pct. {sec_num} - {sec_title[:80]}",
+            })
+
+    return records
+
+
+def _split_section_by_letters(text: str) -> list[tuple[str, str]]:
+    """Split a section into lettered sub-items a), b), c) etc.
+
+    Only splits if the letters appear at line starts and are heading-like.
+    Returns list of (letter, text) tuples, or empty list if no split.
+    """
+    pattern = re.compile(r'^\s*([a-z])\)\s+', re.MULTILINE)
+    matches = list(pattern.finditer(text))
+
+    if len(matches) < 2:
+        return []
+
+    result = []
+    for idx, m in enumerate(matches):
+        letter = m.group(1)
+        start = m.end()
+        end = matches[idx + 1].start() if idx + 1 < len(matches) else len(text)
+        chunk = text[start:end].strip()
+        if chunk:
+            result.append((letter, chunk))
+
+    return result
+
+
+def _parse_modification_act(raw_text: str) -> list[dict]:
+    """Parse a modification act (e.g., Instrucțiune that modifies another Instrucțiune).
+
+    These documents use Roman numeral articles (Art. I., Art. II.) as top-level structure,
+    with numbered modification points (1., 2., ..., 8.) inside.
+    """
+    clean_text = preprocess_text(raw_text)
+    lines = clean_text.split('\n')
+    records = []
+
+    roman_art_re = re.compile(r'^Art\.\s+([IVX]+)[\.\s\-]+(.*)', re.IGNORECASE)
+    numbered_point_re = re.compile(r'^(\d+)\.\s+(.*)')
+
+    current_roman = None
+    current_roman_text = None
+    current_point_num = None
+    current_point_lines: list[str] = []
+    preamble_lines: list[str] = []
+    found_first = False
+    art_counter = 0
+
+    def flush_point():
+        nonlocal current_point_lines, current_point_num
+        if current_point_num is None or not current_point_lines:
+            return
+        point_text = '\n'.join(current_point_lines).strip()
+        if not point_text:
+            return
+        art_counter_local = len(records) + 1
+        citare = f"Art. {current_roman} pct. {current_point_num}"
+        records.append({
+            "numar_articol": art_counter_local,
+            "articol": f"Art. {current_roman}",
+            "alineat": current_point_num,
+            "alineat_text": f"pct. {current_point_num}",
+            "litera": None,
+            "text_fragment": point_text,
+            "articol_complet": point_text,
+            "citare": citare,
+            "capitol": f"Art. {current_roman}",
+            "sectiune": f"Art. {current_roman}" + (f" - {current_roman_text[:80]}" if current_roman_text else ""),
+        })
+        current_point_lines = []
+        current_point_num = None
+
+    for line in lines:
+        stripped = line.strip()
+
+        m = roman_art_re.match(stripped)
+        if m:
+            flush_point()
+            found_first = True
+            current_roman = m.group(1)
+            current_roman_text = m.group(2).strip().rstrip('.-').strip()
+            current_point_num = None
+            current_point_lines = []
+            # If there's substantial text after "Art. I. - ...", start collecting
+            if current_roman_text and len(current_roman_text) > 20:
+                current_point_num = 0
+                current_point_lines = [current_roman_text]
+            continue
+
+        if not found_first:
+            preamble_lines.append(line)
+            continue
+
+        m = numbered_point_re.match(stripped)
+        if m and current_roman:
+            flush_point()
+            current_point_num = int(m.group(1))
+            rest = m.group(2).strip()
+            current_point_lines = [f"{current_point_num}. {rest}"] if rest else []
+            continue
+
+        if current_roman:
+            current_point_lines.append(line)
+
+    flush_point()
+
+    # If the preamble has the "having in view" section, add it
+    preamble_text = '\n'.join(preamble_lines).strip()
+    if preamble_text and len(preamble_text) > 50:
+        records.insert(0, {
+            "numar_articol": 0,
+            "articol": "Preambul",
+            "alineat": None,
+            "alineat_text": None,
+            "litera": None,
+            "text_fragment": preamble_text,
+            "articol_complet": preamble_text,
+            "citare": "Preambul",
+            "capitol": None,
+            "sectiune": None,
+        })
+
+    return records
+
+
+def _parse_table_document(raw_text: str) -> list[dict]:
+    """Parse a document that is essentially a table/unstructured text.
+
+    Imports the entire content as a single fragment, or splits by major
+    visual separators if present (e.g., form-feed characters).
+    """
+    clean_text = preprocess_text(raw_text)
+
+    # Split by form-feed (page breaks) if present
+    pages = [p.strip() for p in clean_text.split('\f') if p.strip()]
+
+    if len(pages) <= 1:
+        # Single fragment for whole document
+        return [{
+            "numar_articol": 1,
+            "articol": "Conținut",
+            "alineat": None,
+            "alineat_text": None,
+            "litera": None,
+            "text_fragment": clean_text.strip(),
+            "articol_complet": clean_text.strip(),
+            "citare": "Conținut",
+            "capitol": None,
+            "sectiune": None,
+        }]
+
+    # Multiple pages — each becomes a fragment
+    records = []
+    for idx, page in enumerate(pages, 1):
+        if len(page) < 10:
+            continue
+        # Try to extract a heading from the first line
+        first_line = page.split('\n')[0].strip()[:80]
+        records.append({
+            "numar_articol": idx,
+            "articol": f"Secțiunea {idx}",
+            "alineat": None,
+            "alineat_text": None,
+            "litera": None,
+            "text_fragment": page,
+            "articol_complet": page,
+            "citare": f"Secțiunea {idx}",
+            "capitol": None,
+            "sectiune": first_line if first_line else None,
+        })
+
+    return records
+
+
 def parse_legislation(raw_text: str) -> list[dict]:
     """Parse a legislative .md/.txt file into fragment-level records.
 
     Auto-detects format (markdown with # headers vs plaintext).
     Each record = smallest independent legal unit (literă > alineat > articol).
 
+    Supports:
+    - Standard law structure: Capitolul → Secțiunea → Articolul → Alineat → Literă
+    - Annex structure: Anexa nr. X → sub-sections, tables, numbered points
+    - Non-standard ANAP documents: numbered sections, modification acts, tables
+
     Returns:
         List of dicts with keys: numar_articol, articol, alineat, alineat_text,
         litera, text_fragment, articol_complet, citare, capitol, sectiune.
     """
+    doc_type = _detect_document_type(raw_text)
+
+    # Route to specialized parser for non-standard documents
+    if doc_type == 'numbered_sections':
+        return _parse_numbered_sections_document(raw_text)
+    elif doc_type == 'modification_act':
+        return _parse_modification_act(raw_text)
+    elif doc_type == 'table_only':
+        return _parse_table_document(raw_text)
     # Preprocess: remove modification notes and Notă blocks
     clean_text = preprocess_text(raw_text)
     lines = clean_text.split('\n')
@@ -286,6 +795,11 @@ def parse_legislation(raw_text: str) -> list[dict]:
     current_art_lines: list[str] = []
     pending_title = None  # 'capitol', 'sectiune', 'paragraf'
     pending_paragraf_num = None
+
+    # Annex accumulation state
+    current_annex_num = None  # int: which annex we're in
+    current_annex_label = None  # str: "Anexa nr. 1 - LISTA alimentelor..."
+    current_annex_lines: list[str] = []
 
     # Regex patterns — handle both markdown (with #) and plaintext formats
     capitol_re = re.compile(
@@ -301,6 +815,24 @@ def parse_legislation(raw_text: str) -> list[dict]:
     paragraf_re = re.compile(
         r'^(?:#{1,4}\s+)?Paragraful\s+(\d+)', re.IGNORECASE
     )
+    anexa_re = re.compile(
+        r'^(?:#{1,4}\s+)?Anexa\s+nr\.?\s*(\d+)\s*$', re.IGNORECASE,
+    )
+
+    def flush_annex():
+        """Process accumulated annex lines into fragment records."""
+        nonlocal current_annex_lines, current_annex_num, current_annex_label
+        if current_annex_num is None or not current_annex_lines:
+            return
+        annex_text = '\n'.join(current_annex_lines).strip()
+        if annex_text:
+            annex_records = _parse_annex_sections(
+                annex_text, current_annex_num, current_annex_label or f"Anexa nr. {current_annex_num}",
+            )
+            records.extend(annex_records)
+        current_annex_lines = []
+        current_annex_num = None
+        current_annex_label = None
 
     def flush_article():
         """Process accumulated article lines into fragment records."""
@@ -366,6 +898,52 @@ def parse_legislation(raw_text: str) -> list[dict]:
     for line in lines:
         stripped = line.strip()
 
+        # --- Annex detection (before other structural checks) ---
+        m = anexa_re.match(stripped)
+        if m:
+            # Flush any pending article/annex
+            flush_article()
+            flush_annex()
+            current_art_num = None
+            current_art_raw = None
+            current_annex_num = int(m.group(1))
+            current_annex_label = f"Anexa nr. {current_annex_num}"
+            current_annex_lines = []
+            current_capitol = f"Anexa nr. {current_annex_num}"
+            current_sectiune = None
+            pending_title = 'annex'  # next line(s) may be the annex title
+            continue
+
+        # If we're collecting annex content, accumulate lines
+        if current_annex_num is not None:
+            # Handle pending annex title (first non-empty line after "Anexa nr. X")
+            if pending_title == 'annex' and stripped:
+                # Check if it's a structural element instead of a title
+                is_next_annex = anexa_re.match(stripped)
+                is_articol = articol_re.match(stripped)
+                if not is_next_annex and not is_articol:
+                    current_annex_label = f"Anexa nr. {current_annex_num} - {stripped}"
+                    pending_title = None
+                    continue
+                else:
+                    pending_title = None
+                    # Fall through to process as structural
+            elif pending_title == 'annex' and not stripped:
+                continue
+
+            # Check if an Articolul appears inside annex context
+            # (some documents have articles after annexes)
+            m_art = articol_re.match(stripped)
+            if m_art:
+                flush_annex()
+                current_art_raw = m_art.group(1)
+                current_art_num = parse_superscript_number(current_art_raw)
+                current_art_lines = []
+                continue
+
+            current_annex_lines.append(line)
+            continue
+
         # Handle pending title (new format: title on separate line)
         if pending_title and stripped:
             # Check if this line is actually a structural element (not a title)
@@ -374,6 +952,7 @@ def parse_legislation(raw_text: str) -> list[dict]:
                 or sectiune_re.match(stripped)
                 or articol_re.match(stripped)
                 or paragraf_re.match(stripped)
+                or anexa_re.match(stripped)
             )
             if not is_structural and not stripped.startswith('#'):
                 if pending_title == 'capitol':
@@ -455,6 +1034,7 @@ def parse_legislation(raw_text: str) -> list[dict]:
             current_art_lines.append(line)
 
     flush_article()
+    flush_annex()
 
     return records
 
@@ -1008,6 +1588,7 @@ async def main():
     embedding_service = EmbeddingService(llm_provider=llm)
 
     totals = {"inserted": 0, "updated": 0, "removed": 0, "unchanged": 0}
+    failed_files: list[tuple[str, str]] = []  # (filename, error_message)
     start = time.time()
 
     for blob_name in blob_names:
@@ -1016,15 +1597,24 @@ async def main():
         try:
             file_text = download_file(bucket, blob_name)
         except Exception as e:
-            print(f"Warning: Failed to download {blob_name}: {e}, skipping")
+            msg = f"Download failed: {e}"
+            print(f"  ⚠ {msg}, skipping")
+            failed_files.append((filename, msg))
             continue
 
-        result = await import_file(
-            filename, file_text, embedding_service,
-            force=args.force, update=args.update, dry_run=args.dry_run,
-        )
-        for k in totals:
-            totals[k] += result[k]
+        try:
+            result = await import_file(
+                filename, file_text, embedding_service,
+                force=args.force, update=args.update, dry_run=args.dry_run,
+            )
+            for k in totals:
+                totals[k] += result[k]
+        except Exception as e:
+            msg = f"{type(e).__name__}: {e}"
+            print(f"  ⚠ Import failed for {filename}: {msg}, skipping")
+            logger.error("import_file_failed", file=filename, error=msg)
+            failed_files.append((filename, msg))
+            continue
 
     elapsed = time.time() - start
     print(
@@ -1034,6 +1624,12 @@ async def main():
         f"Removed: {totals['removed']}, "
         f"Unchanged: {totals['unchanged']}"
     )
+
+    if failed_files:
+        print(f"\n⚠ {len(failed_files)} file(s) could not be imported:")
+        for fname, err in failed_files:
+            print(f"  - {fname}: {err}")
+        sys.exit(1)
 
 
 if __name__ == "__main__":
