@@ -1554,21 +1554,7 @@ async def main():
         print("No legislation files (.md/.txt) found in GCS")
         sys.exit(1)
 
-    # Filter to only legislation files (skip README, etc.)
-    legislation_blobs = []
-    for b in blob_names:
-        try:
-            detect_act_info(Path(b).name)
-            legislation_blobs.append(b)
-        except ValueError:
-            logger.info("skipping_non_legislation_file", file=Path(b).name)
-    blob_names = legislation_blobs
-
-    if not blob_names:
-        print("No recognized legislation files found")
-        sys.exit(1)
-
-    print(f"Found {len(blob_names)} legislation file(s) in gs://{args.bucket}/{args.dir}/:")
+    print(f"Found {len(blob_names)} file(s) in gs://{args.bucket}/{args.dir}/:")
     for b in blob_names:
         print(f"  - {Path(b).name}")
     print()
