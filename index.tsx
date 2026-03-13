@@ -412,8 +412,8 @@ const App = () => {
   const [uploadedDocsRedFlags, setUploadedDocsRedFlags] = useState<{name: string, text: string}[]>([]);
   const [redFlagsProgress, setRedFlagsProgress] = useState("");
   const [selectedRedFlags, setSelectedRedFlags] = useState<number[]>([]);
-  const [redFlagsClarification, setRedFlagsClarification] = useState("");
-  const [redFlagsClarificationLoading, setRedFlagsClarificationLoading] = useState(false);
+  const [editedClarifications, setEditedClarifications] = useState<Record<number, string>>({});
+  const [editingClarificationIdx, setEditingClarificationIdx] = useState<number | null>(null);
 
   // Training States
   const [trainingTema, setTrainingTema] = useState("");
@@ -1168,57 +1168,45 @@ const App = () => {
     }
   };
 
-  const handleRedFlagsClarification = async () => {
+  const handleRedFlagsExport = async (format: 'docx' | 'pdf' | 'md') => {
     if (selectedRedFlags.length === 0) return;
 
-    setRedFlagsClarificationLoading(true);
-    setRedFlagsClarification("");
+    // Assemble clarification document from selected flags
+    const docNames = uploadedDocsRedFlags.map(d => d.name);
+    const header = `Către: Autoritatea Contractantă\nRef: Solicitare de Clarificări / Modificare Documentație de Atribuire\n${docNames.length ? `Documente analizate: ${docNames.join(', ')}\n` : ''}\n---\n\n`;
+
+    const sections = selectedRedFlags.map((flagIdx, i) => {
+      const flag = redFlagsResults[flagIdx];
+      const proposal = editedClarifications[flagIdx] ?? flag.clarification_proposal ?? '';
+      return `### ${i + 1}. Red Flag — Severitate: ${flag.severity}\n\n${proposal || `Având în vedere cerința din documentația de atribuire conform căreia «${flag.clause}», faptul că ${flag.issue}${flag.legal_references?.length ? `, ${flag.legal_references.map((r: any) => `${r.citare} din ${r.act_normativ}`).join(', ')}` : ''}${flag.decision_refs?.length ? `, Deciziile CNSC: ${flag.decision_refs.join(', ')}` : ''}, vă solicităm să fiți de acord cu reformularea cerinței după cum urmează: ${flag.recommendation || '[a se completa]'}`}\n`;
+    });
+
+    const footer = `\n---\n\nCu stimă,\n[Operator Economic]`;
+    const fullContent = header + sections.join('\n') + footer;
 
     try {
-      const flagsToSend = selectedRedFlags.map(idx => redFlagsResults[idx]);
-      const docNames = uploadedDocsRedFlags.map(d => d.name);
-
-      const response = await fetch('/api/v1/redflags/clarification/stream', {
+      const response = await fetch('/api/v1/training/export', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          selected_flags: flagsToSend,
-          document_names: docNames,
+          content: fullContent,
+          format,
+          titlu: 'Solicitare de Clarificări — Red Flags',
+          metadata: {},
         }),
       });
-
-      if (!response.ok) {
-        throw new Error(`Eroare server (${response.status})`);
-      }
-
-      const reader = response.body?.getReader();
-      const decoder = new TextDecoder();
-      let accumulated = "";
-
-      if (reader) {
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          const chunk = decoder.decode(value, { stream: true });
-          const lines = chunk.split('\n');
-          for (const line of lines) {
-            if (line.startsWith('data: ')) {
-              try {
-                const eventData = JSON.parse(line.slice(6));
-                if (eventData.type === 'content' && eventData.text) {
-                  accumulated += eventData.text;
-                  setRedFlagsClarification(accumulated);
-                }
-              } catch { /* skip non-JSON lines */ }
-            }
-          }
-        }
-      }
-    } catch (err: any) {
-      console.error(err);
-      alert(`Eroare la generare clarificări: ${err.message}`);
-    } finally {
-      setRedFlagsClarificationLoading(false);
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      const ext = format === 'docx' ? 'docx' : format === 'pdf' ? 'pdf' : 'md';
+      a.download = `Solicitare_Clarificari_RedFlags.${ext}`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error('Export failed:', err);
+      alert('Eroare la export. Verificați consola.');
     }
   };
 
@@ -3538,14 +3526,19 @@ const App = () => {
                           <span className="text-slate-500 ml-2">{selectedRedFlags.length} selectate</span>
                         )}
                       </div>
-                      <button
-                        onClick={handleRedFlagsClarification}
-                        disabled={selectedRedFlags.length === 0 || redFlagsClarificationLoading}
-                        className="text-xs bg-purple-600 text-white px-3 py-1.5 rounded-lg font-medium hover:bg-purple-700 transition disabled:opacity-40 flex items-center gap-1.5"
-                      >
-                        {redFlagsClarificationLoading ? <Loader2 className="animate-spin" size={12} /> : <FileText size={12} />}
-                        Generează Solicitare Clarificări
-                      </button>
+                      <div className="flex gap-1.5">
+                        {(['docx', 'pdf', 'md'] as const).map(fmt => (
+                          <button
+                            key={fmt}
+                            onClick={() => handleRedFlagsExport(fmt)}
+                            disabled={selectedRedFlags.length === 0}
+                            className="text-xs bg-purple-600 text-white px-2.5 py-1.5 rounded-lg font-medium hover:bg-purple-700 transition disabled:opacity-40 flex items-center gap-1"
+                          >
+                            <Download size={11} />
+                            {fmt.toUpperCase()}
+                          </button>
+                        ))}
+                      </div>
                     </div>
                   </div>
 
@@ -3663,38 +3656,57 @@ const App = () => {
                             Nu s-au gasit referinte legislative sau jurisprudenta CNSC relevanta in baza de date
                           </p>
                         )}
+
+                        {/* Clarification Proposal — editable inline */}
+                        {(flag.clarification_proposal || editedClarifications[idx]) && (
+                          <div className="mt-3 bg-violet-50 border border-violet-200 rounded-lg p-4">
+                            <div className="flex items-center justify-between mb-2">
+                              <p className="font-semibold text-violet-800 text-xs uppercase tracking-wide">Propunere Clarificare</p>
+                              {editingClarificationIdx === idx ? (
+                                <button
+                                  onClick={() => setEditingClarificationIdx(null)}
+                                  className="text-xs bg-violet-600 text-white px-2.5 py-1 rounded hover:bg-violet-700 transition flex items-center gap-1"
+                                >
+                                  <Save size={11} /> Salvează
+                                </button>
+                              ) : (
+                                <button
+                                  onClick={() => {
+                                    if (!editedClarifications[idx]) {
+                                      setEditedClarifications(prev => ({...prev, [idx]: flag.clarification_proposal || ''}));
+                                    }
+                                    setEditingClarificationIdx(idx);
+                                  }}
+                                  className="text-xs bg-violet-100 text-violet-700 px-2.5 py-1 rounded hover:bg-violet-200 transition flex items-center gap-1"
+                                >
+                                  <Pencil size={11} /> Editează
+                                </button>
+                              )}
+                            </div>
+                            {editingClarificationIdx === idx ? (
+                              <textarea
+                                value={editedClarifications[idx] ?? flag.clarification_proposal ?? ''}
+                                onChange={(e) => setEditedClarifications(prev => ({...prev, [idx]: e.target.value}))}
+                                className="w-full min-h-[120px] p-3 border border-violet-300 rounded-lg text-sm text-slate-700 font-serif leading-relaxed resize-y focus:ring-2 focus:ring-violet-400 focus:border-violet-400"
+                              />
+                            ) : (
+                              <p className="text-sm text-slate-700 font-serif leading-relaxed whitespace-pre-wrap">
+                                {editedClarifications[idx] ?? flag.clarification_proposal}
+                              </p>
+                            )}
+                          </div>
+                        )}
                       </div>
                     </div>
                   ))}
 
-                  {/* Clarification generation result */}
-                  {(redFlagsClarification || redFlagsClarificationLoading) && (
-                    <div className="bg-purple-50 border border-purple-200 rounded-xl p-6 mt-4">
-                      <div className="flex items-center justify-between mb-4">
-                        <h4 className="font-bold text-purple-800 flex items-center gap-2">
-                          <FileText size={18} />
-                          Solicitare de Clarificări
-                        </h4>
-                        {redFlagsClarification && (
-                          <button
-                            onClick={() => navigator.clipboard.writeText(redFlagsClarification)}
-                            className="text-xs bg-purple-100 text-purple-700 px-3 py-1 rounded-lg hover:bg-purple-200 transition flex items-center gap-1"
-                          >
-                            <Copy size={12} /> Copiază
-                          </button>
-                        )}
-                      </div>
-                      {redFlagsClarificationLoading && !redFlagsClarification && (
-                        <div className="flex items-center gap-2 text-purple-600 text-sm animate-pulse">
-                          <Loader2 className="animate-spin" size={16} />
-                          Se redactează Solicitarea de Clarificări...
-                        </div>
-                      )}
-                      {redFlagsClarification && (
-                        <div className="prose prose-sm max-w-none text-slate-700 whitespace-pre-wrap font-serif leading-relaxed">
-                          {redFlagsClarification}
-                        </div>
-                      )}
+                  {/* Export info */}
+                  {selectedRedFlags.length > 0 && (
+                    <div className="bg-purple-50 border border-purple-200 rounded-lg p-4 mt-4 text-center">
+                      <p className="text-sm text-purple-700">
+                        <strong>{selectedRedFlags.length}</strong> red flag{selectedRedFlags.length > 1 ? '-uri' : ''} selectat{selectedRedFlags.length > 1 ? 'e' : ''} pentru export.
+                        Editați propunerile de clarificare din fiecare card, apoi exportați folosind butoanele DOCX / PDF / MD de mai sus.
+                      </p>
                     </div>
                   )}
                 </div>
