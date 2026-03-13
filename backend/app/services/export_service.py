@@ -178,7 +178,7 @@ def export_pdf(content: str, title: str, metadata: dict | None = None) -> bytes:
     pdf = TrainingPDF()
     pdf.add_font("DejaVu", "", os.path.join(font_dir, "DejaVuSans.ttf"))
     pdf.add_font("DejaVu", "B", os.path.join(font_dir, "DejaVuSans-Bold.ttf"))
-    pdf.add_font("DejaVu", "I", os.path.join(font_dir, "DejaVuSansMono-Oblique.ttf"))
+    pdf.add_font("DejaVu", "I", os.path.join(font_dir, "DejaVuSans.ttf"))
     pdf.alias_nb_pages()
     pdf.set_auto_page_break(auto=True, margin=20)
     pdf.add_page()
