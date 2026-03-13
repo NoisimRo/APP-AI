@@ -45,6 +45,7 @@ import {
   Share2,
   Plus,
   Shield,
+  Copy,
 } from "lucide-react";
 
 // --- Types ---
@@ -405,11 +406,14 @@ const App = () => {
   const [redFlagsText, setRedFlagsText] = useState("");
   const [redFlagsResults, setRedFlagsResults] = useState<any[]>([]);
   const [redFlagsTab, setRedFlagsTab] = useState<'manual' | 'upload'>('manual');
-  const [uploadedDocDrafter, setUploadedDocDrafter] = useState<{name: string, text: string} | null>(null);
-  const [uploadedDocClarification, setUploadedDocClarification] = useState<{name: string, text: string} | null>(null);
-  const [uploadedDocRag, setUploadedDocRag] = useState<{name: string, text: string} | null>(null);
-  const [uploadedDocRedFlags, setUploadedDocRedFlags] = useState<{name: string, text: string} | null>(null);
+  const [uploadedDocsDrafter, setUploadedDocsDrafter] = useState<{name: string, text: string}[]>([]);
+  const [uploadedDocsClarification, setUploadedDocsClarification] = useState<{name: string, text: string}[]>([]);
+  const [uploadedDocsRag, setUploadedDocsRag] = useState<{name: string, text: string}[]>([]);
+  const [uploadedDocsRedFlags, setUploadedDocsRedFlags] = useState<{name: string, text: string}[]>([]);
   const [redFlagsProgress, setRedFlagsProgress] = useState("");
+  const [selectedRedFlags, setSelectedRedFlags] = useState<number[]>([]);
+  const [redFlagsClarification, setRedFlagsClarification] = useState("");
+  const [redFlagsClarificationLoading, setRedFlagsClarificationLoading] = useState(false);
 
   // Training States
   const [trainingTema, setTrainingTema] = useState("");
@@ -430,8 +434,8 @@ const App = () => {
   const [trainingBatchCount, setTrainingBatchCount] = useState(3);
   const [trainingBatchCustom, setTrainingBatchCustom] = useState(false);
   const [trainingProgramPlan, setTrainingProgramPlan] = useState("");
-  const [uploadedDocTrainingContext, setUploadedDocTrainingContext] = useState<{name: string, text: string} | null>(null);
-  const [uploadedDocTrainingPlan, setUploadedDocTrainingPlan] = useState<{name: string, text: string} | null>(null);
+  const [uploadedDocsTrainingContext, setUploadedDocsTrainingContext] = useState<{name: string, text: string}[]>([]);
+  const [uploadedDocsTrainingPlan, setUploadedDocsTrainingPlan] = useState<{name: string, text: string}[]>([]);
   const [trainingBatchProgress, setTrainingBatchProgress] = useState<{current: number, total: number, results: string[]} | null>(null);
 
   // LLM Settings States
@@ -1033,7 +1037,7 @@ const App = () => {
   const handleDocumentUpload = async (
     event: React.ChangeEvent<HTMLInputElement>,
     onTextExtracted?: (text: string) => void,
-    setUploadedDoc?: (doc: {name: string, text: string}) => void,
+    appendDoc?: (doc: {name: string, text: string}) => void,
   ) => {
     const file = event.target.files?.[0];
     if (!file) return;
@@ -1069,8 +1073,8 @@ const App = () => {
       }
 
       const data = await response.json();
-      if (setUploadedDoc) {
-        setUploadedDoc({ name: file.name, text: data.text });
+      if (appendDoc) {
+        appendDoc({ name: file.name, text: data.text });
       }
       if (onTextExtracted) {
         onTextExtracted(data.text);
@@ -1085,8 +1089,8 @@ const App = () => {
   };
 
   const handleRedFlags = async () => {
-    const textToAnalyze = redFlagsTab === 'upload' && uploadedDocRedFlags
-      ? uploadedDocRedFlags.text
+    const textToAnalyze = redFlagsTab === 'upload' && uploadedDocsRedFlags.length > 0
+      ? uploadedDocsRedFlags.map((doc, i) => `=== DOCUMENT ${i + 1}: ${doc.name} ===\n${doc.text}`).join('\n\n---\n\n')
       : redFlagsText;
 
     if (!textToAnalyze || textToAnalyze.trim().length < 10) {
@@ -1096,6 +1100,8 @@ const App = () => {
 
     setIsLoading(true);
     setRedFlagsResults([]);
+    setSelectedRedFlags([]);
+    setRedFlagsClarification("");
     setRedFlagsProgress("Se trimite documentul pentru analiză...");
 
     // Progress simulation — shows user what's happening during long analysis
@@ -1159,6 +1165,60 @@ const App = () => {
       clearTimeout(fetchTimeout);
       setIsLoading(false);
       setRedFlagsProgress("");
+    }
+  };
+
+  const handleRedFlagsClarification = async () => {
+    if (selectedRedFlags.length === 0) return;
+
+    setRedFlagsClarificationLoading(true);
+    setRedFlagsClarification("");
+
+    try {
+      const flagsToSend = selectedRedFlags.map(idx => redFlagsResults[idx]);
+      const docNames = uploadedDocsRedFlags.map(d => d.name);
+
+      const response = await fetch('/api/v1/redflags/clarification/stream', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          selected_flags: flagsToSend,
+          document_names: docNames,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Eroare server (${response.status})`);
+      }
+
+      const reader = response.body?.getReader();
+      const decoder = new TextDecoder();
+      let accumulated = "";
+
+      if (reader) {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          const chunk = decoder.decode(value, { stream: true });
+          const lines = chunk.split('\n');
+          for (const line of lines) {
+            if (line.startsWith('data: ')) {
+              try {
+                const eventData = JSON.parse(line.slice(6));
+                if (eventData.type === 'content' && eventData.text) {
+                  accumulated += eventData.text;
+                  setRedFlagsClarification(accumulated);
+                }
+              } catch { /* skip non-JSON lines */ }
+            }
+          }
+        }
+      }
+    } catch (err: any) {
+      console.error(err);
+      alert(`Eroare la generare clarificări: ${err.message}`);
+    } finally {
+      setRedFlagsClarificationLoading(false);
     }
   };
 
@@ -2345,7 +2405,7 @@ const App = () => {
             <input
               type="file"
               accept=".txt,.md,.pdf,.doc,.docx"
-              onChange={(e) => handleDocumentUpload(e, (text) => setDrafterContext(prev => ({...prev, facts: text})), setUploadedDocDrafter)}
+              onChange={(e) => handleDocumentUpload(e, (text) => setDrafterContext(prev => ({...prev, facts: prev.facts ? prev.facts + '\n\n---\n\n' + text : text})), (doc) => setUploadedDocsDrafter(prev => [...prev, doc]))}
               className="block w-full text-sm text-slate-600
                 file:mr-4 file:py-1.5 file:px-3
                 file:rounded-lg file:border-0
@@ -2353,10 +2413,18 @@ const App = () => {
                 file:bg-blue-50 file:text-blue-700
                 hover:file:bg-blue-100"
             />
-            {uploadedDocDrafter && (
-              <p className="text-xs text-green-600 mt-2">
-                ✓ {uploadedDocDrafter.name} ({uploadedDocDrafter.text.length} caractere)
-              </p>
+            {uploadedDocsDrafter.length > 0 && (
+              <div className="mt-2 space-y-1">
+                {uploadedDocsDrafter.map((doc, idx) => (
+                  <div key={idx} className="flex items-center justify-between text-xs text-green-600 bg-green-50 rounded px-2 py-1">
+                    <span>✓ {doc.name} ({doc.text.length.toLocaleString()} car.)</span>
+                    <button onClick={() => setUploadedDocsDrafter(prev => prev.filter((_, i) => i !== idx))} className="text-red-400 hover:text-red-600 ml-2" title="Șterge">✕</button>
+                  </div>
+                ))}
+                {uploadedDocsDrafter.length > 1 && (
+                  <button onClick={() => { setUploadedDocsDrafter([]); setDrafterContext(prev => ({...prev, facts: ''})); }} className="text-xs text-red-500 hover:text-red-700 underline">Șterge toate</button>
+                )}
+              </div>
             )}
           </div>
           <div>
@@ -2775,13 +2843,18 @@ const App = () => {
                   <input
                     type="file"
                     accept=".txt,.md,.pdf,.doc,.docx"
-                    onChange={(e) => handleDocumentUpload(e, (text) => setTrainingProgramPlan(text), setUploadedDocTrainingPlan)}
+                    onChange={(e) => handleDocumentUpload(e, (text) => setTrainingProgramPlan(prev => prev ? prev + '\n\n---\n\n' + text : text), (doc) => setUploadedDocsTrainingPlan(prev => [...prev, doc]))}
                     className="block w-full text-sm text-slate-600 file:mr-4 file:py-1 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-amber-50 file:text-amber-700 hover:file:bg-amber-100"
                   />
-                  {uploadedDocTrainingPlan && (
-                    <p className="text-xs text-green-600 mt-1">
-                      ✓ {uploadedDocTrainingPlan.name} ({uploadedDocTrainingPlan.text.length.toLocaleString()} car.)
-                    </p>
+                  {uploadedDocsTrainingPlan.length > 0 && (
+                    <div className="mt-1 space-y-1">
+                      {uploadedDocsTrainingPlan.map((doc, idx) => (
+                        <div key={idx} className="flex items-center justify-between text-xs text-green-600 bg-green-50 rounded px-2 py-1">
+                          <span>✓ {doc.name} ({doc.text.length.toLocaleString()} car.)</span>
+                          <button onClick={() => setUploadedDocsTrainingPlan(prev => prev.filter((_, i) => i !== idx))} className="text-red-400 hover:text-red-600 ml-2" title="Șterge">✕</button>
+                        </div>
+                      ))}
+                    </div>
                   )}
                 </div>
                 <textarea
@@ -2860,13 +2933,18 @@ const App = () => {
                     <input
                       type="file"
                       accept=".txt,.md,.pdf,.doc,.docx"
-                      onChange={(e) => handleDocumentUpload(e, (text) => setTrainingContext(text), setUploadedDocTrainingContext)}
+                      onChange={(e) => handleDocumentUpload(e, (text) => setTrainingContext(prev => prev ? prev + '\n\n---\n\n' + text : text), (doc) => setUploadedDocsTrainingContext(prev => [...prev, doc]))}
                       className="block w-full text-sm text-slate-600 file:mr-4 file:py-1 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-amber-50 file:text-amber-700 hover:file:bg-amber-100"
                     />
-                    {uploadedDocTrainingContext && (
-                      <p className="text-xs text-green-600 mt-1">
-                        ✓ {uploadedDocTrainingContext.name} ({uploadedDocTrainingContext.text.length.toLocaleString()} car.)
-                      </p>
+                    {uploadedDocsTrainingContext.length > 0 && (
+                      <div className="mt-1 space-y-1">
+                        {uploadedDocsTrainingContext.map((doc, idx) => (
+                          <div key={idx} className="flex items-center justify-between text-xs text-green-600 bg-green-50 rounded px-2 py-1">
+                            <span>✓ {doc.name} ({doc.text.length.toLocaleString()} car.)</span>
+                            <button onClick={() => setUploadedDocsTrainingContext(prev => prev.filter((_, i) => i !== idx))} className="text-red-400 hover:text-red-600 ml-2" title="Șterge">✕</button>
+                          </div>
+                        ))}
+                      </div>
                     )}
                   </div>
                   <textarea
@@ -3387,7 +3465,7 @@ const App = () => {
                     <input
                       type="file"
                       accept=".txt,.md,.pdf,.doc,.docx"
-                      onChange={(e) => handleDocumentUpload(e, (text) => setRedFlagsText(text), setUploadedDocRedFlags)}
+                      onChange={(e) => handleDocumentUpload(e, undefined, (doc) => setUploadedDocsRedFlags(prev => [...prev, doc]))}
                       className="block w-full text-sm text-slate-600
                         file:mr-4 file:py-1.5 file:px-3
                         file:rounded-lg file:border-0
@@ -3395,15 +3473,23 @@ const App = () => {
                         file:bg-red-50 file:text-red-700
                         hover:file:bg-red-100"
                     />
-                    {uploadedDocRedFlags && (
-                      <p className="text-xs text-green-600 mt-2">
-                        ✓ {uploadedDocRedFlags.name} ({uploadedDocRedFlags.text.length} caractere)
-                      </p>
+                    {uploadedDocsRedFlags.length > 0 && (
+                      <div className="mt-2 space-y-1">
+                        {uploadedDocsRedFlags.map((doc, idx) => (
+                          <div key={idx} className="flex items-center justify-between text-xs text-green-600 bg-green-50 rounded px-2 py-1">
+                            <span>✓ {doc.name} ({doc.text.length.toLocaleString()} car.)</span>
+                            <button onClick={() => setUploadedDocsRedFlags(prev => prev.filter((_, i) => i !== idx))} className="text-red-400 hover:text-red-600 ml-2" title="Șterge">✕</button>
+                          </div>
+                        ))}
+                        {uploadedDocsRedFlags.length > 1 && (
+                          <button onClick={() => setUploadedDocsRedFlags([])} className="text-xs text-red-500 hover:text-red-700 underline">Șterge toate</button>
+                        )}
+                      </div>
                     )}
                   </div>
                   <button
                     onClick={handleRedFlags}
-                    disabled={isLoading || !uploadedDocRedFlags}
+                    disabled={isLoading || uploadedDocsRedFlags.length === 0}
                     className="w-full bg-red-600 text-white py-3 rounded-xl font-medium hover:bg-red-700 transition disabled:opacity-50 flex items-center gap-2 justify-center shadow-lg hover:shadow-xl"
                   >
                     {isLoading ? <Loader2 className="animate-spin" size={18} /> : <AlertTriangle size={18} />}
@@ -3422,18 +3508,44 @@ const App = () => {
             <div className="w-full md:w-2/3 p-4 md:p-8 overflow-y-auto bg-white">
               {redFlagsResults.length > 0 ? (
                 <div className="space-y-4">
-                  <div className="bg-white p-4 rounded-lg border border-slate-200 flex items-center justify-between sticky top-0 z-10">
-                    <h3 className="font-bold text-slate-800">Rezultate Analiză</h3>
-                    <div className="flex gap-4 text-sm">
-                      <span className="text-red-600 font-bold">
-                        {redFlagsResults.filter(rf => rf.severity === 'CRITICĂ').length} Critice
-                      </span>
-                      <span className="text-orange-600 font-bold">
-                        {redFlagsResults.filter(rf => rf.severity === 'MEDIE').length} Medii
-                      </span>
-                      <span className="text-yellow-600 font-bold">
-                        {redFlagsResults.filter(rf => rf.severity === 'SCĂZUTĂ').length} Scăzute
-                      </span>
+                  <div className="bg-white p-4 rounded-lg border border-slate-200 sticky top-0 z-10 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <h3 className="font-bold text-slate-800">Rezultate Analiză</h3>
+                      <div className="flex gap-4 text-sm">
+                        <span className="text-red-600 font-bold">
+                          {redFlagsResults.filter(rf => rf.severity === 'CRITICĂ').length} Critice
+                        </span>
+                        <span className="text-orange-600 font-bold">
+                          {redFlagsResults.filter(rf => rf.severity === 'MEDIE').length} Medii
+                        </span>
+                        <span className="text-yellow-600 font-bold">
+                          {redFlagsResults.filter(rf => rf.severity === 'SCĂZUTĂ').length} Scăzute
+                        </span>
+                      </div>
+                    </div>
+                    <div className="flex items-center justify-between border-t border-slate-100 pt-2">
+                      <div className="flex gap-2 items-center text-xs">
+                        <button
+                          onClick={() => setSelectedRedFlags(redFlagsResults.map((_, i) => i))}
+                          className="text-blue-600 hover:text-blue-800 underline"
+                        >Selectează toate</button>
+                        <span className="text-slate-300">|</span>
+                        <button
+                          onClick={() => setSelectedRedFlags([])}
+                          className="text-blue-600 hover:text-blue-800 underline"
+                        >Deselectează</button>
+                        {selectedRedFlags.length > 0 && (
+                          <span className="text-slate-500 ml-2">{selectedRedFlags.length} selectate</span>
+                        )}
+                      </div>
+                      <button
+                        onClick={handleRedFlagsClarification}
+                        disabled={selectedRedFlags.length === 0 || redFlagsClarificationLoading}
+                        className="text-xs bg-purple-600 text-white px-3 py-1.5 rounded-lg font-medium hover:bg-purple-700 transition disabled:opacity-40 flex items-center gap-1.5"
+                      >
+                        {redFlagsClarificationLoading ? <Loader2 className="animate-spin" size={12} /> : <FileText size={12} />}
+                        Generează Solicitare Clarificări
+                      </button>
                     </div>
                   </div>
 
@@ -3450,6 +3562,18 @@ const App = () => {
                     >
                       <div className="flex items-start justify-between mb-3">
                         <div className="flex items-center gap-2">
+                          <input
+                            type="checkbox"
+                            checked={selectedRedFlags.includes(idx)}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setSelectedRedFlags(prev => [...prev, idx]);
+                              } else {
+                                setSelectedRedFlags(prev => prev.filter(i => i !== idx));
+                              }
+                            }}
+                            className="w-4 h-4 text-purple-600 border-slate-300 rounded focus:ring-purple-500 cursor-pointer"
+                          />
                           <AlertTriangle
                             className={
                               flag.severity === 'CRITICĂ'
@@ -3542,6 +3666,37 @@ const App = () => {
                       </div>
                     </div>
                   ))}
+
+                  {/* Clarification generation result */}
+                  {(redFlagsClarification || redFlagsClarificationLoading) && (
+                    <div className="bg-purple-50 border border-purple-200 rounded-xl p-6 mt-4">
+                      <div className="flex items-center justify-between mb-4">
+                        <h4 className="font-bold text-purple-800 flex items-center gap-2">
+                          <FileText size={18} />
+                          Solicitare de Clarificări
+                        </h4>
+                        {redFlagsClarification && (
+                          <button
+                            onClick={() => navigator.clipboard.writeText(redFlagsClarification)}
+                            className="text-xs bg-purple-100 text-purple-700 px-3 py-1 rounded-lg hover:bg-purple-200 transition flex items-center gap-1"
+                          >
+                            <Copy size={12} /> Copiază
+                          </button>
+                        )}
+                      </div>
+                      {redFlagsClarificationLoading && !redFlagsClarification && (
+                        <div className="flex items-center gap-2 text-purple-600 text-sm animate-pulse">
+                          <Loader2 className="animate-spin" size={16} />
+                          Se redactează Solicitarea de Clarificări...
+                        </div>
+                      )}
+                      {redFlagsClarification && (
+                        <div className="prose prose-sm max-w-none text-slate-700 whitespace-pre-wrap font-serif leading-relaxed">
+                          {redFlagsClarification}
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               ) : (
                 <div className="flex flex-col items-center justify-center h-full text-slate-300">
@@ -3570,7 +3725,7 @@ const App = () => {
                   <input
                     type="file"
                     accept=".txt,.md,.pdf,.doc,.docx"
-                    onChange={(e) => handleDocumentUpload(e, (text) => setClarificationClause(text), setUploadedDocClarification)}
+                    onChange={(e) => handleDocumentUpload(e, (text) => setClarificationClause(prev => prev ? prev + '\n\n---\n\n' + text : text), (doc) => setUploadedDocsClarification(prev => [...prev, doc]))}
                     className="block w-full text-sm text-slate-600
                       file:mr-4 file:py-1.5 file:px-3
                       file:rounded-lg file:border-0
@@ -3578,10 +3733,18 @@ const App = () => {
                       file:bg-purple-50 file:text-purple-700
                       hover:file:bg-purple-100"
                   />
-                  {uploadedDocClarification && (
-                    <p className="text-xs text-green-600 mt-2">
-                      ✓ {uploadedDocClarification.name} ({uploadedDocClarification.text.length} caractere)
-                    </p>
+                  {uploadedDocsClarification.length > 0 && (
+                    <div className="mt-2 space-y-1">
+                      {uploadedDocsClarification.map((doc, idx) => (
+                        <div key={idx} className="flex items-center justify-between text-xs text-green-600 bg-green-50 rounded px-2 py-1">
+                          <span>✓ {doc.name} ({doc.text.length.toLocaleString()} car.)</span>
+                          <button onClick={() => setUploadedDocsClarification(prev => prev.filter((_, i) => i !== idx))} className="text-red-400 hover:text-red-600 ml-2" title="Șterge">✕</button>
+                        </div>
+                      ))}
+                      {uploadedDocsClarification.length > 1 && (
+                        <button onClick={() => { setUploadedDocsClarification([]); setClarificationClause(''); }} className="text-xs text-red-500 hover:text-red-700 underline">Șterge toate</button>
+                      )}
+                    </div>
                   )}
                 </div>
                 <div>
@@ -3646,7 +3809,7 @@ const App = () => {
                          <input
                            type="file"
                            accept=".txt,.md,.pdf,.doc,.docx"
-                           onChange={(e) => handleDocumentUpload(e, (text) => setMemoTopic(text), setUploadedDocRag)}
+                           onChange={(e) => handleDocumentUpload(e, (text) => setMemoTopic(prev => prev ? prev + '\n\n---\n\n' + text : text), (doc) => setUploadedDocsRag(prev => [...prev, doc]))}
                            className="block w-full text-sm text-slate-600
                              file:mr-4 file:py-1.5 file:px-3
                              file:rounded-lg file:border-0
@@ -3654,10 +3817,18 @@ const App = () => {
                              file:bg-teal-50 file:text-teal-700
                              hover:file:bg-teal-100"
                          />
-                         {uploadedDocRag && (
-                           <p className="text-xs text-green-600 mt-2">
-                             ✓ {uploadedDocRag.name} ({uploadedDocRag.text.length} caractere)
-                           </p>
+                         {uploadedDocsRag.length > 0 && (
+                           <div className="mt-2 space-y-1">
+                             {uploadedDocsRag.map((doc, idx) => (
+                               <div key={idx} className="flex items-center justify-between text-xs text-green-600 bg-green-50 rounded px-2 py-1">
+                                 <span>✓ {doc.name} ({doc.text.length.toLocaleString()} car.)</span>
+                                 <button onClick={() => setUploadedDocsRag(prev => prev.filter((_, i) => i !== idx))} className="text-red-400 hover:text-red-600 ml-2" title="Șterge">✕</button>
+                               </div>
+                             ))}
+                             {uploadedDocsRag.length > 1 && (
+                               <button onClick={() => { setUploadedDocsRag([]); setMemoTopic(''); }} className="text-xs text-red-500 hover:text-red-700 underline">Șterge toate</button>
+                             )}
+                           </div>
                          )}
                        </div>
                        <label className="text-sm font-bold text-slate-700 block mb-2">Subiect Memo</label>

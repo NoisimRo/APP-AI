@@ -112,20 +112,36 @@ class RedFlagsAnalyzer:
         """Return the system prompt for Pass 1 detection."""
         return """Ești un expert în achiziții publice din România cu experiență vastă în contestații CNSC.
 
-Sarcina ta este să citești integral documentația de achiziție și să identifici TOATE clauzele care ar putea fi:
-- Restrictive pentru concurență
+Sarcina ta: analizează documentația de achiziție și identifică clauzele care reprezintă ALEGERI PROPRII ale autorității contractante și care ar putea fi:
+- Restrictive pentru concurență (limitează nejustificat numărul de operatori economici)
 - Discriminatorii (favorizează anumiți operatori economici)
 - Disproporționate față de obiectul contractului
-- Contrare legislației achizițiilor publice (Legea 98/2016, HG 395/2016)
+- Contrare oricărei prevederi legale aplicabile (Legea 98/2016, HG 395/2016, directive europene, orice altă lege)
 - Neclare sau ambigue în mod care ar putea afecta operatorii economici
 
-IMPORTANT:
-- Identifică probleme REALE din document, nu inventa probleme care nu există
+NU SUNT RED FLAGS (NU le semnala):
+- Cerințe impuse prin acte normative (HG, OUG, Legi, Ordine de ministru) — dacă o cerință este mandatată de un act normativ, este o obligație legală, NU o restricție a autorității contractante
+- Dacă documentul menționează explicit un act normativ ca bază/temei pentru o cerință, NU semnala acea cerință
+- Prețuri sau valori stabilite prin hotărâri de guvern sau alte acte normative
+- Cerințe specifice impuse de programe guvernamentale (PNMS, PNRAS, etc.) prin actele lor normative de reglementare
+- Cerințe sanitare, nutriționale sau de siguranță alimentară impuse prin legislație specifică
+- Standarde tehnice obligatorii prin legislație
+
+VERIFICARE OBLIGATORIE: Înainte de a semnala o clauză, întreabă-te:
+- Este o ALEGERE a autorității contractante (potențial restrictivă) SAU este o cerință impusă de un act normativ/program guvernamental (obligație legală)?
+- Documentul menționează un act normativ ca bază pentru această cerință?
+- Cerința este rezonabilă și proporțională cu obiectul contractului?
+
+REGULI:
+- Identifică doar probleme REALE și SUBSTANȚIALE, nu inventa probleme care nu există
 - Citează textul EXACT din document pentru fiecare problemă
 - NU furniza referințe la articole de lege — acestea vor fi identificate automat ulterior
 - Dacă documentul nu conține clauze problematice, returnează o listă goală
 - Fii specific: descrie de ce fiecare clauză e problematică
-- Pentru search_query: formulează o frază scurtă (10-20 cuvinte) care descrie esența problemei, optimizată pentru căutare semantică în jurisprudența CNSC
+- Pentru search_query: formulează folosind TERMINOLOGIE JURIDICĂ din achiziții publice, NU termeni specifici domeniului documentului
+  Exemple BUNE: "cerință restrictivă specificații tehnice caiet de sarcini", "cerință experiență similară disproporționată limitare concurență", "standard tehnic fără echivalent restricționare", "factor de evaluare subiectiv discriminatoriu"
+  Exemple RELE: "preț fix pe porție alimentație", "pondere minimă materie primă costuri", "excludere supă ciorbă meniu"
+  Căutarea trebuie să corespundă limbajului din deciziile CNSC și argumentările critice, nu din documentul analizat.
 
 Răspunde EXCLUSIV în format JSON:
 ```json
@@ -134,7 +150,7 @@ Răspunde EXCLUSIV în format JSON:
     {
       "clause": "textul exact din document",
       "issue": "descrierea detaliată a problemei identificate",
-      "search_query": "cerință experiență similară disproporționată restricționare concurență",
+      "search_query": "cerință restrictivă specificații tehnice caiet de sarcini disproporționată",
       "severity": "CRITICĂ"
     }
   ]
@@ -142,9 +158,9 @@ Răspunde EXCLUSIV în format JSON:
 ```
 
 Severitate:
-- CRITICĂ: Încălcare clară a legii, risc foarte mare de anulare
-- MEDIE: Clauză discutabilă, potențial restrictivă
-- SCĂZUTĂ: Problemă minoră, ar putea fi îmbunătățită"""
+- CRITICĂ: Încălcare clară a oricărei prevederi legale aplicabile. De asemenea, orice tip de formulare care este tipic contestată și confirmată de CNSC ca fiind restrictivă (ex: cerințe de experiență similară excesive, mărci fără „sau echivalent", criterii de evaluare subiective, termene nejustificat de scurte).
+- MEDIE: Clauză discutabilă, potențial restrictivă, dar fără precedent clar sau cu justificări posibile
+- SCĂZUTĂ: Problemă minoră de formulare, ar putea fi îmbunătățită"""
 
     async def _detect_single_chunk(self, chunk_text: str, chunk_idx: int, total_chunks: int) -> list[dict]:
         """Run Pass 1 detection on a single chunk with timeout.
@@ -352,7 +368,7 @@ Severitate:
         self,
         query_text: str,
         session: AsyncSession,
-        limit: int = 3,
+        limit: int = 5,
         query_vector=None,
     ) -> list[tuple[LegislatieFragment, str]]:
         """Search legislation fragments by vector similarity.
@@ -386,14 +402,15 @@ Severitate:
 
         relevant = [
             (row.LegislatieFragment, row.ActNormativ.denumire)
-            for row in rows if row.distance < 0.6
+            for row in rows if row.distance < 0.75
         ]
 
         logger.info(
             "legislation_search",
             query_preview=query_text[:60],
             found=len(relevant),
-            top_distance=rows[0].distance if rows else None,
+            all_distances=[round(row.distance, 3) for row in rows],
+            threshold=0.75,
         )
 
         return relevant
@@ -402,7 +419,7 @@ Severitate:
         self,
         query_text: str,
         session: AsyncSession,
-        limit: int = 5,
+        limit: int = 10,
         query_vector=None,
     ) -> tuple[list[DecizieCNSC], list[tuple[ArgumentareCritica, float]]]:
         """Search CNSC decisions by vector similarity.
@@ -435,8 +452,8 @@ Severitate:
         if not rows:
             return [], []
 
-        # Filter by relevance (cosine distance < 0.5 → similarity > 0.5)
-        relevant_chunks = [(row.ArgumentareCritica, row.distance) for row in rows if row.distance < 0.5]
+        # Filter by relevance (cosine distance < 0.65 → similarity > 0.35)
+        relevant_chunks = [(row.ArgumentareCritica, row.distance) for row in rows if row.distance < 0.65]
 
         if not relevant_chunks:
             return [], []
@@ -453,6 +470,8 @@ Severitate:
             query_preview=query_text[:60],
             chunks_found=len(relevant_chunks),
             decisions_found=len(decisions),
+            all_distances=[round(row.distance, 3) for row in rows],
+            threshold=0.65,
         )
 
         return decisions, relevant_chunks
@@ -480,8 +499,8 @@ Severitate:
         query_vector = await self.embedding_service.embed_query(search_query)
 
         # Run searches SEQUENTIALLY — AsyncSession cannot handle concurrent queries
-        legal_articles = await self._search_legislation(search_query, session, limit=3, query_vector=query_vector)
-        decisions, matched_chunks = await self._search_jurisprudence(search_query, session, limit=5, query_vector=query_vector)
+        legal_articles = await self._search_legislation(search_query, session, limit=5, query_vector=query_vector)
+        decisions, matched_chunks = await self._search_jurisprudence(search_query, session, limit=10, query_vector=query_vector)
 
         return {
             "legal_articles": legal_articles,
@@ -543,19 +562,25 @@ Severitate:
                 for arg, dist in chunks:
                     similarity = 1.0 - dist
                     section.append(f"\n--- Critica {arg.cod_critica} (relevanță: {similarity:.2f}) ---")
-                    if arg.argumentatie_cnsc:
-                        section.append(f"Argumentație CNSC: {arg.argumentatie_cnsc[:600]}")
-                    if arg.elemente_retinute_cnsc:
-                        section.append(f"Elemente reținute: {arg.elemente_retinute_cnsc[:400]}")
                     if arg.castigator_critica and arg.castigator_critica != "unknown":
-                        section.append(f"Câștigător: {arg.castigator_critica}")
+                        section.append(f"★ CÂȘTIGĂTOR CRITICĂ: {arg.castigator_critica}")
+                    if arg.elemente_retinute_cnsc:
+                        section.append(f"Elemente reținute de CNSC: {arg.elemente_retinute_cnsc[:1000]}")
+                    if arg.argumentatie_cnsc:
+                        section.append(f"Argumentație CNSC: {arg.argumentatie_cnsc[:1500]}")
+                    if arg.jurisprudenta_cnsc:
+                        section.append(f"Jurisprudență citată CNSC: {'; '.join(arg.jurisprudenta_cnsc)}")
+                    if arg.argumente_contestator:
+                        section.append(f"Argumente contestator: {arg.argumente_contestator[:500]}")
+                    if arg.argumente_ac:
+                        section.append(f"Argumente AC: {arg.argumente_ac[:500]}")
                 parts.append("\n".join(section))
             jurisprudence_context = "\n\n---\n\n".join(parts)
 
         # Build grounding prompt
         decision_ids = list(available_decisions.keys())
 
-        system_prompt = """Ești un expert în achiziții publice. Ți se dă o clauză problematică detectată într-o documentație de achiziție, împreună cu ARTICOLE REALE din legislație și DECIZII REALE CNSC.
+        system_prompt = """Ești un expert în achiziții publice. Ți se dă o clauză problematică detectată într-o documentație de achiziție, împreună cu ARTICOLE REALE din legislație și DECIZII REALE CNSC din baza de date argumentare_critica.
 
 Sarcina ta: compune analiza finală a problemei folosind EXCLUSIV referințele reale furnizate.
 
@@ -565,7 +590,10 @@ REGULI STRICTE:
 - Dacă niciun articol furnizat nu e relevant, lasă legal_references ca listă goală.
 - Pentru decision_refs: folosește DOAR ID-urile de decizii furnizate. NU inventa alte decizii.
 - Dacă nicio decizie furnizată nu e relevantă, lasă decision_refs ca listă goală.
-- recommendation: bazează-te pe articolele reale pentru a face o recomandare concretă.
+- PRIORITIZEAZĂ CE A REȚINUT ȘI DECIS CNSC: câmpurile "Elemente reținute de CNSC", "Argumentație CNSC" și "Câștigător critică" sunt cele mai importante.
+- Dacă câștigătorul criticii = "contestator", CNSC a confirmat că cerința era problematică — citează această decizie.
+- NU te baza pe ce au susținut contestatorii sau AC — bazează-te pe concluziile CNSC.
+- recommendation: bazează-te pe articolele reale și pe concluziile CNSC pentru o recomandare concretă.
 
 Răspunde EXCLUSIV în format JSON:
 ```json
