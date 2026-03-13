@@ -30,7 +30,7 @@ from app.services.llm.factory import get_llm_provider, get_embedding_provider
 logger = get_logger(__name__)
 
 # Max concurrent grounding tasks (avoid overwhelming the API)
-MAX_CONCURRENT_GROUNDING = 5
+MAX_CONCURRENT_GROUNDING = 8
 
 # Document chunking thresholds
 CHUNK_THRESHOLD = 15000  # chars — documents larger than this get chunked
@@ -38,7 +38,7 @@ CHUNK_SIZE = 10000       # chars per chunk
 CHUNK_OVERLAP = 1500     # overlap between chunks for context continuity
 
 # Max flags to ground in Pass 2 (to keep total time reasonable)
-MAX_FLAGS_TO_GROUND = 15
+MAX_FLAGS_TO_GROUND = 10
 
 # Timeout for individual LLM calls (seconds)
 LLM_CALL_TIMEOUT = 120
@@ -419,7 +419,7 @@ Severitate:
         self,
         query_text: str,
         session: AsyncSession,
-        limit: int = 10,
+        limit: int = 20,
         query_vector=None,
     ) -> tuple[list[DecizieCNSC], list[tuple[ArgumentareCritica, float]]]:
         """Search CNSC decisions by vector similarity.
@@ -427,7 +427,7 @@ Severitate:
         Args:
             query_text: Description of the issue to find jurisprudence for.
             session: Database session.
-            limit: Maximum chunks to return.
+            limit: Maximum chunks to return (default 20 per PERFORMANCE.md).
             query_vector: Pre-computed embedding vector (avoids redundant API call).
 
         Returns:
@@ -496,11 +496,30 @@ Severitate:
         search_query = clause_info.get("search_query", clause_info.get("issue", ""))
 
         # Embed ONCE, reuse for both searches (avoids 2x Gemini API calls per flag)
-        query_vector = await self.embedding_service.embed_query(search_query)
+        try:
+            query_vector = await self.embedding_service.embed_query(search_query)
+        except Exception as e:
+            logger.error(
+                "embed_query_error",
+                search_query_preview=search_query[:80],
+                error=str(e),
+                error_type=type(e).__name__,
+                exc_info=True,
+            )
+            return {"legal_articles": [], "decisions": [], "matched_chunks": []}
 
         # Run searches SEQUENTIALLY — AsyncSession cannot handle concurrent queries
-        legal_articles = await self._search_legislation(search_query, session, limit=5, query_vector=query_vector)
-        decisions, matched_chunks = await self._search_jurisprudence(search_query, session, limit=10, query_vector=query_vector)
+        try:
+            legal_articles = await self._search_legislation(search_query, session, limit=5, query_vector=query_vector)
+        except Exception as e:
+            logger.error("legislation_search_error", error=str(e), error_type=type(e).__name__, exc_info=True)
+            legal_articles = []
+
+        try:
+            decisions, matched_chunks = await self._search_jurisprudence(search_query, session, limit=20, query_vector=query_vector)
+        except Exception as e:
+            logger.error("jurisprudence_search_error", error=str(e), error_type=type(e).__name__, exc_info=True)
+            decisions, matched_chunks = [], []
 
         return {
             "legal_articles": legal_articles,
@@ -565,15 +584,18 @@ Severitate:
                     if arg.castigator_critica and arg.castigator_critica != "unknown":
                         section.append(f"★ CÂȘTIGĂTOR CRITICĂ: {arg.castigator_critica}")
                     if arg.elemente_retinute_cnsc:
-                        section.append(f"Elemente reținute de CNSC: {arg.elemente_retinute_cnsc[:1000]}")
+                        section.append(f"Elemente reținute de CNSC: {arg.elemente_retinute_cnsc}")
                     if arg.argumentatie_cnsc:
-                        section.append(f"Argumentație CNSC: {arg.argumentatie_cnsc[:1500]}")
+                        section.append(f"Argumentație CNSC: {arg.argumentatie_cnsc}")
                     if arg.jurisprudenta_cnsc:
                         section.append(f"Jurisprudență citată CNSC: {'; '.join(arg.jurisprudenta_cnsc)}")
                     if arg.argumente_contestator:
                         section.append(f"Argumente contestator: {arg.argumente_contestator[:500]}")
                     if arg.argumente_ac:
                         section.append(f"Argumente AC: {arg.argumente_ac[:500]}")
+                    if arg.argumente_intervenienti:
+                        for interv in arg.argumente_intervenienti:
+                            section.append(f"Intervenient {interv.get('nr', '?')}: {interv.get('argumente', '')[:300]}")
                 parts.append("\n".join(section))
             jurisprudence_context = "\n\n---\n\n".join(parts)
 
@@ -609,9 +631,17 @@ Răspunde EXCLUSIV în format JSON:
     }
   ],
   "decision_refs": ["BO2025_1011"],
-  "recommendation": "recomandare concretă bazată pe legislație"
+  "recommendation": "recomandare concretă bazată pe legislație",
+  "clarification_proposal": "Având în vedere cerința din documentația de atribuire conform căreia «[clauza exactă, verbatim]», faptul că [descrierea problemei identificate], [art. X din Legea Y], [Decizia BOxxxx dacă există], vă solicităm să fiți de acord cu reformularea [cerinței/factorului/clauzei etc] după cum urmează: [propunere concretă de reformulare]"
 }
-```"""
+```
+
+IMPORTANT pentru clarification_proposal:
+- Structura OBLIGATORIE: "Având în vedere cerința din documentația de atribuire conform căreia «...»" → "faptul că ..." → "vă solicităm să fiți de acord cu reformularea ... după cum urmează: ..."
+- Citează clauza EXACT, verbatim, între «guillemets»
+- Include baza legală și jurisprudența CNSC dacă există
+- Propunerea de reformulare trebuie să fie CONCRETĂ, nu generică
+- Tonul: formal, profesionist, politicos dar ferm"""
 
         prompt_parts = [
             f"CLAUZĂ PROBLEMATICĂ DETECTATĂ:\n"
@@ -655,7 +685,7 @@ Răspunde EXCLUSIV în format JSON:
                     prompt="\n".join(prompt_parts),
                     system_prompt=system_prompt,
                     temperature=0.1,
-                    max_tokens=2048,
+                    max_tokens=4096,
                 ),
                 timeout=LLM_CALL_TIMEOUT,
             )
@@ -711,6 +741,8 @@ Răspunde EXCLUSIV în format JSON:
                 grounded["issue"] = clause_info.get("issue", "")
             if not grounded.get("severity"):
                 grounded["severity"] = clause_info.get("severity", "MEDIE")
+            if not grounded.get("clarification_proposal"):
+                grounded["clarification_proposal"] = ""
 
             return grounded
 
@@ -719,6 +751,8 @@ Răspunde EXCLUSIV în format JSON:
                 "grounding_error",
                 clause_preview=clause_info.get("clause", "")[:80],
                 error=str(e),
+                error_type=type(e).__name__,
+                exc_info=True,
             )
             # Return ungrounded flag on error
             return {
@@ -727,7 +761,8 @@ Răspunde EXCLUSIV în format JSON:
                 "severity": clause_info.get("severity", "MEDIE"),
                 "legal_references": [],
                 "decision_refs": [],
-                "recommendation": "Nu s-a putut efectua analiza legislativă automată.",
+                "recommendation": f"Nu s-a putut efectua analiza legislativă automată. Eroare: {type(e).__name__}: {str(e)[:200]}",
+                "clarification_proposal": "",
             }
 
     @staticmethod
@@ -855,6 +890,7 @@ Răspunde EXCLUSIV în format JSON:
                     "legal_references": [],
                     "decision_refs": [],
                     "recommendation": "",
+                    "clarification_proposal": "",
                 }
                 for c in detected_clauses
             ]

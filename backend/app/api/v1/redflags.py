@@ -36,6 +36,7 @@ class RedFlagItem(BaseModel):
     legal_references: list[LegalReference] = Field(default_factory=list)
     recommendation: str = ""
     decision_refs: list[str] = Field(default_factory=list)
+    clarification_proposal: str = ""
 
 
 class RedFlagsRequest(BaseModel):
@@ -118,6 +119,7 @@ async def analyze_red_flags(
                 legal_references=legal_refs,
                 recommendation=flag_data.get("recommendation", ""),
                 decision_refs=flag_data.get("decision_refs", []),
+                clarification_proposal=flag_data.get("clarification_proposal", ""),
             ))
 
         critical_count = sum(1 for rf in red_flags if rf.severity == "CRITICĂ")
