@@ -27,7 +27,7 @@ DATABASE_URL="postgresql+asyncpg://..." python scripts/generate_embeddings.py
 - **Backend:** `backend/app/` - FastAPI with async SQLAlchemy
 - **LLM:** Multi-provider (Gemini + Claude + OpenAI + Groq + OpenRouter) via factory pattern (`backend/app/services/llm/factory.py`). Groq = modele open-source gratuite (Llama, GPT-OSS, Qwen, Llama 4 Scout). OpenRouter = 400+ modele, multe gratuite (suffix `:free`). Fiecare provider cu token-aware context truncation (estimare ~4 chars/token, truncare proporțională automată). Embeddings always on Gemini.
 - **RAG Pipeline:** `backend/app/services/rag.py` - vector search on ArgumentareCritica → LLM generation
-- **Database Models:** `backend/app/models/decision.py` - DecizieCNSC, ArgumentareCritica, etc.
+- **Database Models:** `backend/app/models/decision.py` - DecizieCNSC, ArgumentareCritica, User, Conversatie, MesajConversatie, DocumentGenerat, RedFlagsSalvate, TrainingMaterial, etc.
 
 ## Key Files
 
@@ -56,6 +56,7 @@ DATABASE_URL="postgresql+asyncpg://..." python scripts/generate_embeddings.py
 | `backend/app/services/training_generator.py` | TrainingAP: generare materiale didactice (RAG + LLM) |
 | `backend/app/services/export_service.py` | Export materiale DOCX/PDF/MD |
 | `backend/app/api/v1/training.py` | TrainingAP API endpoints (generate, stream, export) |
+| `backend/app/api/v1/saved.py` | Saved content CRUD API (conversations, documents, red flags, training materials) |
 
 ## Code Conventions
 
@@ -97,7 +98,7 @@ DATABASE_URL="postgresql+asyncpg://..." python scripts/generate_embeddings.py
 - **History:** Started at 768 (text-embedding-004 convention) → tried 3072 (native) but hit pgvector HNSW limit → settled on 2000.
 - After dimension changes, regenerate embeddings: `python scripts/generate_embeddings.py --force`
 
-### Key Tables (7 în producție)
+### Key Tables (13 în producție)
 
 | Table | Purpose | RAG? |
 |-------|---------|------|
@@ -108,6 +109,12 @@ DATABASE_URL="postgresql+asyncpg://..." python scripts/generate_embeddings.py
 | `legislatie_fragmente` | Fragmente legislație la granularitate maximă (articol/alineat/literă) | Yes (2000-dim) |
 | `llm_settings` | LLM provider config (single-row: active provider, model, encrypted API keys for Gemini/Anthropic/OpenAI/Groq/OpenRouter) | No |
 | `search_scopes` | Saved filter presets for RAG pre-filtering (name, JSONB filters, cached decision_count) | No (pre-filter) |
+| `users` | Conturi utilizatori — pregătit pentru auth multi-user (roluri: admin, registered, paid_*) | No |
+| `conversatii` | Conversații chat salvate (titlu, nr mesaje, scope_id, user_id FK) | No |
+| `mesaje_conversatie` | Mesajele individuale din conversații (rol, conținut, citations, ordine) | No |
+| `documente_generate` | Documente generate salvate: contestații, clarificări, RAG memo (tip_document, conținut, referințe) | No |
+| `red_flags_salvate` | Analize Red Flags salvate (rezultate JSONB, statistici severitate) | No |
+| `training_materials` | Materiale didactice salvate (tip, temă, nivel, secțiuni parsate, referințe legale) | No |
 
 ### Tabele eliminate (2026-03-07)
 

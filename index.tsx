@@ -332,6 +332,38 @@ const SidebarItem = ({
   </button>
 );
 
+const HistoryPanel = ({ items, loading, type, onLoad, onDelete, onClose }: {
+  items: any[], loading: boolean, type: string,
+  onLoad: (item: any) => void, onDelete: (id: string) => void, onClose: () => void
+}) => (
+  <div className="fixed right-0 top-0 w-80 h-full bg-white border-l border-slate-200 shadow-xl z-40 flex flex-col">
+    <div className="flex justify-between items-center p-4 border-b border-slate-100">
+      <h3 className="font-bold text-slate-800 text-sm">Istoric</h3>
+      <button onClick={onClose} className="text-slate-400 hover:text-slate-600"><X size={16} /></button>
+    </div>
+    <div className="flex-1 overflow-y-auto p-3 space-y-2">
+      {loading ? (
+        <div className="flex justify-center py-8"><Loader2 className="animate-spin text-slate-400" size={24} /></div>
+      ) : items.length === 0 ? (
+        <p className="text-center text-slate-400 text-sm py-8">Niciun element salvat</p>
+      ) : items.map((item: any) => (
+        <div key={item.id} className="group bg-slate-50 rounded-lg p-3 hover:bg-slate-100 transition cursor-pointer" onClick={() => onLoad(item)}>
+          <div className="flex justify-between items-start">
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium text-slate-800 truncate">{item.titlu || item.tema || item.titlu}</p>
+              <p className="text-xs text-slate-400 mt-1">{new Date(item.created_at).toLocaleDateString('ro-RO', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</p>
+              {item.numar_mesaje !== undefined && <p className="text-xs text-slate-500 mt-0.5">{item.numar_mesaje} mesaje</p>}
+              {item.total_flags !== undefined && <p className="text-xs text-slate-500 mt-0.5">{item.total_flags} flags ({item.critice} critice)</p>}
+              {item.tip_material && <p className="text-xs text-slate-500 mt-0.5">{item.tip_material} — {item.nivel_dificultate}</p>}
+            </div>
+            <button onClick={(e) => { e.stopPropagation(); onDelete(item.id); }} className="opacity-0 group-hover:opacity-100 text-red-400 hover:text-red-600 p-1 transition"><Trash2 size={14} /></button>
+          </div>
+        </div>
+      ))}
+    </div>
+  </div>
+);
+
 const StatCard = ({ label, value, icon: Icon, color }: { label: string, value: string | number, icon: any, color: string }) => (
   <div className="bg-white p-6 rounded-xl border border-slate-100 shadow-sm flex items-center gap-4">
     <div className={`p-4 rounded-full ${color} bg-opacity-10`}>
@@ -437,6 +469,12 @@ const App = () => {
   const [uploadedDocsTrainingContext, setUploadedDocsTrainingContext] = useState<{name: string, text: string}[]>([]);
   const [uploadedDocsTrainingPlan, setUploadedDocsTrainingPlan] = useState<{name: string, text: string}[]>([]);
   const [trainingBatchProgress, setTrainingBatchProgress] = useState<{current: number, total: number, results: string[]} | null>(null);
+
+  // Save/History States
+  const [saveStatus, setSaveStatus] = useState<{type: 'success' | 'error', text: string} | null>(null);
+  const [historyPanel, setHistoryPanel] = useState<string | null>(null); // which history panel is open
+  const [historyItems, setHistoryItems] = useState<any[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
 
   // LLM Settings States
   const [llmSettings, setLlmSettings] = useState<LLMSettingsData | null>(null);
@@ -915,6 +953,174 @@ const App = () => {
       inlineData: { mimeType: f.type || 'text/plain', data: f.content }
     }));
   };
+
+  // === SAVE & HISTORY HELPERS ===
+
+  const showSaveToast = (success: boolean, msg?: string) => {
+    setSaveStatus({ type: success ? 'success' : 'error', text: msg || (success ? 'Salvat cu succes!' : 'Eroare la salvare') });
+    setTimeout(() => setSaveStatus(null), 3000);
+  };
+
+  const saveConversation = async () => {
+    if (chatMessages.length === 0) return;
+    try {
+      const firstUserMsg = chatMessages.find(m => m.role === 'user')?.text || 'Conversație';
+      const res = await fetch('/api/v1/saved/conversations', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          titlu: firstUserMsg.slice(0, 200),
+          mesaje: chatMessages.map((m, i) => ({ rol: m.role, continut: m.text, citations: (m as any).citations || [], ordine: i })),
+          scope_id: activeScopeId || null,
+        }),
+      });
+      showSaveToast(res.ok);
+    } catch { showSaveToast(false); }
+  };
+
+  const saveDocument = async (tipDocument: string, titlu: string, continut: string, referinte: string[] = [], meta: any = {}) => {
+    try {
+      const res = await fetch('/api/v1/saved/documents', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tip_document: tipDocument, titlu, continut, referinte_decizii: referinte, metadata: meta }),
+      });
+      showSaveToast(res.ok);
+    } catch { showSaveToast(false); }
+  };
+
+  const saveRedFlags = async () => {
+    if (redFlagsResults.length === 0) return;
+    const critice = redFlagsResults.filter(r => r.severity === 'CRITICĂ').length;
+    const medii = redFlagsResults.filter(r => r.severity === 'MEDIE').length;
+    const scazute = redFlagsResults.filter(r => r.severity === 'SCĂZUTĂ').length;
+    try {
+      const res = await fetch('/api/v1/saved/redflags', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          titlu: `Analiză Red Flags — ${redFlagsResults.length} flags`,
+          text_analizat_preview: redFlagsText.slice(0, 500),
+          rezultate: redFlagsResults.map((rf, i) => ({ ...rf, edited_clarification: editedClarifications[i] || null })),
+          total_flags: redFlagsResults.length,
+          critice, medii, scazute,
+        }),
+      });
+      showSaveToast(res.ok);
+    } catch { showSaveToast(false); }
+  };
+
+  const saveTraining = async () => {
+    if (!trainingResult) return;
+    const meta = trainingMeta || {};
+    try {
+      const res = await fetch('/api/v1/saved/training', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          tip_material: trainingTip,
+          tema: trainingTema,
+          nivel_dificultate: trainingNivel,
+          lungime: trainingLungime,
+          full_content: trainingEditedResult || trainingResult,
+          material: meta.material || null,
+          cerinte: meta.cerinte || null,
+          rezolvare: meta.rezolvare || null,
+          note_trainer: meta.note_trainer || null,
+          legislatie_citata: meta.legislatie_citata || [],
+          jurisprudenta_citata: meta.jurisprudenta_citata || [],
+          metadata: { tip_name: meta.tip_name || trainingTip },
+        }),
+      });
+      showSaveToast(res.ok);
+    } catch { showSaveToast(false); }
+  };
+
+  const loadHistory = async (type: string) => {
+    if (historyPanel === type) { setHistoryPanel(null); return; }
+    setHistoryPanel(type);
+    setHistoryLoading(true);
+    try {
+      const urlMap: Record<string, string> = {
+        conversations: '/api/v1/saved/conversations',
+        contestatie: '/api/v1/saved/documents?tip=contestatie',
+        clarificare: '/api/v1/saved/documents?tip=clarificare',
+        rag_memo: '/api/v1/saved/documents?tip=rag_memo',
+        redflags: '/api/v1/saved/redflags',
+        training: '/api/v1/saved/training',
+      };
+      const res = await fetch(urlMap[type] || '/api/v1/saved/conversations');
+      const data = await res.json();
+      setHistoryItems(data);
+    } catch { setHistoryItems([]); }
+    setHistoryLoading(false);
+  };
+
+  const loadConversation = async (id: string) => {
+    try {
+      const res = await fetch(`/api/v1/saved/conversations/${id}`);
+      const data = await res.json();
+      setChatMessages(data.mesaje.map((m: any) => ({ role: m.rol, text: m.continut, citations: m.citations })));
+      setHistoryPanel(null);
+    } catch { showSaveToast(false, 'Eroare la încărcare'); }
+  };
+
+  const loadDocument = async (id: string, targetMode: AppMode) => {
+    try {
+      const res = await fetch(`/api/v1/saved/documents/${id}`);
+      const data = await res.json();
+      setGeneratedContent(data.continut);
+      setGeneratedDecisionRefs(data.referinte_decizii || []);
+      setMode(targetMode);
+      setHistoryPanel(null);
+    } catch { showSaveToast(false, 'Eroare la încărcare'); }
+  };
+
+  const loadRedFlags = async (id: string) => {
+    try {
+      const res = await fetch(`/api/v1/saved/redflags/${id}`);
+      const data = await res.json();
+      setRedFlagsResults(data.rezultate);
+      setSelectedRedFlags([]);
+      const edits: Record<number, string> = {};
+      data.rezultate.forEach((rf: any, i: number) => { if (rf.edited_clarification) edits[i] = rf.edited_clarification; });
+      setEditedClarifications(edits);
+      setHistoryPanel(null);
+    } catch { showSaveToast(false, 'Eroare la încărcare'); }
+  };
+
+  const loadTraining = async (id: string) => {
+    try {
+      const res = await fetch(`/api/v1/saved/training/${id}`);
+      const data = await res.json();
+      setTrainingResult(data.full_content);
+      setTrainingTema(data.tema);
+      setTrainingTip(data.tip_material);
+      setTrainingNivel(data.nivel_dificultate);
+      setTrainingLungime(data.lungime);
+      setTrainingMeta({ material: data.material, cerinte: data.cerinte, rezolvare: data.rezolvare, note_trainer: data.note_trainer, legislatie_citata: data.legislatie_citata, jurisprudenta_citata: data.jurisprudenta_citata });
+      setTrainingEditedResult(null);
+      setTrainingEditing(false);
+      setHistoryPanel(null);
+    } catch { showSaveToast(false, 'Eroare la încărcare'); }
+  };
+
+  const deleteHistoryItem = async (type: string, id: string) => {
+    const urlMap: Record<string, string> = {
+      conversations: `/api/v1/saved/conversations/${id}`,
+      contestatie: `/api/v1/saved/documents/${id}`,
+      clarificare: `/api/v1/saved/documents/${id}`,
+      rag_memo: `/api/v1/saved/documents/${id}`,
+      redflags: `/api/v1/saved/redflags/${id}`,
+      training: `/api/v1/saved/training/${id}`,
+    };
+    try {
+      await fetch(urlMap[type], { method: 'DELETE' });
+      setHistoryItems(prev => prev.filter(item => item.id !== id));
+    } catch { showSaveToast(false, 'Eroare la ștergere'); }
+  };
+
+  // === END SAVE & HISTORY HELPERS ===
 
   const handleChat = async () => {
     if (!chatInput.trim()) return;
@@ -2460,8 +2666,10 @@ const App = () => {
       <div className="w-full md:w-2/3 p-4 md:p-10 overflow-y-auto bg-white">
         {generatedContent ? (
           <div className="max-w-3xl mx-auto">
-             <div className="flex justify-end mb-4">
+             <div className="flex justify-end gap-3 mb-4">
                 <button className="text-sm text-blue-600 font-medium hover:underline">Descarcă .DOCX</button>
+                <button onClick={() => saveDocument('contestatie', drafterContext.facts.slice(0, 200) || 'Contestație', generatedContent, generatedDecisionRefs, { facts: drafterContext.facts, authorityArgs: drafterContext.authorityArgs, legalGrounds: drafterContext.legalGrounds })} className="text-sm text-green-600 font-medium hover:underline flex items-center gap-1"><Save size={12} /> Salvează</button>
+                <button onClick={() => loadHistory('contestatie')} className="text-sm text-slate-500 font-medium hover:underline flex items-center gap-1"><Bookmark size={12} /> Istoric</button>
              </div>
              <div className="prose prose-slate max-w-none font-serif text-slate-800 leading-loose bg-white" dangerouslySetInnerHTML={{ __html: formatMarkdown(generatedContent) }} />
              {generatedDecisionRefs.length > 0 && (
@@ -3031,6 +3239,8 @@ const App = () => {
                       {fmt.toUpperCase()}
                     </button>
                   ))}
+                  <button onClick={saveTraining} disabled={trainingLoading} className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border border-green-300 text-green-600 hover:bg-green-50 hover:border-green-400 transition disabled:opacity-50"><Save size={12} /> Salvează</button>
+                  <button onClick={() => loadHistory('training')} className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border border-slate-300 text-slate-500 hover:bg-slate-50 transition"><Bookmark size={12} /> Istoric</button>
                 </div>
               </div>
 
@@ -3274,7 +3484,13 @@ const App = () => {
               <MessageSquare className="text-blue-500" size={18} />
               Asistent AP
            </h2>
-           <span className="text-xs text-slate-500 bg-slate-100 px-2 py-1 rounded">Conectat la baza de date CNSC</span>
+           <div className="flex items-center gap-2">
+              {chatMessages.length > 0 && (
+                <button onClick={saveConversation} className="text-xs bg-blue-50 text-blue-600 px-2.5 py-1 rounded-lg font-medium hover:bg-blue-100 transition flex items-center gap-1" title="Salvează conversația"><Save size={12} /> Salvează</button>
+              )}
+              <button onClick={() => loadHistory('conversations')} className="text-xs bg-slate-50 text-slate-500 px-2.5 py-1 rounded-lg font-medium hover:bg-slate-100 transition flex items-center gap-1" title="Istoric conversații"><Bookmark size={12} /> Istoric</button>
+              <span className="text-xs text-slate-500 bg-slate-100 px-2 py-1 rounded">Conectat la baza de date CNSC</span>
+           </div>
         </div>
         {activeScopeId && (
           <div className="mt-2"><ActiveScopeIndicator /></div>
@@ -3538,6 +3754,8 @@ const App = () => {
                             {fmt.toUpperCase()}
                           </button>
                         ))}
+                        <button onClick={saveRedFlags} className="text-xs bg-green-600 text-white px-2.5 py-1.5 rounded-lg font-medium hover:bg-green-700 transition flex items-center gap-1"><Save size={11} /> Salvează</button>
+                        <button onClick={() => loadHistory('redflags')} className="text-xs bg-slate-100 text-slate-600 px-2.5 py-1.5 rounded-lg font-medium hover:bg-slate-200 transition flex items-center gap-1"><Bookmark size={11} /> Istoric</button>
                       </div>
                     </div>
                   </div>
@@ -3784,6 +4002,10 @@ const App = () => {
             <div className="w-full md:w-2/3 p-4 md:p-10 overflow-y-auto bg-white">
               {generatedContent ? (
                 <div>
+                  <div className="flex justify-end gap-2 mb-4">
+                    <button onClick={() => saveDocument('clarificare', clarificationClause.slice(0, 200) || 'Clarificare', generatedContent, generatedDecisionRefs, { clauza_originala: clarificationClause })} className="text-xs text-green-600 font-medium hover:underline flex items-center gap-1"><Save size={12} /> Salvează</button>
+                    <button onClick={() => loadHistory('clarificare')} className="text-xs text-slate-500 font-medium hover:underline flex items-center gap-1"><Bookmark size={12} /> Istoric</button>
+                  </div>
                   <div className="prose prose-slate max-w-none" dangerouslySetInnerHTML={{ __html: formatMarkdown(generatedContent) }} />
                   {generatedDecisionRefs.length > 0 && (
                     <div className="mt-6 p-4 bg-purple-50 border border-purple-200 rounded-xl">
@@ -3865,7 +4087,13 @@ const App = () => {
                  </div>
                  <div className="flex-1 bg-white border border-slate-200 rounded-xl shadow-sm p-4 md:p-8 overflow-y-auto text-slate-800 leading-relaxed">
                     {generatedContent ? (
-                       <div className="prose prose-slate max-w-none" dangerouslySetInnerHTML={{ __html: formatMarkdown(generatedContent) }} />
+                       <div>
+                         <div className="flex justify-end gap-2 mb-4">
+                           <button onClick={() => saveDocument('rag_memo', memoTopic.slice(0, 200) || 'Memo RAG', generatedContent, generatedDecisionRefs, { topic: memoTopic })} className="text-xs text-green-600 font-medium hover:underline flex items-center gap-1"><Save size={12} /> Salvează</button>
+                           <button onClick={() => loadHistory('rag_memo')} className="text-xs text-slate-500 font-medium hover:underline flex items-center gap-1"><Bookmark size={12} /> Istoric</button>
+                         </div>
+                         <div className="prose prose-slate max-w-none" dangerouslySetInnerHTML={{ __html: formatMarkdown(generatedContent) }} />
+                       </div>
                     ) : (
                        <div className="flex flex-col items-center justify-center h-full text-slate-300">
                           <BookOpen size={48} className="mb-4 opacity-20"/>
@@ -3879,6 +4107,35 @@ const App = () => {
         {mode === 'training' && renderTraining()}
         {mode === 'settings' && renderSettings()}
         </div>
+
+        {/* Save Toast */}
+        {saveStatus && (
+          <div className={`fixed top-4 right-4 z-50 px-4 py-3 rounded-lg shadow-lg text-sm font-medium flex items-center gap-2 ${
+            saveStatus.type === 'success' ? 'bg-green-600 text-white' : 'bg-red-600 text-white'
+          }`}>
+            {saveStatus.type === 'success' ? <CheckCircle size={16} /> : <XCircle size={16} />}
+            {saveStatus.text}
+          </div>
+        )}
+
+        {/* Global History Panel */}
+        {historyPanel && (
+          <HistoryPanel
+            items={historyItems}
+            loading={historyLoading}
+            type={historyPanel}
+            onLoad={(item) => {
+              if (historyPanel === 'conversations') loadConversation(item.id);
+              else if (historyPanel === 'redflags') loadRedFlags(item.id);
+              else if (historyPanel === 'training') loadTraining(item.id);
+              else if (historyPanel === 'contestatie') loadDocument(item.id, 'drafter');
+              else if (historyPanel === 'clarificare') loadDocument(item.id, 'clarification');
+              else if (historyPanel === 'rag_memo') loadDocument(item.id, 'rag');
+            }}
+            onDelete={(id) => deleteHistoryItem(historyPanel, id)}
+            onClose={() => setHistoryPanel(null)}
+          />
+        )}
 
         {/* Sticky Install Banner - Mobile PWA */}
         {showInstallBanner && (

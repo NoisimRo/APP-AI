@@ -1,16 +1,22 @@
 # \dt+
 
                                             List of relations
- Schema |        Name          | Type  |  Owner   | Persistence | Access method |    Size    | Description
---------+----------------------+-------+----------+-------------+---------------+------------+-------------
- public | acte_normative       | table | expertap | permanent   | heap          | 8192 bytes |
- public | argumentare_critica  | table | expertap | permanent   | heap          | 4320 kB    |
- public | decizii_cnsc         | table | expertap | permanent   | heap          | 78 MB      |
- public | legislatie_fragmente | table | expertap | permanent   | heap          | 8192 bytes |
- public | llm_settings         | table | expertap | permanent   | heap          | 8192 bytes |
- public | nomenclator_cpv      | table | expertap | permanent   | heap          | 8192 bytes |
- public | search_scopes        | table | expertap | permanent   | heap          | 8192 bytes |
-(7 rows)
+ Schema |        Name              | Type  |  Owner   | Persistence | Access method |    Size    | Description
+--------+--------------------------+-------+----------+-------------+---------------+------------+-------------
+ public | acte_normative           | table | expertap | permanent   | heap          | 8192 bytes |
+ public | argumentare_critica      | table | expertap | permanent   | heap          | 4320 kB    |
+ public | conversatii              | table | expertap | permanent   | heap          | 8192 bytes |
+ public | decizii_cnsc             | table | expertap | permanent   | heap          | 78 MB      |
+ public | documente_generate       | table | expertap | permanent   | heap          | 8192 bytes |
+ public | legislatie_fragmente     | table | expertap | permanent   | heap          | 8192 bytes |
+ public | llm_settings             | table | expertap | permanent   | heap          | 8192 bytes |
+ public | mesaje_conversatie       | table | expertap | permanent   | heap          | 8192 bytes |
+ public | nomenclator_cpv          | table | expertap | permanent   | heap          | 8192 bytes |
+ public | red_flags_salvate        | table | expertap | permanent   | heap          | 8192 bytes |
+ public | search_scopes            | table | expertap | permanent   | heap          | 8192 bytes |
+ public | training_materials       | table | expertap | permanent   | heap          | 8192 bytes |
+ public | users                    | table | expertap | permanent   | heap          | 8192 bytes |
+(13 rows)
 
 
 # \d decizii_cnsc
@@ -202,9 +208,149 @@ Indexes:
     "search_scopes_pkey" PRIMARY KEY, btree (id)
 
 
+# \d users
+                              Table "public.users"
+     Column    |            Type             | Collation | Nullable |       Default
+---------------+-----------------------------+-----------+----------+--------------------
+ id            | uuid                        |           | not null | gen_random_uuid()
+ email         | character varying(255)      |           |          |
+ nume          | character varying(200)      |           |          |
+ rol           | character varying(30)       |           | not null | 'registered'::character varying
+ activ         | boolean                     |           | not null | true
+ metadata      | jsonb                       |           |          | '{}'::jsonb
+ created_at    | timestamp without time zone |           | not null | now()
+ updated_at    | timestamp without time zone |           | not null | now()
+Indexes:
+    "users_pkey" PRIMARY KEY, btree (id)
+    "users_email_key" UNIQUE CONSTRAINT, btree (email)
+    "ix_users_email" btree (email)
+    "ix_users_rol" btree (rol)
+Referenced by:
+    TABLE "conversatii" CONSTRAINT "conversatii_user_id_fkey" FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    TABLE "documente_generate" CONSTRAINT "documente_generate_user_id_fkey" FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    TABLE "red_flags_salvate" CONSTRAINT "red_flags_salvate_user_id_fkey" FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    TABLE "training_materials" CONSTRAINT "training_materials_user_id_fkey" FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+
+
+# \d conversatii
+                            Table "public.conversatii"
+     Column     |            Type             | Collation | Nullable |       Default
+----------------+-----------------------------+-----------+----------+--------------------
+ id             | uuid                        |           | not null | gen_random_uuid()
+ user_id        | uuid                        |           |          |
+ titlu          | character varying(200)      |           | not null |
+ primul_mesaj   | text                        |           |          |
+ numar_mesaje   | integer                     |           | not null | 0
+ scope_id       | uuid                        |           |          |
+ created_at     | timestamp without time zone |           | not null | now()
+ updated_at     | timestamp without time zone |           | not null | now()
+Indexes:
+    "conversatii_pkey" PRIMARY KEY, btree (id)
+    "ix_conv_created" btree (created_at DESC)
+    "ix_conv_user" btree (user_id)
+Foreign-key constraints:
+    "conversatii_user_id_fkey" FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    "conversatii_scope_id_fkey" FOREIGN KEY (scope_id) REFERENCES search_scopes(id) ON DELETE SET NULL
+Referenced by:
+    TABLE "mesaje_conversatie" CONSTRAINT "mesaje_conversatie_conversatie_id_fkey" FOREIGN KEY (conversatie_id) REFERENCES conversatii(id) ON DELETE CASCADE
+
+
+# \d mesaje_conversatie
+                         Table "public.mesaje_conversatie"
+      Column       |            Type             | Collation | Nullable |       Default
+-------------------+-----------------------------+-----------+----------+--------------------
+ id                | uuid                        |           | not null | gen_random_uuid()
+ conversatie_id    | uuid                        |           | not null |
+ rol               | character varying(20)       |           | not null |
+ continut          | text                        |           | not null |
+ citations         | jsonb                       |           |          | '[]'::jsonb
+ confidence        | real                        |           |          |
+ ordine            | integer                     |           | not null |
+ created_at        | timestamp without time zone |           | not null | now()
+Indexes:
+    "mesaje_conversatie_pkey" PRIMARY KEY, btree (id)
+    "ix_msg_conv" btree (conversatie_id, ordine)
+Foreign-key constraints:
+    "mesaje_conversatie_conversatie_id_fkey" FOREIGN KEY (conversatie_id) REFERENCES conversatii(id) ON DELETE CASCADE
+
+
+# \d documente_generate
+                         Table "public.documente_generate"
+      Column        |            Type             | Collation | Nullable |       Default
+--------------------+-----------------------------+-----------+----------+--------------------
+ id                 | uuid                        |           | not null | gen_random_uuid()
+ user_id            | uuid                        |           |          |
+ tip_document       | character varying(30)       |           | not null |
+ titlu              | character varying(300)      |           | not null |
+ continut           | text                        |           | not null |
+ referinte_decizii  | text[]                      |           |          |
+ metadata           | jsonb                       |           |          | '{}'::jsonb
+ created_at         | timestamp without time zone |           | not null | now()
+ updated_at         | timestamp without time zone |           | not null | now()
+Indexes:
+    "documente_generate_pkey" PRIMARY KEY, btree (id)
+    "ix_docgen_created" btree (created_at DESC)
+    "ix_docgen_tip" btree (tip_document)
+    "ix_docgen_user" btree (user_id)
+Foreign-key constraints:
+    "documente_generate_user_id_fkey" FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+
+
+# \d red_flags_salvate
+                         Table "public.red_flags_salvate"
+        Column         |            Type             | Collation | Nullable |       Default
+-----------------------+-----------------------------+-----------+----------+--------------------
+ id                    | uuid                        |           | not null | gen_random_uuid()
+ user_id               | uuid                        |           |          |
+ titlu                 | character varying(300)      |           | not null |
+ text_analizat_preview | text                        |           |          |
+ rezultate             | jsonb                       |           | not null |
+ total_flags           | integer                     |           | not null | 0
+ critice               | integer                     |           | not null | 0
+ medii                 | integer                     |           | not null | 0
+ scazute               | integer                     |           | not null | 0
+ created_at            | timestamp without time zone |           | not null | now()
+ updated_at            | timestamp without time zone |           | not null | now()
+Indexes:
+    "red_flags_salvate_pkey" PRIMARY KEY, btree (id)
+    "ix_rf_created" btree (created_at DESC)
+    "ix_rf_user" btree (user_id)
+Foreign-key constraints:
+    "red_flags_salvate_user_id_fkey" FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+
+
+# \d training_materials
+                          Table "public.training_materials"
+       Column        |            Type             | Collation | Nullable |       Default
+---------------------+-----------------------------+-----------+----------+--------------------
+ id                  | uuid                        |           | not null | gen_random_uuid()
+ user_id             | uuid                        |           |          |
+ tip_material        | character varying(30)       |           | not null |
+ tema                | text                        |           | not null |
+ nivel_dificultate   | character varying(20)       |           | not null |
+ lungime             | character varying(20)       |           | not null |
+ full_content        | text                        |           | not null |
+ material            | text                        |           |          |
+ cerinte             | text                        |           |          |
+ rezolvare           | text                        |           |          |
+ note_trainer        | text                        |           |          |
+ legislatie_citata   | text[]                      |           |          |
+ jurisprudenta_citata| text[]                      |           |          |
+ metadata            | jsonb                       |           |          | '{}'::jsonb
+ created_at          | timestamp without time zone |           | not null | now()
+ updated_at          | timestamp without time zone |           | not null | now()
+Indexes:
+    "training_materials_pkey" PRIMARY KEY, btree (id)
+    "ix_tm_created" btree (created_at DESC)
+    "ix_tm_tip" btree (tip_material)
+    "ix_tm_user" btree (user_id)
+Foreign-key constraints:
+    "training_materials_user_id_fkey" FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+
+
 ---
 
-# Ultima sincronizare cu producția: 2026-03-10
+# Ultima sincronizare cu producția: 2026-03-15
 
 # Changelog Schema Producție
 
@@ -220,3 +366,9 @@ Indexes:
 | 2026-03-09 | `ALTER TABLE llm_settings ADD COLUMN groq_api_key_enc TEXT;` | Utilizator | DA |
 | 2026-03-09 | `ALTER TABLE llm_settings ADD COLUMN openrouter_api_key_enc TEXT;` | Utilizator | DA |
 | 2026-03-09 | `CREATE TABLE search_scopes (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), name VARCHAR(100) NOT NULL, description TEXT, filters JSONB NOT NULL DEFAULT '{}', decision_count INTEGER DEFAULT 0, created_at TIMESTAMP NOT NULL DEFAULT now(), updated_at TIMESTAMP NOT NULL DEFAULT now());` | Utilizator | DA |
+| 2026-03-15 | `CREATE TABLE users (...)` + 2 indexuri (email, rol) — pregătit pentru auth multi-user viitor | Utilizator | DA |
+| 2026-03-15 | `CREATE TABLE conversatii (...)` + 2 indexuri (user_id, created_at DESC) + FK users, search_scopes | Utilizator | DA |
+| 2026-03-15 | `CREATE TABLE mesaje_conversatie (...)` + 1 index (conversatie_id, ordine) + FK conversatii CASCADE | Utilizator | DA |
+| 2026-03-15 | `CREATE TABLE documente_generate (...)` + 3 indexuri (user_id, tip, created_at DESC) + FK users | Utilizator | DA |
+| 2026-03-15 | `CREATE TABLE red_flags_salvate (...)` + 2 indexuri (user_id, created_at DESC) + FK users | Utilizator | DA |
+| 2026-03-15 | `CREATE TABLE training_materials (...)` + 3 indexuri (user_id, tip, created_at DESC) + FK users | Utilizator | DA |
