@@ -1,4 +1,10 @@
-"""Saved content API — CRUD for conversations, documents, red flags, training materials."""
+"""Saved content API — CRUD for conversations, documents, red flags, training materials.
+
+All endpoints use optional auth: authenticated users see only their own content,
+anonymous users see only anonymous (user_id=NULL) content.
+"""
+
+from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Depends, Query
 from pydantic import BaseModel, Field
@@ -6,15 +12,32 @@ from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.core.deps import get_optional_user
 from app.core.logging import get_logger
 from app.db.session import get_session, is_db_available
 from app.models.decision import (
     Conversatie, MesajConversatie,
-    DocumentGenerat, RedFlagsSalvate, TrainingMaterial,
+    DocumentGenerat, RedFlagsSalvate, TrainingMaterial, User,
 )
 
 router = APIRouter()
 logger = get_logger(__name__)
+
+
+def _ownership_filter(model_class, user: Optional[User]):
+    """Return a SQLAlchemy where clause filtering by ownership."""
+    if user:
+        return model_class.user_id == user.id
+    return model_class.user_id.is_(None)
+
+
+def _check_ownership(obj, user: Optional[User]):
+    """Raise 403 if user doesn't own the object."""
+    obj_user_id = getattr(obj, "user_id", None)
+    if user and obj_user_id != user.id:
+        raise HTTPException(403, "Nu aveți acces la această resursă")
+    if not user and obj_user_id is not None:
+        raise HTTPException(403, "Nu aveți acces la această resursă")
 
 
 # =============================================================================
@@ -158,6 +181,7 @@ class TrainingDetail(TrainingListItem):
 async def save_conversation(
     request: SaveConversationRequest,
     session: AsyncSession = Depends(get_session),
+    user: Optional[User] = Depends(get_optional_user),
 ):
     """Save a chat conversation with all messages."""
     if not is_db_available():
@@ -168,6 +192,7 @@ async def save_conversation(
         primul_mesaj=request.mesaje[0].continut[:500] if request.mesaje else None,
         numar_mesaje=len(request.mesaje),
         scope_id=request.scope_id,
+        user_id=user.id if user else None,
     )
     session.add(conv)
     await session.flush()  # Get conv.id
@@ -220,13 +245,15 @@ async def list_conversations(
     skip: int = Query(0, ge=0),
     limit: int = Query(20, ge=1, le=100),
     session: AsyncSession = Depends(get_session),
+    user: Optional[User] = Depends(get_optional_user),
 ):
-    """List saved conversations, newest first."""
+    """List saved conversations, newest first. Filtered by ownership."""
     if not is_db_available():
         return []
 
     result = await session.execute(
         select(Conversatie)
+        .where(_ownership_filter(Conversatie, user))
         .order_by(Conversatie.updated_at.desc())
         .offset(skip).limit(limit)
     )
@@ -247,6 +274,7 @@ async def list_conversations(
 async def get_conversation(
     conv_id: str,
     session: AsyncSession = Depends(get_session),
+    user: Optional[User] = Depends(get_optional_user),
 ):
     """Get a conversation with all messages."""
     if not is_db_available():
@@ -260,6 +288,8 @@ async def get_conversation(
     conv = result.scalar_one_or_none()
     if not conv:
         raise HTTPException(status_code=404, detail="Conversație negăsită")
+
+    _check_ownership(conv, user)
 
     return ConversationDetail(
         id=conv.id, titlu=conv.titlu, primul_mesaj=conv.primul_mesaj,
@@ -281,6 +311,7 @@ async def get_conversation(
 async def delete_conversation(
     conv_id: str,
     session: AsyncSession = Depends(get_session),
+    user: Optional[User] = Depends(get_optional_user),
 ):
     """Delete a conversation and all its messages."""
     if not is_db_available():
@@ -292,6 +323,8 @@ async def delete_conversation(
     conv = result.scalar_one_or_none()
     if not conv:
         raise HTTPException(status_code=404, detail="Conversație negăsită")
+
+    _check_ownership(conv, user)
 
     await session.delete(conv)
     await session.commit()
@@ -307,6 +340,7 @@ async def delete_conversation(
 async def save_document(
     request: SaveDocumentRequest,
     session: AsyncSession = Depends(get_session),
+    user: Optional[User] = Depends(get_optional_user),
 ):
     """Save a generated document (contestație, clarificare, RAG memo)."""
     if not is_db_available():
@@ -318,6 +352,7 @@ async def save_document(
         continut=request.continut,
         referinte_decizii=request.referinte_decizii or [],
         metadata_=request.metadata or {},
+        user_id=user.id if user else None,
     )
     session.add(doc)
     await session.commit()
@@ -341,12 +376,17 @@ async def list_documents(
     skip: int = Query(0, ge=0),
     limit: int = Query(20, ge=1, le=100),
     session: AsyncSession = Depends(get_session),
+    user: Optional[User] = Depends(get_optional_user),
 ):
     """List saved documents, newest first. Optional filter by type."""
     if not is_db_available():
         return []
 
-    query = select(DocumentGenerat).order_by(DocumentGenerat.created_at.desc())
+    query = (
+        select(DocumentGenerat)
+        .where(_ownership_filter(DocumentGenerat, user))
+        .order_by(DocumentGenerat.created_at.desc())
+    )
     if tip:
         query = query.where(DocumentGenerat.tip_document == tip)
     query = query.offset(skip).limit(limit)
@@ -369,6 +409,7 @@ async def list_documents(
 async def get_document(
     doc_id: str,
     session: AsyncSession = Depends(get_session),
+    user: Optional[User] = Depends(get_optional_user),
 ):
     """Get a saved document with full content."""
     if not is_db_available():
@@ -380,6 +421,8 @@ async def get_document(
     doc = result.scalar_one_or_none()
     if not doc:
         raise HTTPException(status_code=404, detail="Document negăsit")
+
+    _check_ownership(doc, user)
 
     return DocumentDetail(
         id=doc.id, tip_document=doc.tip_document, titlu=doc.titlu,
@@ -395,6 +438,7 @@ async def get_document(
 async def delete_document(
     doc_id: str,
     session: AsyncSession = Depends(get_session),
+    user: Optional[User] = Depends(get_optional_user),
 ):
     """Delete a saved document."""
     if not is_db_available():
@@ -406,6 +450,8 @@ async def delete_document(
     doc = result.scalar_one_or_none()
     if not doc:
         raise HTTPException(status_code=404, detail="Document negăsit")
+
+    _check_ownership(doc, user)
 
     await session.delete(doc)
     await session.commit()
@@ -421,6 +467,7 @@ async def delete_document(
 async def save_redflags(
     request: SaveRedFlagsRequest,
     session: AsyncSession = Depends(get_session),
+    user: Optional[User] = Depends(get_optional_user),
 ):
     """Save a red flags analysis."""
     if not is_db_available():
@@ -434,6 +481,7 @@ async def save_redflags(
         critice=request.critice,
         medii=request.medii,
         scazute=request.scazute,
+        user_id=user.id if user else None,
     )
     session.add(rf)
     await session.commit()
@@ -457,6 +505,7 @@ async def list_redflags(
     skip: int = Query(0, ge=0),
     limit: int = Query(20, ge=1, le=100),
     session: AsyncSession = Depends(get_session),
+    user: Optional[User] = Depends(get_optional_user),
 ):
     """List saved red flags analyses, newest first."""
     if not is_db_available():
@@ -464,6 +513,7 @@ async def list_redflags(
 
     result = await session.execute(
         select(RedFlagsSalvate)
+        .where(_ownership_filter(RedFlagsSalvate, user))
         .order_by(RedFlagsSalvate.created_at.desc())
         .offset(skip).limit(limit)
     )
@@ -486,6 +536,7 @@ async def list_redflags(
 async def get_redflags(
     rf_id: str,
     session: AsyncSession = Depends(get_session),
+    user: Optional[User] = Depends(get_optional_user),
 ):
     """Get a saved red flags analysis with full results."""
     if not is_db_available():
@@ -497,6 +548,8 @@ async def get_redflags(
     rf = result.scalar_one_or_none()
     if not rf:
         raise HTTPException(status_code=404, detail="Analiză negăsită")
+
+    _check_ownership(rf, user)
 
     return RedFlagsDetail(
         id=rf.id, titlu=rf.titlu,
@@ -513,6 +566,7 @@ async def get_redflags(
 async def delete_redflags(
     rf_id: str,
     session: AsyncSession = Depends(get_session),
+    user: Optional[User] = Depends(get_optional_user),
 ):
     """Delete a saved red flags analysis."""
     if not is_db_available():
@@ -524,6 +578,8 @@ async def delete_redflags(
     rf = result.scalar_one_or_none()
     if not rf:
         raise HTTPException(status_code=404, detail="Analiză negăsită")
+
+    _check_ownership(rf, user)
 
     await session.delete(rf)
     await session.commit()
@@ -539,6 +595,7 @@ async def delete_redflags(
 async def save_training(
     request: SaveTrainingRequest,
     session: AsyncSession = Depends(get_session),
+    user: Optional[User] = Depends(get_optional_user),
 ):
     """Save a training material."""
     if not is_db_available():
@@ -557,6 +614,7 @@ async def save_training(
         legislatie_citata=request.legislatie_citata or [],
         jurisprudenta_citata=request.jurisprudenta_citata or [],
         metadata_=request.metadata or {},
+        user_id=user.id if user else None,
     )
     session.add(tm)
     await session.commit()
@@ -584,12 +642,17 @@ async def list_training(
     skip: int = Query(0, ge=0),
     limit: int = Query(20, ge=1, le=100),
     session: AsyncSession = Depends(get_session),
+    user: Optional[User] = Depends(get_optional_user),
 ):
     """List saved training materials, newest first."""
     if not is_db_available():
         return []
 
-    query = select(TrainingMaterial).order_by(TrainingMaterial.created_at.desc())
+    query = (
+        select(TrainingMaterial)
+        .where(_ownership_filter(TrainingMaterial, user))
+        .order_by(TrainingMaterial.created_at.desc())
+    )
     if tip:
         query = query.where(TrainingMaterial.tip_material == tip)
     query = query.offset(skip).limit(limit)
@@ -612,6 +675,7 @@ async def list_training(
 async def get_training(
     tm_id: str,
     session: AsyncSession = Depends(get_session),
+    user: Optional[User] = Depends(get_optional_user),
 ):
     """Get a saved training material with full content."""
     if not is_db_available():
@@ -623,6 +687,8 @@ async def get_training(
     tm = result.scalar_one_or_none()
     if not tm:
         raise HTTPException(status_code=404, detail="Material negăsit")
+
+    _check_ownership(tm, user)
 
     return TrainingDetail(
         id=tm.id, tip_material=tm.tip_material, tema=tm.tema,
@@ -642,6 +708,7 @@ async def get_training(
 async def delete_training(
     tm_id: str,
     session: AsyncSession = Depends(get_session),
+    user: Optional[User] = Depends(get_optional_user),
 ):
     """Delete a saved training material."""
     if not is_db_available():
@@ -653,6 +720,8 @@ async def delete_training(
     tm = result.scalar_one_or_none()
     if not tm:
         raise HTTPException(status_code=404, detail="Material negăsit")
+
+    _check_ownership(tm, user)
 
     await session.delete(tm)
     await session.commit()

@@ -1,11 +1,15 @@
 """Chat API endpoints."""
 
-from fastapi import APIRouter, HTTPException, Depends
+from typing import Optional
+
+from fastapi import APIRouter, HTTPException, Depends, Request
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.logging import get_logger
+from app.core.rate_limiter import require_rate_limit, increment_usage
 from app.db.session import get_session
+from app.models.decision import User
 from app.services.rag import RAGService
 from app.services.llm.factory import get_active_llm_provider
 from app.services.llm.streaming import create_sse_response
@@ -54,7 +58,9 @@ class ChatResponse(BaseModel):
 @router.post("/", response_model=ChatResponse)
 async def chat(
     request: ChatRequest,
-    session: AsyncSession = Depends(get_session)
+    http_request: Request,
+    session: AsyncSession = Depends(get_session),
+    rate_user: Optional[User] = Depends(require_rate_limit),
 ) -> ChatResponse:
     """
     Chat with ExpertAP.
@@ -117,6 +123,8 @@ async def chat(
             for c in citations
         ]
 
+        increment_usage(rate_user, http_request)
+
         return ChatResponse(
             message=response_text,
             conversation_id=conversation_id,
@@ -136,7 +144,9 @@ async def chat(
 @router.post("/stream")
 async def chat_stream(
     request: ChatRequest,
-    session: AsyncSession = Depends(get_session)
+    http_request: Request,
+    session: AsyncSession = Depends(get_session),
+    rate_user: Optional[User] = Depends(require_rate_limit),
 ):
     """Stream chat response via SSE."""
     logger.info("chat_stream_request", message_length=len(request.message))
@@ -184,6 +194,8 @@ async def chat_stream(
         n_sources = len(citations)
         if n_sources:
             status_msgs.append(f"Am identificat {n_sources} decizii CNSC relevante")
+
+        increment_usage(rate_user, http_request)
 
         # Stream the LLM response
         return await create_sse_response(

@@ -4,15 +4,18 @@ Uses RAG vector search to ground clarifications in actual CNSC jurisprudence.
 """
 
 import time
+from typing import Optional
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.logging import get_logger
+from app.core.deps import require_feature
+from app.core.rate_limiter import require_rate_limit, increment_usage
 from app.db.session import get_session
-from app.models.decision import ArgumentareCritica, DecizieCNSC
+from app.models.decision import ArgumentareCritica, DecizieCNSC, User
 from app.services.embedding import EmbeddingService
 from app.services.llm.factory import get_active_llm_provider, get_embedding_provider
 from app.services.llm.streaming import create_sse_response
@@ -158,7 +161,10 @@ Redactează în limba română, limbaj formal și profesionist."""
 @router.post("/", response_model=ClarificationResponse)
 async def generate_clarification(
     request: ClarificationRequest,
+    http_request: Request,
     session: AsyncSession = Depends(get_session),
+    rate_user: Optional[User] = Depends(require_rate_limit),
+    _feature: Optional[User] = Depends(require_feature("clarification")),
 ) -> ClarificationResponse:
     """Generate a formal clarification request with RAG jurisprudence."""
     t0 = time.monotonic()
@@ -180,6 +186,7 @@ async def generate_clarification(
             decision_refs=decision_refs,
         )
         logger.info("timing_clarification_total", duration_s=round(time.monotonic() - t0, 2))
+        increment_usage(rate_user, http_request)
         return ClarificationResponse(content=response_text, decision_refs=decision_refs)
 
     except Exception as e:
@@ -190,10 +197,14 @@ async def generate_clarification(
 @router.post("/stream")
 async def generate_clarification_stream(
     request: ClarificationRequest,
+    http_request: Request,
     session: AsyncSession = Depends(get_session),
+    rate_user: Optional[User] = Depends(require_rate_limit),
+    _feature: Optional[User] = Depends(require_feature("clarification")),
 ):
     """Stream a clarification request via SSE."""
     logger.info("clarification_stream_request", clause_length=len(request.clause))
+    increment_usage(rate_user, http_request)
 
     llm = await get_active_llm_provider(session)
     prompt, decision_refs = await _build_clarification_context(request.clause, session)

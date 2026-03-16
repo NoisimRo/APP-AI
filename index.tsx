@@ -46,11 +46,29 @@ import {
   Plus,
   Shield,
   Copy,
+  LogOut,
+  Lock,
+  UserCircle,
 } from "lucide-react";
 
 // --- Types ---
 
-type AppMode = 'dashboard' | 'datalake' | 'drafter' | 'redflags' | 'chat' | 'clarification' | 'rag' | 'training' | 'settings';
+type AppMode = 'dashboard' | 'datalake' | 'drafter' | 'redflags' | 'chat' | 'clarification' | 'rag' | 'training' | 'settings' | 'profile';
+
+interface AuthUser {
+  id: string;
+  email: string;
+  nume: string | null;
+  rol: string;
+  activ: boolean;
+  queries_today: number;
+  queries_limit: number;
+}
+
+interface AuthState {
+  user: AuthUser | null;
+  loading: boolean;
+}
 
 interface LLMModelInfo {
   id: string;
@@ -169,6 +187,118 @@ const fileToBase64 = (file: File): Promise<string> => {
     };
     reader.onerror = error => reject(error);
   });
+};
+
+// --- Auth Utilities ---
+
+const storeTokens = (access: string, refresh: string) => {
+  localStorage.setItem('expertap_access_token', access);
+  localStorage.setItem('expertap_refresh_token', refresh);
+};
+const clearTokens = () => {
+  localStorage.removeItem('expertap_access_token');
+  localStorage.removeItem('expertap_refresh_token');
+};
+const getAccessToken = () => localStorage.getItem('expertap_access_token');
+const getRefreshToken = () => localStorage.getItem('expertap_refresh_token');
+
+const authFetch = async (url: string, options: RequestInit = {}): Promise<Response> => {
+  const token = getAccessToken();
+  const headers = new Headers(options.headers || {});
+  if (token) headers.set('Authorization', `Bearer ${token}`);
+  if (!headers.has('Content-Type') && options.body && typeof options.body === 'string') {
+    headers.set('Content-Type', 'application/json');
+  }
+  let response = await fetch(url, { ...options, headers });
+
+  // Auto-refresh on 401
+  if (response.status === 401 && getRefreshToken()) {
+    const refreshResponse = await fetch('/api/v1/auth/refresh', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ refresh_token: getRefreshToken() }),
+    });
+    if (refreshResponse.ok) {
+      const data = await refreshResponse.json();
+      storeTokens(data.access_token, data.refresh_token);
+      headers.set('Authorization', `Bearer ${data.access_token}`);
+      response = await fetch(url, { ...options, headers });
+    } else {
+      clearTokens();
+    }
+  }
+  return response;
+};
+
+const authFetchStream = async (
+  url: string,
+  body: any,
+  onChunk: (text: string) => void,
+  onDone: (meta: any) => void,
+  onError: (error: string) => void,
+  onStatus?: (status: string) => void,
+) => {
+  const token = getAccessToken();
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  if (token) headers['Authorization'] = `Bearer ${token}`;
+
+  const response = await fetch(url, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify(body),
+  });
+  if (!response.ok) {
+    let detail = `HTTP ${response.status}`;
+    try {
+      const errBody = await response.json();
+      const d = errBody.detail;
+      if (typeof d === 'string') detail = d;
+      else if (Array.isArray(d)) detail = d.map((e: any) => e.msg || JSON.stringify(e)).join('; ');
+      else if (d && d.message) detail = d.message;
+      else if (d) detail = JSON.stringify(d);
+      else detail = JSON.stringify(errBody);
+    } catch { /* ignore parse errors */ }
+    onError(detail);
+    return;
+  }
+  const reader = response.body!.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    const parts = buffer.split('\n\n');
+    buffer = parts.pop()!;
+    for (const part of parts) {
+      if (part.startsWith('data: ')) {
+        try {
+          const data = JSON.parse(part.slice(6));
+          if (data.error) { onError(typeof data.error === 'string' ? data.error : JSON.stringify(data.error)); return; }
+          if (data.status && onStatus) onStatus(data.status);
+          if (data.text) onChunk(data.text);
+          if (data.done) onDone(data);
+        } catch { /* ignore malformed SSE */ }
+      }
+    }
+  }
+};
+
+// Feature access rules per role
+const ROLE_FEATURES: Record<string, string[]> = {
+  registered: ['chat', 'dashboard', 'datalake', 'rag'],
+  paid_basic: ['chat', 'dashboard', 'datalake', 'rag', 'drafter', 'redflags', 'clarification'],
+  paid_pro: ['chat', 'dashboard', 'datalake', 'rag', 'drafter', 'redflags', 'clarification', 'training', 'export', 'settings'],
+  paid_enterprise: ['chat', 'dashboard', 'datalake', 'rag', 'drafter', 'redflags', 'clarification', 'training', 'export', 'settings'],
+  admin: ['chat', 'dashboard', 'datalake', 'rag', 'drafter', 'redflags', 'clarification', 'training', 'export', 'settings', 'profile'],
+};
+
+const PLAN_LABELS: Record<string, string> = {
+  registered: 'Free',
+  paid_basic: 'Basic',
+  paid_pro: 'Pro',
+  paid_enterprise: 'Enterprise',
+  admin: 'Admin',
 };
 
 // --- Markdown Formatter ---
@@ -506,8 +636,125 @@ const App = () => {
   const [scopeDescription, setScopeDescription] = useState("");
   const [showYearDropdown, setShowYearDropdown] = useState(false);
 
+  // Auth State
+  const [authState, setAuthState] = useState<AuthState>({ user: null, loading: true });
+  const [showAuthModal, setShowAuthModal] = useState(false);
+  const [authMode, setAuthMode] = useState<'login' | 'register'>('login');
+  const [authEmail, setAuthEmail] = useState('');
+  const [authPassword, setAuthPassword] = useState('');
+  const [authConfirmPassword, setAuthConfirmPassword] = useState('');
+  const [authNume, setAuthNume] = useState('');
+  const [authError, setAuthError] = useState('');
+  const [authLoading, setAuthLoading] = useState(false);
+
   // Mobile Sidebar State
   const [sidebarOpen, setSidebarOpen] = useState(false);
+
+  // Auth: check stored token on mount
+  useEffect(() => {
+    const token = getAccessToken();
+    if (token) {
+      authFetch('/api/v1/auth/me').then(res => {
+        if (res.ok) return res.json();
+        clearTokens();
+        return null;
+      }).then(data => {
+        setAuthState({ user: data, loading: false });
+      }).catch(() => setAuthState({ user: null, loading: false }));
+    } else {
+      setAuthState({ user: null, loading: false });
+    }
+  }, []);
+
+  // Auth helper: canAccess feature
+  const canAccess = (feature: string): boolean => {
+    const user = authState.user;
+    if (!user) return ['chat', 'dashboard', 'datalake', 'rag'].includes(feature);
+    const features = ROLE_FEATURES[user.rol];
+    if (!features) return false;
+    return features.includes(feature);
+  };
+
+  // Auth helper: refresh user data after usage
+  const refreshAuthUser = async () => {
+    if (!getAccessToken()) return;
+    try {
+      const res = await authFetch('/api/v1/auth/me');
+      if (res.ok) {
+        const data = await res.json();
+        setAuthState(prev => ({ ...prev, user: data }));
+      }
+    } catch { /* ignore */ }
+  };
+
+  // Auth handlers
+  const handleLogin = async () => {
+    setAuthError('');
+    setAuthLoading(true);
+    try {
+      const formData = new URLSearchParams();
+      formData.append('username', authEmail);
+      formData.append('password', authPassword);
+      const res = await fetch('/api/v1/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: formData,
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        setAuthError(err.detail || 'Eroare la autentificare');
+        setAuthLoading(false);
+        return;
+      }
+      const data = await res.json();
+      storeTokens(data.access_token, data.refresh_token);
+      setAuthState({ user: data.user, loading: false });
+      setShowAuthModal(false);
+      setAuthEmail(''); setAuthPassword('');
+    } catch (e: any) {
+      setAuthError('Eroare de rețea');
+    }
+    setAuthLoading(false);
+  };
+
+  const handleRegister = async () => {
+    setAuthError('');
+    if (authPassword !== authConfirmPassword) {
+      setAuthError('Parolele nu coincid');
+      return;
+    }
+    if (authPassword.length < 8) {
+      setAuthError('Parola trebuie să aibă minim 8 caractere');
+      return;
+    }
+    setAuthLoading(true);
+    try {
+      const res = await fetch('/api/v1/auth/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: authEmail, password: authPassword, nume: authNume || null }),
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        setAuthError(err.detail || 'Eroare la înregistrare');
+        setAuthLoading(false);
+        return;
+      }
+      const data = await res.json();
+      storeTokens(data.access_token, data.refresh_token);
+      setAuthState({ user: data.user, loading: false });
+      setShowAuthModal(false);
+      setAuthEmail(''); setAuthPassword(''); setAuthConfirmPassword(''); setAuthNume('');
+    } catch (e: any) {
+      setAuthError('Eroare de rețea');
+    }
+    setAuthLoading(false);
+  };
+
+  const handleLogout = () => {
+    clearTokens();
+    setAuthState({ user: null, loading: false });
+  };
 
   // Global click handler to close all dropdowns
   useEffect(() => {
@@ -564,7 +811,7 @@ const App = () => {
   useEffect(() => {
     const fetchStats = async () => {
       try {
-        const response = await fetch('/api/v1/decisions/stats/overview');
+        const response = await authFetch('/api/v1/decisions/stats/overview');
         if (response.ok) {
           const data = await response.json();
           setDbStats(data);
@@ -579,7 +826,7 @@ const App = () => {
   // Fetch LLM settings on mount
   const fetchLLMSettings = async () => {
     try {
-      const response = await fetch('/api/v1/settings/llm');
+      const response = await authFetch('/api/v1/settings/llm');
       if (response.ok) {
         const data: LLMSettingsData = await response.json();
         setLlmSettings(data);
@@ -598,7 +845,7 @@ const App = () => {
   // Fetch search scopes
   const fetchScopes = async () => {
     try {
-      const res = await fetch('/api/v1/scopes/');
+      const res = await authFetch('/api/v1/scopes/');
       if (res.ok) setScopes(await res.json());
     } catch (e) { console.error('Failed to fetch scopes:', e); }
   };
@@ -681,7 +928,7 @@ const App = () => {
       if (settingsApiKey.trim()) {
         body.api_key = settingsApiKey.trim();
       }
-      const response = await fetch('/api/v1/settings/llm', {
+      const response = await authFetch('/api/v1/settings/llm', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
@@ -706,7 +953,7 @@ const App = () => {
     setSettingsTesting(true);
     setSettingsTestResult(null);
     try {
-      const response = await fetch('/api/v1/settings/llm/test', { method: 'POST' });
+      const response = await authFetch('/api/v1/settings/llm/test', { method: 'POST' });
       if (response.ok) {
         const data = await response.json();
         setSettingsTestResult(data);
@@ -751,9 +998,9 @@ const App = () => {
   const fetchFilterOptions = async () => {
     try {
       const [critRes, cpvRes, catRes] = await Promise.all([
-        fetch('/api/v1/decisions/filters/critici-codes'),
-        fetch('/api/v1/decisions/filters/cpv-codes'),
-        fetch('/api/v1/decisions/filters/categorii'),
+        authFetch('/api/v1/decisions/filters/critici-codes'),
+        authFetch('/api/v1/decisions/filters/cpv-codes'),
+        authFetch('/api/v1/decisions/filters/categorii'),
       ]);
       if (critRes.ok) setCriticiOptions(await critRes.json());
       if (cpvRes.ok) setCpvOptions(await cpvRes.json());
@@ -807,11 +1054,11 @@ const App = () => {
     const fetchCpvStats = async () => {
       try {
         const [topRes, catRes, wrCatRes, wrCritRes, cpvGroupRes] = await Promise.all([
-          fetch('/api/v1/decisions/stats/cpv-top?limit=10'),
-          fetch('/api/v1/decisions/stats/categorii'),
-          fetch('/api/v1/decisions/stats/win-rate-by-category'),
-          fetch('/api/v1/decisions/stats/win-rate-by-critici'),
-          fetch('/api/v1/decisions/stats/cpv-top-grouped?limit=15'),
+          authFetch('/api/v1/decisions/stats/cpv-top?limit=10'),
+          authFetch('/api/v1/decisions/stats/categorii'),
+          authFetch('/api/v1/decisions/stats/win-rate-by-category'),
+          authFetch('/api/v1/decisions/stats/win-rate-by-critici'),
+          authFetch('/api/v1/decisions/stats/cpv-top-grouped?limit=15'),
         ]);
         if (topRes.ok) setCpvTopStats(await topRes.json());
         if (catRes.ok) setCategoriiStats(await catRes.json());
@@ -965,7 +1212,7 @@ const App = () => {
     if (chatMessages.length === 0) return;
     try {
       const firstUserMsg = chatMessages.find(m => m.role === 'user')?.text || 'Conversație';
-      const res = await fetch('/api/v1/saved/conversations', {
+      const res = await authFetch('/api/v1/saved/conversations', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -980,7 +1227,7 @@ const App = () => {
 
   const saveDocument = async (tipDocument: string, titlu: string, continut: string, referinte: string[] = [], meta: any = {}) => {
     try {
-      const res = await fetch('/api/v1/saved/documents', {
+      const res = await authFetch('/api/v1/saved/documents', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ tip_document: tipDocument, titlu, continut, referinte_decizii: referinte, metadata: meta }),
@@ -995,7 +1242,7 @@ const App = () => {
     const medii = redFlagsResults.filter(r => r.severity === 'MEDIE').length;
     const scazute = redFlagsResults.filter(r => r.severity === 'SCĂZUTĂ').length;
     try {
-      const res = await fetch('/api/v1/saved/redflags', {
+      const res = await authFetch('/api/v1/saved/redflags', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -1014,7 +1261,7 @@ const App = () => {
     if (!trainingResult) return;
     const meta = trainingMeta || {};
     try {
-      const res = await fetch('/api/v1/saved/training', {
+      const res = await authFetch('/api/v1/saved/training', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -1135,7 +1382,7 @@ const App = () => {
 
     try {
       let accumulated = '';
-      await fetchStream(
+      await authFetchStream(
         '/api/v1/chat/stream',
         {
           message: userMsg,
@@ -1210,7 +1457,7 @@ const App = () => {
     setGeneratedDecisionRefs([]);
 
     try {
-      await fetchStream(
+      await authFetchStream(
         '/api/v1/drafter/stream',
         {
           facts: drafterContext.facts,
@@ -1262,7 +1509,7 @@ const App = () => {
       const base64 = await fileToBase64(file);
 
       // Call backend to extract text
-      const response = await fetch('/api/v1/documents/analyze', {
+      const response = await authFetch('/api/v1/documents/analyze', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -1333,7 +1580,7 @@ const App = () => {
     const fetchTimeout = setTimeout(() => controller.abort(), timeoutMs);
 
     try {
-      const response = await fetch('/api/v1/redflags/', {
+      const response = await authFetch('/api/v1/redflags/', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -1391,7 +1638,7 @@ const App = () => {
     const fullContent = header + sections.join('\n') + footer;
 
     try {
-      const response = await fetch('/api/v1/training/export', {
+      const response = await authFetch('/api/v1/training/export', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -1421,7 +1668,7 @@ const App = () => {
     setGeneratedContent("");
     setGeneratedDecisionRefs([]);
     try {
-      const response = await fetch('/api/v1/clarification/', {
+      const response = await authFetch('/api/v1/clarification/', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ clause: clarificationClause })
@@ -1453,7 +1700,7 @@ const App = () => {
     setGeneratedContent("");
 
     try {
-      await fetchStream(
+      await authFetchStream(
         '/api/v1/ragmemo/stream',
         {
           topic: memoTopic,
@@ -1550,15 +1797,39 @@ const App = () => {
 
         <div>
            <div className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3 px-2">Instrumente Juridice</div>
-           <SidebarItem icon={Scale} label="Drafter Contestații" active={mode === 'drafter'} onClick={() => { setMode('drafter'); setSidebarOpen(false); }} />
-           <SidebarItem icon={AlertTriangle} label="Red Flags Detector" active={mode === 'redflags'} onClick={() => { setMode('redflags'); setSidebarOpen(false); }} />
-           <SidebarItem icon={Search} label="Clarificări" active={mode === 'clarification'} onClick={() => { setMode('clarification'); setSidebarOpen(false); }} />
+           {canAccess('drafter') ? (
+             <SidebarItem icon={Scale} label="Drafter Contestații" active={mode === 'drafter'} onClick={() => { setMode('drafter'); setSidebarOpen(false); }} />
+           ) : (
+             <div className="opacity-50 cursor-not-allowed" title="Disponibil în planul Basic">
+               <SidebarItem icon={Scale} label="Drafter Contestații" active={false} onClick={() => setShowAuthModal(true)} />
+             </div>
+           )}
+           {canAccess('redflags') ? (
+             <SidebarItem icon={AlertTriangle} label="Red Flags Detector" active={mode === 'redflags'} onClick={() => { setMode('redflags'); setSidebarOpen(false); }} />
+           ) : (
+             <div className="opacity-50 cursor-not-allowed" title="Disponibil în planul Basic">
+               <SidebarItem icon={AlertTriangle} label="Red Flags Detector" active={false} onClick={() => setShowAuthModal(true)} />
+             </div>
+           )}
+           {canAccess('clarification') ? (
+             <SidebarItem icon={Search} label="Clarificări" active={mode === 'clarification'} onClick={() => { setMode('clarification'); setSidebarOpen(false); }} />
+           ) : (
+             <div className="opacity-50 cursor-not-allowed" title="Disponibil în planul Basic">
+               <SidebarItem icon={Search} label="Clarificări" active={false} onClick={() => setShowAuthModal(true)} />
+             </div>
+           )}
            <SidebarItem icon={BookOpen} label="Jurisprudență RAG" active={mode === 'rag'} onClick={() => { setMode('rag'); setSidebarOpen(false); }} />
         </div>
 
         <div>
            <div className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3 px-2">Formare</div>
-           <SidebarItem icon={GraduationCap} label="TrainingAP" active={mode === 'training'} onClick={() => { setMode('training'); setSidebarOpen(false); }} />
+           {canAccess('training') ? (
+             <SidebarItem icon={GraduationCap} label="TrainingAP" active={mode === 'training'} onClick={() => { setMode('training'); setSidebarOpen(false); }} />
+           ) : (
+             <div className="opacity-50 cursor-not-allowed" title="Disponibil în planul Pro">
+               <SidebarItem icon={GraduationCap} label="TrainingAP" active={false} onClick={() => setShowAuthModal(true)} />
+             </div>
+           )}
         </div>
 
         <div>
@@ -1567,34 +1838,64 @@ const App = () => {
         </div>
       </nav>
 
-      <div className="p-4 border-t border-slate-800 bg-slate-900/50 cursor-pointer hover:bg-slate-800/50 transition-colors" onClick={() => { setMode('settings'); setSidebarOpen(false); }}>
-         <div className="flex items-center gap-3">
-            <div className={`w-8 h-8 rounded-full flex items-center justify-center text-white font-bold text-xs ${
-              llmSettings?.active_provider === 'anthropic'
-                ? 'bg-gradient-to-tr from-orange-500 to-amber-500'
-                : llmSettings?.active_provider === 'groq'
-                ? 'bg-gradient-to-tr from-purple-500 to-pink-500'
-                : llmSettings?.active_provider === 'openai'
-                ? 'bg-gradient-to-tr from-green-500 to-emerald-500'
-                : llmSettings?.active_provider === 'openrouter'
-                ? 'bg-gradient-to-tr from-rose-500 to-red-500'
-                : 'bg-gradient-to-tr from-blue-500 to-purple-500'
-            }`}>AI</div>
-            <div>
-               <p className="text-sm text-white font-medium">{
-                 llmSettings?.active_model
-                   ? llmSettings.active_model.replace(/-preview$/, '').replace(/^gemini-/, 'Gemini ').replace(/^claude-/, 'Claude ').replace(/-versatile$/, '').replace(/-instant$/, '').replace(/:free$/, ' ★')
-                   : llmSettings?.active_provider === 'anthropic' ? 'Claude'
-                   : llmSettings?.active_provider === 'groq' ? 'Groq'
-                   : llmSettings?.active_provider === 'openai' ? 'OpenAI'
-                   : llmSettings?.active_provider === 'openrouter' ? 'OpenRouter'
-                   : 'Gemini'
-               }</p>
-               <p className={`text-xs ${llmSettings?.providers?.[llmSettings.active_provider]?.configured ? 'text-green-400' : 'text-yellow-400'}`}>
-                 {llmSettings?.providers?.[llmSettings.active_provider]?.configured ? 'Operațional' : 'Neconfigurat'}
-               </p>
+      {/* Sidebar bottom: user info or login prompt */}
+      <div className="p-4 border-t border-slate-800 bg-slate-900/50">
+        {authState.user ? (
+          <div>
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center text-white font-bold text-xs shrink-0">
+                {(authState.user.nume || authState.user.email)[0].toUpperCase()}
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm text-white font-medium truncate">{authState.user.nume || authState.user.email}</p>
+                <p className="text-xs text-slate-400">{PLAN_LABELS[authState.user.rol] || authState.user.rol}</p>
+              </div>
+              <button onClick={handleLogout} className="text-slate-400 hover:text-white p-1" title="Deconectare">
+                <LogOut size={16} />
+              </button>
             </div>
-         </div>
+            <div className="mt-2">
+              <div className="flex justify-between text-xs text-slate-500 mb-1">
+                <span>{authState.user.queries_today}/{authState.user.queries_limit} interogări azi</span>
+              </div>
+              <div className="w-full bg-slate-700 rounded-full h-1">
+                <div className="bg-blue-500 rounded-full h-1 transition-all" style={{width: `${Math.min(100, (authState.user.queries_today / authState.user.queries_limit) * 100)}%`}} />
+              </div>
+            </div>
+            {/* LLM provider mini-info */}
+            <div className="mt-2 flex items-center gap-2 cursor-pointer hover:bg-slate-800/50 rounded p-1 -mx-1" onClick={() => { setMode('settings'); setSidebarOpen(false); }}>
+              <div className={`w-5 h-5 rounded-full flex items-center justify-center text-white font-bold text-[8px] ${
+                llmSettings?.active_provider === 'anthropic' ? 'bg-orange-500' : llmSettings?.active_provider === 'groq' ? 'bg-purple-500' : llmSettings?.active_provider === 'openai' ? 'bg-green-500' : 'bg-blue-500'
+              }`}>AI</div>
+              <span className="text-xs text-slate-500 truncate">
+                {llmSettings?.active_model?.replace(/-preview$/, '').replace(/^gemini-/, '').replace(/^claude-/, '').replace(/-versatile$/, '').replace(/:free$/, ' ★') || llmSettings?.active_provider || 'Gemini'}
+              </span>
+              <div className={`w-1.5 h-1.5 rounded-full ml-auto ${llmSettings?.providers?.[llmSettings?.active_provider || '']?.configured ? 'bg-green-400' : 'bg-yellow-400'}`} />
+            </div>
+          </div>
+        ) : (
+          <div>
+            <button onClick={() => { setShowAuthModal(true); setAuthMode('login'); }} className="w-full flex items-center gap-3 p-2 rounded-lg hover:bg-slate-800 transition-colors">
+              <div className="w-8 h-8 rounded-full bg-slate-700 flex items-center justify-center">
+                <Shield size={16} className="text-slate-400" />
+              </div>
+              <div className="text-left">
+                <p className="text-sm text-white font-medium">Conectează-te</p>
+                <p className="text-xs text-slate-500">Salvează și accesează instrumentele</p>
+              </div>
+            </button>
+            {/* LLM provider mini-info */}
+            <div className="mt-2 flex items-center gap-2 cursor-pointer hover:bg-slate-800/50 rounded p-1 -mx-1" onClick={() => { setMode('settings'); setSidebarOpen(false); }}>
+              <div className={`w-5 h-5 rounded-full flex items-center justify-center text-white font-bold text-[8px] ${
+                llmSettings?.active_provider === 'anthropic' ? 'bg-orange-500' : llmSettings?.active_provider === 'groq' ? 'bg-purple-500' : llmSettings?.active_provider === 'openai' ? 'bg-green-500' : 'bg-blue-500'
+              }`}>AI</div>
+              <span className="text-xs text-slate-500 truncate">
+                {llmSettings?.active_model?.replace(/-preview$/, '').replace(/^gemini-/, '').replace(/^claude-/, '').replace(/-versatile$/, '').replace(/:free$/, ' ★') || llmSettings?.active_provider || 'Gemini'}
+              </span>
+              <div className={`w-1.5 h-1.5 rounded-full ml-auto ${llmSettings?.providers?.[llmSettings?.active_provider || '']?.configured ? 'bg-green-400' : 'bg-yellow-400'}`} />
+            </div>
+          </div>
+        )}
       </div>
     </div>
     </>
@@ -2741,7 +3042,7 @@ const App = () => {
     if (trainingMode === 'program') {
       resetUI();
 
-      await fetchStream(
+      await authFetchStream(
         '/api/v1/training/generate/stream',
         {
           ...buildTrainingRequestBody('program_formare'),
@@ -2771,7 +3072,7 @@ const App = () => {
         const header = `\n\n---\n\n# Material ${i + 1} din ${trainingBatchCount} — ${tipName}\n\n`;
         setTrainingResult(prev => prev + header);
 
-        await fetchStream(
+        await authFetchStream(
           '/api/v1/training/generate/stream',
           {
             ...buildTrainingRequestBody(tipForThis),
@@ -2793,7 +3094,7 @@ const App = () => {
     // Individual mode (default)
     resetUI();
 
-    await fetchStream(
+    await authFetchStream(
       '/api/v1/training/generate/stream',
       buildTrainingRequestBody(),
       (text) => setTrainingResult(prev => prev + text),
@@ -2806,7 +3107,7 @@ const App = () => {
     const contentToExport = trainingEditedResult ?? trainingResult;
     if (!contentToExport) return;
     try {
-      const response = await fetch('/api/v1/training/export', {
+      const response = await authFetch('/api/v1/training/export', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -3589,6 +3890,108 @@ const App = () => {
   return (
     <div className="flex h-screen bg-slate-50 font-sans text-slate-900">
       {renderSidebar()}
+
+      {/* Auth Modal */}
+      {showAuthModal && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-sm">
+          <div className="bg-slate-900 rounded-2xl shadow-2xl w-full max-w-md mx-4 border border-slate-700">
+            <div className="p-6">
+              <div className="flex items-center justify-between mb-6">
+                <h2 className="text-xl font-bold text-white">
+                  {authMode === 'login' ? 'Autentificare' : 'Creează cont'}
+                </h2>
+                <button onClick={() => { setShowAuthModal(false); setAuthError(''); }} className="text-slate-400 hover:text-white">
+                  <X size={20} />
+                </button>
+              </div>
+
+              {authError && (
+                <div className="mb-4 p-3 rounded-lg bg-red-500/10 border border-red-500/30 text-red-400 text-sm">
+                  {authError}
+                </div>
+              )}
+
+              <div className="space-y-4">
+                {authMode === 'register' && (
+                  <div>
+                    <label className="text-sm text-slate-400 mb-1 block">Nume</label>
+                    <input
+                      type="text"
+                      value={authNume}
+                      onChange={e => setAuthNume(e.target.value)}
+                      className="w-full p-3 rounded-lg bg-slate-800 border border-slate-700 text-white text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                      placeholder="Numele dvs."
+                    />
+                  </div>
+                )}
+                <div>
+                  <label className="text-sm text-slate-400 mb-1 block">Email</label>
+                  <input
+                    type="email"
+                    value={authEmail}
+                    onChange={e => setAuthEmail(e.target.value)}
+                    className="w-full p-3 rounded-lg bg-slate-800 border border-slate-700 text-white text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                    placeholder="email@exemplu.ro"
+                    onKeyDown={e => e.key === 'Enter' && authMode === 'login' && handleLogin()}
+                  />
+                </div>
+                <div>
+                  <label className="text-sm text-slate-400 mb-1 block">Parolă</label>
+                  <input
+                    type="password"
+                    value={authPassword}
+                    onChange={e => setAuthPassword(e.target.value)}
+                    className="w-full p-3 rounded-lg bg-slate-800 border border-slate-700 text-white text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                    placeholder="Minim 8 caractere"
+                    onKeyDown={e => e.key === 'Enter' && authMode === 'login' && handleLogin()}
+                  />
+                </div>
+                {authMode === 'register' && (
+                  <div>
+                    <label className="text-sm text-slate-400 mb-1 block">Confirmă parola</label>
+                    <input
+                      type="password"
+                      value={authConfirmPassword}
+                      onChange={e => setAuthConfirmPassword(e.target.value)}
+                      className="w-full p-3 rounded-lg bg-slate-800 border border-slate-700 text-white text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                      placeholder="Repetă parola"
+                      onKeyDown={e => e.key === 'Enter' && handleRegister()}
+                    />
+                  </div>
+                )}
+
+                <button
+                  onClick={authMode === 'login' ? handleLogin : handleRegister}
+                  disabled={authLoading}
+                  className="w-full py-3 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-medium text-sm transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                >
+                  {authLoading && <Loader2 size={16} className="animate-spin" />}
+                  {authMode === 'login' ? 'Autentifică-te' : 'Creează cont'}
+                </button>
+              </div>
+
+              <div className="mt-4 text-center">
+                {authMode === 'login' ? (
+                  <p className="text-sm text-slate-400">
+                    Nu ai cont?{' '}
+                    <button onClick={() => { setAuthMode('register'); setAuthError(''); }} className="text-blue-400 hover:underline">
+                      Creează cont
+                    </button>
+                  </p>
+                ) : (
+                  <p className="text-sm text-slate-400">
+                    Ai deja cont?{' '}
+                    <button onClick={() => { setAuthMode('login'); setAuthError(''); }} className="text-blue-400 hover:underline">
+                      Autentifică-te
+                    </button>
+                  </p>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       <main className="flex-1 overflow-hidden relative shadow-2xl z-10 md:rounded-l-2xl md:border-l border-slate-200/50 bg-white md:ml-[-1px] pt-[52px] md:pt-0 flex flex-col">
         <div className="flex-1 overflow-hidden flex flex-col">
         {mode === 'dashboard' && renderDashboard()}
@@ -4392,7 +4795,7 @@ const App = () => {
                     if (filterClasa) filters.clasa = filterClasa;
                     if (fileSearch.trim()) filters.search = fileSearch.trim();
 
-                    const res = await fetch('/api/v1/scopes/', {
+                    const res = await authFetch('/api/v1/scopes/', {
                       method: 'POST',
                       headers: { 'Content-Type': 'application/json' },
                       body: JSON.stringify({

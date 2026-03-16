@@ -7,13 +7,16 @@ grounded in real legislation and CNSC jurisprudence via RAG.
 import unicodedata
 import re
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import Response
 from pydantic import BaseModel, Field
-from typing import Literal
+from typing import Literal, Optional
 
 from app.core.logging import get_logger
+from app.core.deps import require_feature
+from app.core.rate_limiter import require_rate_limit, increment_usage
 from app.db.session import get_session
+from app.models.decision import User
 from app.services.training_generator import (
     TrainingGenerator,
     MATERIAL_TYPES,
@@ -97,7 +100,10 @@ async def get_material_types():
 @router.post("/generate", response_model=TrainingGenerateResponse)
 async def generate_material(
     request: TrainingGenerateRequest,
+    http_request: Request,
     session: AsyncSession = Depends(get_session),
+    rate_user: Optional[User] = Depends(require_rate_limit),
+    _feature: Optional[User] = Depends(require_feature("training")),
 ) -> TrainingGenerateResponse:
     """Generate a training material using LLM with RAG grounding."""
     logger.info(
@@ -142,6 +148,7 @@ async def generate_material(
             legislatie_count=len(result["legislatie_citata"]),
         )
 
+        increment_usage(rate_user, http_request)
         return TrainingGenerateResponse(**result)
 
     except Exception as e:
@@ -152,7 +159,10 @@ async def generate_material(
 @router.post("/generate/stream")
 async def generate_material_stream(
     request: TrainingGenerateRequest,
+    http_request: Request,
     session: AsyncSession = Depends(get_session),
+    rate_user: Optional[User] = Depends(require_rate_limit),
+    _feature: Optional[User] = Depends(require_feature("training")),
 ):
     """Stream a training material generation via SSE."""
     logger.info(
@@ -160,6 +170,7 @@ async def generate_material_stream(
         tema=request.tema[:80],
         tip=request.tip_material,
     )
+    increment_usage(rate_user, http_request)
 
     llm = await get_active_llm_provider(session)
     generator = TrainingGenerator(llm_provider=llm)
@@ -215,7 +226,10 @@ async def generate_material_stream(
 
 
 @router.post("/export")
-async def export_material(request: TrainingExportRequest):
+async def export_material(
+    request: TrainingExportRequest,
+    _feature: Optional[User] = Depends(require_feature("export")),
+):
     """Export a training material to DOCX, PDF, or MD format."""
     logger.info(
         "training_export_request",
