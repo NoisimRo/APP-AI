@@ -12,10 +12,10 @@ from uuid import uuid4
 
 from pgvector.sqlalchemy import Vector
 from sqlalchemy import (
-    JSON, Date, DateTime, ForeignKey, Index, Integer, Numeric, String, Text,
-    func,
+    Boolean, JSON, Date, DateTime, Float, ForeignKey, Index, Integer, Numeric,
+    String, Text, func,
 )
-from sqlalchemy.dialects.postgresql import UUID, ARRAY, TSVECTOR
+from sqlalchemy.dialects.postgresql import UUID, ARRAY, JSONB, TSVECTOR
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.session import Base
@@ -496,6 +496,317 @@ class SearchScope(Base):
 
     def __repr__(self) -> str:
         return f"<SearchScope '{self.name}' ({self.decision_count} decizii)>"
+
+
+# =============================================================================
+# USERS (pregătit pentru auth multi-user viitor)
+# =============================================================================
+
+class User(Base):
+    """User account — prepared for future authentication.
+
+    Roles: 'admin', 'registered', 'paid_basic', 'paid_pro', 'paid_enterprise'.
+    Auth mechanism (JWT/OAuth) will be implemented in a future session.
+    """
+
+    __tablename__ = "users"
+
+    id: Mapped[str] = mapped_column(
+        UUID(as_uuid=False),
+        primary_key=True,
+        default=lambda: str(uuid4())
+    )
+    email: Mapped[Optional[str]] = mapped_column(String(255), unique=True)
+    nume: Mapped[Optional[str]] = mapped_column(String(200))
+    rol: Mapped[str] = mapped_column(
+        String(30), nullable=False, default="registered"
+    )
+    activ: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    metadata_: Mapped[Optional[dict]] = mapped_column(
+        "metadata", JSONB, default=dict
+    )
+
+    # Timestamps
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+
+    # Relationships
+    conversatii: Mapped[list["Conversatie"]] = relationship(
+        "Conversatie", back_populates="user", cascade="all, delete-orphan"
+    )
+    documente: Mapped[list["DocumentGenerat"]] = relationship(
+        "DocumentGenerat", back_populates="user", cascade="all, delete-orphan"
+    )
+    red_flags: Mapped[list["RedFlagsSalvate"]] = relationship(
+        "RedFlagsSalvate", back_populates="user", cascade="all, delete-orphan"
+    )
+    training_materials: Mapped[list["TrainingMaterial"]] = relationship(
+        "TrainingMaterial", back_populates="user", cascade="all, delete-orphan"
+    )
+
+    __table_args__ = (
+        Index("ix_users_email", email),
+        Index("ix_users_rol", rol),
+    )
+
+    def __repr__(self) -> str:
+        return f"<User {self.email} rol={self.rol}>"
+
+
+# =============================================================================
+# CONVERSAȚII SALVATE (Chat)
+# =============================================================================
+
+class Conversatie(Base):
+    """Saved chat conversation with metadata."""
+
+    __tablename__ = "conversatii"
+
+    id: Mapped[str] = mapped_column(
+        UUID(as_uuid=False),
+        primary_key=True,
+        default=lambda: str(uuid4())
+    )
+    user_id: Mapped[Optional[str]] = mapped_column(
+        UUID(as_uuid=False),
+        ForeignKey("users.id", ondelete="CASCADE"),
+    )
+    titlu: Mapped[str] = mapped_column(String(200), nullable=False)
+    primul_mesaj: Mapped[Optional[str]] = mapped_column(Text)
+    numar_mesaje: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    scope_id: Mapped[Optional[str]] = mapped_column(
+        UUID(as_uuid=False),
+        ForeignKey("search_scopes.id", ondelete="SET NULL"),
+    )
+
+    # Timestamps
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+
+    # Relationships
+    user: Mapped[Optional["User"]] = relationship(
+        "User", back_populates="conversatii"
+    )
+    mesaje: Mapped[list["MesajConversatie"]] = relationship(
+        "MesajConversatie", back_populates="conversatie",
+        cascade="all, delete-orphan", order_by="MesajConversatie.ordine"
+    )
+
+    __table_args__ = (
+        Index("ix_conv_user", user_id),
+        Index("ix_conv_created", created_at.desc()),
+    )
+
+    def __repr__(self) -> str:
+        return f"<Conversatie '{self.titlu}' ({self.numar_mesaje} mesaje)>"
+
+
+class MesajConversatie(Base):
+    """Individual message within a saved conversation."""
+
+    __tablename__ = "mesaje_conversatie"
+
+    id: Mapped[str] = mapped_column(
+        UUID(as_uuid=False),
+        primary_key=True,
+        default=lambda: str(uuid4())
+    )
+    conversatie_id: Mapped[str] = mapped_column(
+        UUID(as_uuid=False),
+        ForeignKey("conversatii.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    rol: Mapped[str] = mapped_column(String(20), nullable=False)  # 'user' or 'assistant'
+    continut: Mapped[str] = mapped_column(Text, nullable=False)
+    citations: Mapped[Optional[list]] = mapped_column(JSONB, default=list)
+    confidence: Mapped[Optional[float]] = mapped_column(Float)
+    ordine: Mapped[int] = mapped_column(Integer, nullable=False)
+
+    # Timestamps
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(), nullable=False
+    )
+
+    # Relationships
+    conversatie: Mapped["Conversatie"] = relationship(
+        "Conversatie", back_populates="mesaje"
+    )
+
+    __table_args__ = (
+        Index("ix_msg_conv", conversatie_id, ordine),
+    )
+
+    def __repr__(self) -> str:
+        return f"<MesajConversatie {self.rol} #{self.ordine}>"
+
+
+# =============================================================================
+# DOCUMENTE GENERATE (Contestații, Clarificări, RAG Memo)
+# =============================================================================
+
+class DocumentGenerat(Base):
+    """Saved generated document — contestație, clarificare, or RAG memo."""
+
+    __tablename__ = "documente_generate"
+
+    id: Mapped[str] = mapped_column(
+        UUID(as_uuid=False),
+        primary_key=True,
+        default=lambda: str(uuid4())
+    )
+    user_id: Mapped[Optional[str]] = mapped_column(
+        UUID(as_uuid=False),
+        ForeignKey("users.id", ondelete="CASCADE"),
+    )
+    tip_document: Mapped[str] = mapped_column(
+        String(30), nullable=False
+    )  # 'contestatie', 'clarificare', 'rag_memo'
+    titlu: Mapped[str] = mapped_column(String(300), nullable=False)
+    continut: Mapped[str] = mapped_column(Text, nullable=False)
+    referinte_decizii: Mapped[Optional[list]] = mapped_column(
+        ARRAY(Text), default=list
+    )
+    metadata_: Mapped[Optional[dict]] = mapped_column(
+        "metadata", JSONB, default=dict
+    )
+
+    # Timestamps
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+
+    # Relationships
+    user: Mapped[Optional["User"]] = relationship(
+        "User", back_populates="documente"
+    )
+
+    __table_args__ = (
+        Index("ix_docgen_user", user_id),
+        Index("ix_docgen_tip", tip_document),
+        Index("ix_docgen_created", created_at.desc()),
+    )
+
+    def __repr__(self) -> str:
+        return f"<DocumentGenerat {self.tip_document}: '{self.titlu}'>"
+
+
+# =============================================================================
+# RED FLAGS SALVATE
+# =============================================================================
+
+class RedFlagsSalvate(Base):
+    """Saved red flags analysis results."""
+
+    __tablename__ = "red_flags_salvate"
+
+    id: Mapped[str] = mapped_column(
+        UUID(as_uuid=False),
+        primary_key=True,
+        default=lambda: str(uuid4())
+    )
+    user_id: Mapped[Optional[str]] = mapped_column(
+        UUID(as_uuid=False),
+        ForeignKey("users.id", ondelete="CASCADE"),
+    )
+    titlu: Mapped[str] = mapped_column(String(300), nullable=False)
+    text_analizat_preview: Mapped[Optional[str]] = mapped_column(Text)
+    rezultate: Mapped[dict] = mapped_column(JSONB, nullable=False)
+    total_flags: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    critice: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    medii: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    scazute: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+
+    # Timestamps
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+
+    # Relationships
+    user: Mapped[Optional["User"]] = relationship(
+        "User", back_populates="red_flags"
+    )
+
+    __table_args__ = (
+        Index("ix_rf_user", user_id),
+        Index("ix_rf_created", created_at.desc()),
+    )
+
+    def __repr__(self) -> str:
+        return f"<RedFlagsSalvate '{self.titlu}' ({self.total_flags} flags)>"
+
+
+# =============================================================================
+# TRAINING MATERIALS
+# =============================================================================
+
+class TrainingMaterial(Base):
+    """Saved training material generated by TrainingAP."""
+
+    __tablename__ = "training_materials"
+
+    id: Mapped[str] = mapped_column(
+        UUID(as_uuid=False),
+        primary_key=True,
+        default=lambda: str(uuid4())
+    )
+    user_id: Mapped[Optional[str]] = mapped_column(
+        UUID(as_uuid=False),
+        ForeignKey("users.id", ondelete="CASCADE"),
+    )
+    tip_material: Mapped[str] = mapped_column(String(30), nullable=False)
+    tema: Mapped[str] = mapped_column(Text, nullable=False)
+    nivel_dificultate: Mapped[str] = mapped_column(String(20), nullable=False)
+    lungime: Mapped[str] = mapped_column(String(20), nullable=False)
+    full_content: Mapped[str] = mapped_column(Text, nullable=False)
+    material: Mapped[Optional[str]] = mapped_column(Text)
+    cerinte: Mapped[Optional[str]] = mapped_column(Text)
+    rezolvare: Mapped[Optional[str]] = mapped_column(Text)
+    note_trainer: Mapped[Optional[str]] = mapped_column(Text)
+    legislatie_citata: Mapped[Optional[list]] = mapped_column(
+        ARRAY(Text), default=list
+    )
+    jurisprudenta_citata: Mapped[Optional[list]] = mapped_column(
+        ARRAY(Text), default=list
+    )
+    metadata_: Mapped[Optional[dict]] = mapped_column(
+        "metadata", JSONB, default=dict
+    )
+
+    # Timestamps
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+
+    # Relationships
+    user: Mapped[Optional["User"]] = relationship(
+        "User", back_populates="training_materials"
+    )
+
+    __table_args__ = (
+        Index("ix_tm_user", user_id),
+        Index("ix_tm_tip", tip_material),
+        Index("ix_tm_created", created_at.desc()),
+    )
+
+    def __repr__(self) -> str:
+        return f"<TrainingMaterial {self.tip_material}: '{self.tema}'>"
 
 
 # =============================================================================
