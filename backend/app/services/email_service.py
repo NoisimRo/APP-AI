@@ -1,12 +1,12 @@
 """Email service for sending verification codes and notifications.
 
-Uses SMTP. Configure via environment variables:
+Uses SMTP over SSL. Configure via environment variables:
   - SMTP_HOST (default: mail.exe.org.ro)
-  - SMTP_PORT (default: 26)
+  - SMTP_PORT (default: 465)
   - SMTP_USER (email address, e.g. asociatia@exe.org.ro)
   - SMTP_PASSWORD (email account password)
   - SMTP_FROM (sender address, defaults to SMTP_USER)
-  - SMTP_USE_TLS (true/false — use STARTTLS, default: false)
+  - SMTP_SSL (true/false — use implicit SSL via SMTP_SSL, default: true)
 """
 
 import os
@@ -19,11 +19,11 @@ from app.core.logging import get_logger
 logger = get_logger(__name__)
 
 SMTP_HOST = os.getenv("SMTP_HOST", "mail.exe.org.ro")
-SMTP_PORT = int(os.getenv("SMTP_PORT", "26"))
+SMTP_PORT = int(os.getenv("SMTP_PORT", "465"))
 SMTP_USER = os.getenv("SMTP_USER", "")
 SMTP_PASSWORD = os.getenv("SMTP_PASSWORD", "")
 SMTP_FROM = os.getenv("SMTP_FROM", "") or SMTP_USER
-SMTP_USE_TLS = os.getenv("SMTP_USE_TLS", "false").lower() in ("true", "1", "yes")
+SMTP_SSL = os.getenv("SMTP_SSL", "true").lower() in ("true", "1", "yes")
 
 
 async def send_verification_email(to_email: str, code: str, name: str | None = None) -> None:
@@ -76,11 +76,17 @@ async def send_verification_email(to_email: str, code: str, name: str | None = N
     msg.attach(MIMEText(html_body, "html", "utf-8"))
 
     try:
-        with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=10) as server:
-            if SMTP_USE_TLS:
+        if SMTP_SSL:
+            # Port 465: implicit SSL (wrapped connection)
+            with smtplib.SMTP_SSL(SMTP_HOST, SMTP_PORT, timeout=10) as server:
+                server.login(SMTP_USER, SMTP_PASSWORD)
+                server.send_message(msg)
+        else:
+            # Port 587: STARTTLS (upgrade plaintext to TLS)
+            with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=10) as server:
                 server.starttls()
-            server.login(SMTP_USER, SMTP_PASSWORD)
-            server.send_message(msg)
+                server.login(SMTP_USER, SMTP_PASSWORD)
+                server.send_message(msg)
         logger.info("verification_email_sent", to=to_email)
     except Exception as e:
         logger.error("smtp_send_failed", to=to_email, error=str(e))

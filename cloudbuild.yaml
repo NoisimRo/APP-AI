@@ -58,7 +58,7 @@ steps:
       - '--max-instances'
       - '3'
       - '--set-env-vars'
-      - 'ENVIRONMENT=production,SKIP_DB=false,DEBUG=false,LOG_LEVEL=INFO,SMTP_HOST=mail.exe.org.ro,SMTP_PORT=26,SMTP_USE_TLS=false'
+      - 'ENVIRONMENT=production,SKIP_DB=false,DEBUG=false,LOG_LEVEL=INFO,SMTP_HOST=mail.exe.org.ro,SMTP_PORT=465,SMTP_SSL=true'
       - '--set-secrets'
       - 'DATABASE_URL=expertap-database-url:latest,GEMINI_API_KEY=expertap-gemini-api-key:latest,LLM_SETTINGS_KEY=expertap-llm-settings-key:latest,SMTP_USER=expertap-smtp-user:latest,SMTP_PASSWORD=expertap-smtp-password:latest'
       - '--add-cloudsql-instances'
