@@ -202,10 +202,14 @@ Indexes:
  description      | text                        |           |          |
  filters          | jsonb                       |           | not null | '{}'::jsonb
  decision_count   | integer                     |           |          | 0
+ user_id          | uuid                        |           |          |
  created_at       | timestamp without time zone |           | not null | now()
  updated_at       | timestamp without time zone |           | not null | now()
 Indexes:
     "search_scopes_pkey" PRIMARY KEY, btree (id)
+    "ix_search_scopes_user_id" btree (user_id)
+Foreign-key constraints:
+    "search_scopes_user_id_fkey" FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 
 
 # \d users
@@ -357,7 +361,7 @@ Foreign-key constraints:
 
 ---
 
-# Ultima sincronizare cu producția: 2026-03-16
+# Ultima sincronizare cu producția: 2026-03-17
 
 # Changelog Schema Producție
 
@@ -386,3 +390,5 @@ Foreign-key constraints:
 | 2026-03-16 | `ALTER TABLE users ADD COLUMN reset_token_expires TIMESTAMP` | Utilizator | DA |
 | 2026-03-17 | `ALTER TABLE users ADD COLUMN verification_code VARCHAR(10)` | Utilizator | DA |
 | 2026-03-17 | `ALTER TABLE users ADD COLUMN verification_code_expires TIMESTAMP` | Utilizator | DA |
+| 2026-03-17 | `ALTER TABLE search_scopes ADD COLUMN user_id UUID REFERENCES users(id) ON DELETE CASCADE;` | Utilizator | DA |
+| 2026-03-17 | `CREATE INDEX ix_search_scopes_user_id ON search_scopes(user_id);` | Utilizator | DA |
