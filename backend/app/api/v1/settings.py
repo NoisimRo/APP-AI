@@ -14,10 +14,11 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
+from app.core.deps import require_role
 from app.core.encryption import encrypt_value, decrypt_value
 from app.core.logging import get_logger
 from app.db.session import get_session
-from app.models.decision import LLMSettings
+from app.models.decision import LLMSettings, User
 from app.services.llm.factory import (
     clear_provider_cache,
     get_llm_provider,
@@ -254,6 +255,7 @@ async def _get_settings_row(session: AsyncSession) -> LLMSettings | None:
 @router.get("/llm", response_model=LLMSettingsResponse)
 async def get_llm_settings(
     session: AsyncSession = Depends(get_session),
+    _admin: User = Depends(require_role("admin")),
 ) -> LLMSettingsResponse:
     """Return current LLM settings (without decrypted keys)."""
     settings_row = await _get_settings_row(session)
@@ -283,6 +285,7 @@ async def get_llm_settings(
 async def update_llm_settings(
     request: LLMSettingsUpdateRequest,
     session: AsyncSession = Depends(get_session),
+    _admin: User = Depends(require_role("admin")),
 ) -> LLMSettingsResponse:
     """Update LLM settings — provider, model, and/or API key."""
     logger.info(
@@ -352,6 +355,7 @@ async def update_llm_settings(
 @router.post("/llm/test", response_model=LLMTestResponse)
 async def test_llm_connection(
     session: AsyncSession = Depends(get_session),
+    _admin: User = Depends(require_role("admin")),
 ) -> LLMTestResponse:
     """Test the currently configured LLM provider with a simple completion."""
     settings_row = await _get_settings_row(session)

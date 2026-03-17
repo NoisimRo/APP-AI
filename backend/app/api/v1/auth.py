@@ -1,6 +1,8 @@
-"""Authentication API — register, login, token refresh, profile."""
+"""Authentication API — register, login, token refresh, profile, email verification."""
 
+import random
 import secrets
+import string
 from datetime import datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -20,6 +22,7 @@ from app.core.deps import get_current_active_user
 from app.core.logging import get_logger
 from app.db.session import get_session
 from app.models.decision import User
+from app.services.email_service import send_verification_email
 
 router = APIRouter()
 logger = get_logger(__name__)
@@ -62,6 +65,19 @@ class ResetPasswordRequest(BaseModel):
 
 class UpdateProfileRequest(BaseModel):
     nume: str | None = Field(None, max_length=200)
+
+
+class VerifyEmailRequest(BaseModel):
+    code: str = Field(..., min_length=6, max_length=6)
+
+
+class ResendVerificationRequest(BaseModel):
+    pass
+
+
+def _generate_verification_code() -> str:
+    """Generate a 6-digit verification code."""
+    return "".join(random.choices(string.digits, k=6))
 
 
 def _user_to_dict(user: User, queries_today: int = 0, queries_limit: int = 5) -> dict:
@@ -110,6 +126,9 @@ async def register(
             detail="Adresa de email este deja înregistrată",
         )
 
+    # Generate verification code
+    code = _generate_verification_code()
+
     user = User(
         email=req.email.lower().strip(),
         nume=req.nume,
@@ -117,12 +136,20 @@ async def register(
         rol="registered",
         activ=True,
         email_verified=False,
+        verification_code=code,
+        verification_code_expires=datetime.utcnow() + timedelta(hours=24),
     )
     session.add(user)
     await session.commit()
     await session.refresh(user)
 
     logger.info("user_registered", email=user.email, user_id=user.id)
+
+    # Send verification email (fire-and-forget, don't block registration)
+    try:
+        await send_verification_email(user.email, code, user.nume)
+    except Exception as e:
+        logger.error("verification_email_failed", email=user.email, error=str(e))
 
     access_token, refresh_token = _create_tokens(user)
     return LoginResponse(
@@ -249,6 +276,80 @@ async def change_password(
     user.password_hash = get_password_hash(req.new_password)
     await session.commit()
     return {"status": "ok", "message": "Parola a fost schimbată cu succes"}
+
+
+@router.post("/verify-email")
+async def verify_email(
+    req: VerifyEmailRequest,
+    user: User = Depends(get_current_active_user),
+    session: AsyncSession = Depends(get_session),
+):
+    """Verify email with 6-digit code sent during registration."""
+    if user.email_verified:
+        return {"status": "ok", "message": "Email-ul este deja verificat"}
+
+    if not user.verification_code:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Nu există un cod de verificare activ. Solicită un cod nou.",
+        )
+
+    if user.verification_code_expires and user.verification_code_expires < datetime.utcnow():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Codul de verificare a expirat. Solicită un cod nou.",
+        )
+
+    if user.verification_code != req.code:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Cod de verificare incorect.",
+        )
+
+    user.email_verified = True
+    user.verification_code = None
+    user.verification_code_expires = None
+    await session.commit()
+
+    logger.info("email_verified", email=user.email, user_id=user.id)
+    return {"status": "ok", "message": "Email verificat cu succes!"}
+
+
+@router.post("/resend-verification")
+async def resend_verification(
+    user: User = Depends(get_current_active_user),
+    session: AsyncSession = Depends(get_session),
+):
+    """Resend email verification code."""
+    if user.email_verified:
+        return {"status": "ok", "message": "Email-ul este deja verificat"}
+
+    # Rate limit: don't resend if code was generated less than 60 seconds ago
+    if (
+        user.verification_code_expires
+        and user.verification_code_expires > datetime.utcnow() + timedelta(hours=23, minutes=59)
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Codul a fost trimis recent. Așteaptă 60 de secunde.",
+        )
+
+    code = _generate_verification_code()
+    user.verification_code = code
+    user.verification_code_expires = datetime.utcnow() + timedelta(hours=24)
+    await session.commit()
+
+    try:
+        await send_verification_email(user.email, code, user.nume)
+    except Exception as e:
+        logger.error("resend_verification_failed", email=user.email, error=str(e))
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Eroare la trimiterea email-ului. Încercați din nou.",
+        )
+
+    logger.info("verification_resent", email=user.email)
+    return {"status": "ok", "message": "Cod de verificare trimis pe email"}
 
 
 @router.post("/forgot-password")
