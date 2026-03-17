@@ -221,6 +221,8 @@ Indexes:
  email_verified        | boolean                     |           | not null | false
  reset_token           | character varying(255)      |           |          |
  reset_token_expires   | timestamp without time zone |           |          |
+ verification_code     | character varying(10)       |           |          |
+ verification_code_expires | timestamp without time zone |           |          |
  metadata              | jsonb                       |           |          | '{}'::jsonb
  created_at            | timestamp without time zone |           | not null | now()
  updated_at            | timestamp without time zone |           | not null | now()
@@ -382,3 +384,5 @@ Foreign-key constraints:
 | 2026-03-16 | `ALTER TABLE users ADD COLUMN email_verified BOOLEAN NOT NULL DEFAULT false` | Utilizator | DA |
 | 2026-03-16 | `ALTER TABLE users ADD COLUMN reset_token VARCHAR(255)` | Utilizator | DA |
 | 2026-03-16 | `ALTER TABLE users ADD COLUMN reset_token_expires TIMESTAMP` | Utilizator | DA |
+| 2026-03-17 | `ALTER TABLE users ADD COLUMN verification_code VARCHAR(10)` | Utilizator | DA |
+| 2026-03-17 | `ALTER TABLE users ADD COLUMN verification_code_expires TIMESTAMP` | Utilizator | DA |

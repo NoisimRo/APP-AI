@@ -1,12 +1,12 @@
 """Email service for sending verification codes and notifications.
 
-Uses SMTP (Gmail, SendGrid, or any SMTP provider).
-Configure via environment variables:
-  - SMTP_HOST (default: smtp.gmail.com)
-  - SMTP_PORT (default: 587)
-  - SMTP_USER (email address)
-  - SMTP_PASSWORD (app password or API key)
+Uses SMTP. Configure via environment variables:
+  - SMTP_HOST (default: mail.exe.org.ro)
+  - SMTP_PORT (default: 26)
+  - SMTP_USER (email address, e.g. asociatia@exe.org.ro)
+  - SMTP_PASSWORD (email account password)
   - SMTP_FROM (sender address, defaults to SMTP_USER)
+  - SMTP_USE_TLS (true/false — use STARTTLS, default: false)
 """
 
 import os
@@ -18,11 +18,12 @@ from app.core.logging import get_logger
 
 logger = get_logger(__name__)
 
-SMTP_HOST = os.getenv("SMTP_HOST", "smtp.gmail.com")
-SMTP_PORT = int(os.getenv("SMTP_PORT", "587"))
+SMTP_HOST = os.getenv("SMTP_HOST", "mail.exe.org.ro")
+SMTP_PORT = int(os.getenv("SMTP_PORT", "26"))
 SMTP_USER = os.getenv("SMTP_USER", "")
 SMTP_PASSWORD = os.getenv("SMTP_PASSWORD", "")
 SMTP_FROM = os.getenv("SMTP_FROM", "") or SMTP_USER
+SMTP_USE_TLS = os.getenv("SMTP_USE_TLS", "false").lower() in ("true", "1", "yes")
 
 
 async def send_verification_email(to_email: str, code: str, name: str | None = None) -> None:
@@ -76,7 +77,8 @@ async def send_verification_email(to_email: str, code: str, name: str | None = N
 
     try:
         with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=10) as server:
-            server.starttls()
+            if SMTP_USE_TLS:
+                server.starttls()
             server.login(SMTP_USER, SMTP_PASSWORD)
             server.send_message(msg)
         logger.info("verification_email_sent", to=to_email)
