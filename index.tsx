@@ -701,8 +701,12 @@ const App = () => {
         body: formData,
       });
       if (!res.ok) {
-        const err = await res.json();
-        setAuthError(err.detail || 'Eroare la autentificare');
+        try {
+          const err = await res.json();
+          setAuthError(err.detail || 'Eroare la autentificare');
+        } catch {
+          setAuthError(`Eroare server (${res.status})`);
+        }
         setAuthLoading(false);
         return;
       }
