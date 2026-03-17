@@ -8,7 +8,7 @@ from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Depends, Query
 from pydantic import BaseModel, Field
-from sqlalchemy import select, func
+from sqlalchemy import select, func, true as sa_true
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -24,15 +24,27 @@ router = APIRouter()
 logger = get_logger(__name__)
 
 
+def _is_admin(user: Optional[User]) -> bool:
+    """Check if user is an admin."""
+    return user is not None and user.rol == "admin"
+
+
 def _ownership_filter(model_class, user: Optional[User]):
-    """Return a SQLAlchemy where clause filtering by ownership."""
+    """Return a SQLAlchemy where clause filtering by ownership.
+
+    Admin users bypass the filter and see all records.
+    """
+    if user and user.rol == "admin":
+        return sa_true()  # No filter — admin sees everything
     if user:
         return model_class.user_id == user.id
     return model_class.user_id.is_(None)
 
 
 def _check_ownership(obj, user: Optional[User]):
-    """Raise 403 if user doesn't own the object."""
+    """Raise 403 if user doesn't own the object. Admin bypasses."""
+    if user and user.rol == "admin":
+        return  # Admin can access everything
     obj_user_id = getattr(obj, "user_id", None)
     if user and obj_user_id != user.id:
         raise HTTPException(403, "Nu aveți acces la această resursă")

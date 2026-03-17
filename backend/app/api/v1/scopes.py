@@ -1,16 +1,38 @@
 """Search Scopes API endpoints — saved filter presets for RAG pre-filtering."""
 
+from typing import Optional
+
 from fastapi import APIRouter, HTTPException, Depends, Query
 from pydantic import BaseModel, Field
-from sqlalchemy import select, func, or_, cast, String
+from sqlalchemy import select, func, or_, cast, String, true as sa_true
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.deps import get_optional_user
 from app.core.logging import get_logger
 from app.db.session import get_session, is_db_available
-from app.models.decision import DecizieCNSC, SearchScope
+from app.models.decision import DecizieCNSC, SearchScope, User
 
 router = APIRouter()
 logger = get_logger(__name__)
+
+
+def _scope_ownership_filter(user: Optional[User]):
+    """Filter scopes by ownership. Admin sees all."""
+    if user and user.rol == "admin":
+        return sa_true()
+    if user:
+        return SearchScope.user_id == user.id
+    return SearchScope.user_id.is_(None)
+
+
+def _check_scope_ownership(scope: SearchScope, user: Optional[User]):
+    """Raise 403 if user doesn't own the scope. Admin bypasses."""
+    if user and user.rol == "admin":
+        return
+    if user and scope.user_id != user.id:
+        raise HTTPException(403, "Nu aveți acces la acest filtru")
+    if not user and scope.user_id is not None:
+        raise HTTPException(403, "Nu aveți acces la acest filtru")
 
 
 class ScopeFilters(BaseModel):
@@ -152,13 +174,16 @@ async def get_scope_decision_ids(
 @router.get("/", response_model=list[ScopeResponse])
 async def list_scopes(
     session: AsyncSession = Depends(get_session),
+    user: Optional[User] = Depends(get_optional_user),
 ):
-    """List all saved search scopes."""
+    """List saved search scopes for the current user."""
     if not is_db_available():
         return []
 
     result = await session.execute(
-        select(SearchScope).order_by(SearchScope.updated_at.desc())
+        select(SearchScope)
+        .where(_scope_ownership_filter(user))
+        .order_by(SearchScope.updated_at.desc())
     )
     scopes = result.scalars().all()
 
@@ -180,6 +205,7 @@ async def list_scopes(
 async def create_scope(
     request: CreateScopeRequest,
     session: AsyncSession = Depends(get_session),
+    user: Optional[User] = Depends(get_optional_user),
 ):
     """Create a new search scope from current filters."""
     if not is_db_available():
@@ -195,6 +221,7 @@ async def create_scope(
         description=request.description,
         filters=filters_dict,
         decision_count=count,
+        user_id=user.id if user else None,
     )
     session.add(scope)
     await session.commit()
@@ -223,6 +250,7 @@ async def update_scope(
     scope_id: str,
     request: UpdateScopeRequest,
     session: AsyncSession = Depends(get_session),
+    user: Optional[User] = Depends(get_optional_user),
 ):
     """Update an existing scope."""
     if not is_db_available():
@@ -234,6 +262,8 @@ async def update_scope(
     scope = result.scalar_one_or_none()
     if not scope:
         raise HTTPException(status_code=404, detail="Scope not found")
+
+    _check_scope_ownership(scope, user)
 
     if request.name is not None:
         scope.name = request.name
@@ -264,6 +294,7 @@ async def update_scope(
 async def delete_scope(
     scope_id: str,
     session: AsyncSession = Depends(get_session),
+    user: Optional[User] = Depends(get_optional_user),
 ):
     """Delete a scope."""
     if not is_db_available():
@@ -275,6 +306,8 @@ async def delete_scope(
     scope = result.scalar_one_or_none()
     if not scope:
         raise HTTPException(status_code=404, detail="Scope not found")
+
+    _check_scope_ownership(scope, user)
 
     await session.delete(scope)
     await session.commit()

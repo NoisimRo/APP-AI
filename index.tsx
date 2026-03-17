@@ -691,7 +691,8 @@ const App = () => {
   // Auth helper: canAccess feature
   const canAccess = (feature: string): boolean => {
     const user = authState.user;
-    if (!user) return ['chat', 'dashboard', 'datalake', 'rag'].includes(feature);
+    // Unregistered users: only chat
+    if (!user) return feature === 'chat';
     const features = ROLE_FEATURES[user.rol];
     if (!features) return false;
     return features.includes(feature);
@@ -939,11 +940,11 @@ const App = () => {
 
   useEffect(() => {
     fetchScopes();
-  }, []);
+  }, [authState.user?.id]);
 
   const deleteScope = async (id: string) => {
     try {
-      const res = await fetch(`/api/v1/scopes/${id}`, { method: 'DELETE' });
+      const res = await authFetch(`/api/v1/scopes/${id}`, { method: 'DELETE' });
       if (res.ok) {
         if (activeScopeId === id) setActiveScopeId(null);
         await fetchScopes();
@@ -955,7 +956,7 @@ const App = () => {
     try {
       const body: any = { name, description };
       if (filters) body.filters = filters;
-      const res = await fetch(`/api/v1/scopes/${id}`, {
+      const res = await authFetch(`/api/v1/scopes/${id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
@@ -1383,7 +1384,7 @@ const App = () => {
         redflags: '/api/v1/saved/redflags',
         training: '/api/v1/saved/training',
       };
-      const res = await fetch(urlMap[type] || '/api/v1/saved/conversations');
+      const res = await authFetch(urlMap[type] || '/api/v1/saved/conversations');
       const data = await res.json();
       setHistoryItems(data);
     } catch { setHistoryItems([]); }
@@ -1392,7 +1393,7 @@ const App = () => {
 
   const loadConversation = async (id: string) => {
     try {
-      const res = await fetch(`/api/v1/saved/conversations/${id}`);
+      const res = await authFetch(`/api/v1/saved/conversations/${id}`);
       const data = await res.json();
       setChatMessages(data.mesaje.map((m: any) => ({ role: m.rol, text: m.continut, citations: m.citations })));
       setHistoryPanel(null);
@@ -1401,7 +1402,7 @@ const App = () => {
 
   const loadDocument = async (id: string, targetMode: AppMode) => {
     try {
-      const res = await fetch(`/api/v1/saved/documents/${id}`);
+      const res = await authFetch(`/api/v1/saved/documents/${id}`);
       const data = await res.json();
       setGeneratedContent(data.continut);
       setGeneratedDecisionRefs(data.referinte_decizii || []);
@@ -1412,7 +1413,7 @@ const App = () => {
 
   const loadRedFlags = async (id: string) => {
     try {
-      const res = await fetch(`/api/v1/saved/redflags/${id}`);
+      const res = await authFetch(`/api/v1/saved/redflags/${id}`);
       const data = await res.json();
       setRedFlagsResults(data.rezultate);
       setSelectedRedFlags([]);
@@ -1425,7 +1426,7 @@ const App = () => {
 
   const loadTraining = async (id: string) => {
     try {
-      const res = await fetch(`/api/v1/saved/training/${id}`);
+      const res = await authFetch(`/api/v1/saved/training/${id}`);
       const data = await res.json();
       setTrainingResult(data.full_content);
       setTrainingTema(data.tema);
@@ -1449,7 +1450,7 @@ const App = () => {
       training: `/api/v1/saved/training/${id}`,
     };
     try {
-      await fetch(urlMap[type], { method: 'DELETE' });
+      await authFetch(urlMap[type], { method: 'DELETE' });
       setHistoryItems(prev => prev.filter(item => item.id !== id));
     } catch { showSaveToast(false, 'Eroare la ștergere'); }
   };
@@ -1883,8 +1884,20 @@ const App = () => {
         <div>
            <div className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3 px-2">Workspace</div>
            <SidebarItem icon={MessageSquare} label="Asistent AP" active={mode === 'chat'} onClick={() => { setMode('chat'); setSidebarOpen(false); }} />
-           <SidebarItem icon={Filter} label="Filtrare date" active={mode === 'datalake'} onClick={() => { setMode('datalake'); setSidebarOpen(false); }} badge={files.length} />
-           <SidebarItem icon={LayoutDashboard} label="Dashboard" active={mode === 'dashboard'} onClick={() => { setMode('dashboard'); setSidebarOpen(false); }} />
+           {canAccess('datalake') ? (
+             <SidebarItem icon={Filter} label="Filtrare date" active={mode === 'datalake'} onClick={() => { setMode('datalake'); setSidebarOpen(false); }} badge={files.length} />
+           ) : (
+             <div className="opacity-50 cursor-not-allowed" title="Creează un cont gratuit">
+               <SidebarItem icon={Filter} label="Filtrare date" active={false} onClick={() => setShowAuthModal(true)} />
+             </div>
+           )}
+           {canAccess('dashboard') ? (
+             <SidebarItem icon={LayoutDashboard} label="Dashboard" active={mode === 'dashboard'} onClick={() => { setMode('dashboard'); setSidebarOpen(false); }} />
+           ) : (
+             <div className="opacity-50 cursor-not-allowed" title="Creează un cont gratuit">
+               <SidebarItem icon={LayoutDashboard} label="Dashboard" active={false} onClick={() => setShowAuthModal(true)} />
+             </div>
+           )}
         </div>
 
         <div>
@@ -1910,7 +1923,13 @@ const App = () => {
                <SidebarItem icon={Search} label="Clarificări" active={false} onClick={() => setShowAuthModal(true)} />
              </div>
            )}
-           <SidebarItem icon={BookOpen} label="Jurisprudență RAG" active={mode === 'rag'} onClick={() => { setMode('rag'); setSidebarOpen(false); }} />
+           {canAccess('rag') ? (
+             <SidebarItem icon={BookOpen} label="Jurisprudență RAG" active={mode === 'rag'} onClick={() => { setMode('rag'); setSidebarOpen(false); }} />
+           ) : (
+             <div className="opacity-50 cursor-not-allowed" title="Creează un cont gratuit">
+               <SidebarItem icon={BookOpen} label="Jurisprudență RAG" active={false} onClick={() => setShowAuthModal(true)} />
+             </div>
+           )}
         </div>
 
         <div>
