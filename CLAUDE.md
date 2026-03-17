@@ -40,6 +40,33 @@ DATABASE_URL="postgresql+asyncpg://..." python scripts/generate_embeddings.py
 - **Auth:** JWT-based (python-jose + bcrypt), `backend/app/core/auth.py` + `deps.py`. Role-based feature gating + in-memory rate limiting per role.
 - **Database Models:** `backend/app/models/decision.py` - DecizieCNSC, ArgumentareCritica, User, Conversatie, MesajConversatie, DocumentGenerat, RedFlagsSalvate, TrainingMaterial, etc.
 
+### ⚠️ asyncpg Gotchas (PostgreSQL async driver)
+
+**Regulile de mai jos sunt OBLIGATORII** pentru a evita erori 500 greu de depanat:
+
+1. **NICIODATĂ `datetime.now(timezone.utc)`** pentru coloane `timestamp without time zone`. asyncpg aruncă `InterfaceError` dacă primește un datetime timezone-aware într-o coloană timezone-naive. Folosește `datetime.utcnow()` sau `func.now()` (server-side).
+   ```python
+   # ❌ GREȘIT — crash cu asyncpg
+   user.last_login = datetime.now(timezone.utc)
+
+   # ✅ CORECT — naive UTC, compatibil cu coloana
+   user.last_login = datetime.utcnow()
+
+   # ✅ CORECT — server-side default în model
+   created_at = Column(DateTime, server_default=func.now())
+   ```
+
+2. **UUID-urile din asyncpg** sunt obiecte `uuid.UUID`, nu string-uri. Când le pui în dict-uri sau JWT payloads, folosește `str(user.id)`. Pydantic v2 le serializează automat, dar `json.dumps()` și `jose.jwt.encode()` nu.
+   ```python
+   # ❌ GREȘIT — jwt.encode nu știe să serializeze UUID
+   token_data = {"sub": user.id}
+
+   # ✅ CORECT
+   token_data = {"sub": str(user.id)}
+   ```
+
+3. **Preferă `server_default=func.now()`** în modelele SQLAlchemy pentru `created_at`/`updated_at` în loc de `default=datetime.utcnow` — lasă PostgreSQL să genereze timestamp-ul.
+
 ## Key Files
 
 | File | Purpose |
