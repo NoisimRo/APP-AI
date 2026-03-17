@@ -1,7 +1,7 @@
 """Authentication API — register, login, token refresh, profile."""
 
 import secrets
-from datetime import datetime, timezone
+from datetime import datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm
@@ -69,7 +69,7 @@ def _user_to_dict(user: User, queries_today: int = 0, queries_limit: int = 5) ->
     from app.core.rate_limiter import ROLE_LIMITS
     limit = ROLE_LIMITS.get(user.rol, 5)
     return {
-        "id": user.id,
+        "id": str(user.id),
         "email": user.email,
         "nume": user.nume,
         "rol": user.rol,
@@ -83,7 +83,7 @@ def _user_to_dict(user: User, queries_today: int = 0, queries_limit: int = 5) ->
 
 def _create_tokens(user: User) -> tuple[str, str]:
     """Create access + refresh token pair for a user."""
-    token_data = {"sub": user.id, "email": user.email, "rol": user.rol}
+    token_data = {"sub": str(user.id), "email": user.email, "rol": user.rol}
     return (
         create_access_token(token_data),
         create_refresh_token(token_data),
@@ -161,8 +161,8 @@ async def login(
             detail="Contul este dezactivat",
         )
 
-    # Update last_login
-    user.last_login = datetime.now(timezone.utc)
+    # Update last_login (naive UTC — column is 'timestamp without time zone')
+    user.last_login = datetime.utcnow()
     await session.commit()
 
     logger.info("user_login", email=user.email, user_id=user.id)
@@ -266,9 +266,7 @@ async def forgot_password(
         # Generate reset token
         raw_token = secrets.token_urlsafe(32)
         user.reset_token = get_password_hash(raw_token)
-        user.reset_token_expires = datetime.now(timezone.utc).replace(
-            hour=datetime.now(timezone.utc).hour + 1
-        )
+        user.reset_token_expires = datetime.utcnow() + timedelta(hours=1)
         await session.commit()
 
         # TODO: Send email with reset link containing raw_token
@@ -291,7 +289,7 @@ async def reset_password(
     result = await session.execute(
         select(User).where(
             User.reset_token.isnot(None),
-            User.reset_token_expires > datetime.now(timezone.utc),
+            User.reset_token_expires > datetime.utcnow(),
         )
     )
     users = result.scalars().all()
