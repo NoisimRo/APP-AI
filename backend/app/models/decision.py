@@ -527,6 +527,8 @@ class User(Base):
     )
     reset_token: Mapped[Optional[str]] = mapped_column(String(255))
     reset_token_expires: Mapped[Optional[datetime]] = mapped_column(DateTime)
+    verification_code: Mapped[Optional[str]] = mapped_column(String(10))
+    verification_code_expires: Mapped[Optional[datetime]] = mapped_column(DateTime)
     metadata_: Mapped[Optional[dict]] = mapped_column(
         "metadata", JSONB, default=dict
     )

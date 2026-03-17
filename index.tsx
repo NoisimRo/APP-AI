@@ -53,7 +53,7 @@ import {
 
 // --- Types ---
 
-type AppMode = 'dashboard' | 'datalake' | 'drafter' | 'redflags' | 'chat' | 'clarification' | 'rag' | 'training' | 'settings' | 'profile';
+type AppMode = 'dashboard' | 'datalake' | 'drafter' | 'redflags' | 'chat' | 'clarification' | 'rag' | 'training' | 'settings' | 'profile' | 'pricing';
 
 interface AuthUser {
   id: string;
@@ -61,6 +61,8 @@ interface AuthUser {
   nume: string | null;
   rol: string;
   activ: boolean;
+  email_verified: boolean;
+  created_at: string | null;
   queries_today: number;
   queries_limit: number;
 }
@@ -286,11 +288,11 @@ const authFetchStream = async (
 
 // Feature access rules per role
 const ROLE_FEATURES: Record<string, string[]> = {
-  registered: ['chat', 'dashboard', 'datalake', 'rag'],
-  paid_basic: ['chat', 'dashboard', 'datalake', 'rag', 'drafter', 'redflags', 'clarification'],
-  paid_pro: ['chat', 'dashboard', 'datalake', 'rag', 'drafter', 'redflags', 'clarification', 'training', 'export', 'settings'],
-  paid_enterprise: ['chat', 'dashboard', 'datalake', 'rag', 'drafter', 'redflags', 'clarification', 'training', 'export', 'settings'],
-  admin: ['chat', 'dashboard', 'datalake', 'rag', 'drafter', 'redflags', 'clarification', 'training', 'export', 'settings', 'profile'],
+  registered: ['chat', 'dashboard', 'datalake', 'rag', 'profile', 'pricing'],
+  paid_basic: ['chat', 'dashboard', 'datalake', 'rag', 'drafter', 'redflags', 'clarification', 'profile', 'pricing'],
+  paid_pro: ['chat', 'dashboard', 'datalake', 'rag', 'drafter', 'redflags', 'clarification', 'training', 'export', 'profile', 'pricing'],
+  paid_enterprise: ['chat', 'dashboard', 'datalake', 'rag', 'drafter', 'redflags', 'clarification', 'training', 'export', 'profile', 'pricing'],
+  admin: ['chat', 'dashboard', 'datalake', 'rag', 'drafter', 'redflags', 'clarification', 'training', 'export', 'settings', 'profile', 'pricing'],
 };
 
 const PLAN_LABELS: Record<string, string> = {
@@ -647,6 +649,22 @@ const App = () => {
   const [authError, setAuthError] = useState('');
   const [authLoading, setAuthLoading] = useState(false);
 
+  // Profile State
+  const [profileCurrentPassword, setProfileCurrentPassword] = useState('');
+  const [profileNewPassword, setProfileNewPassword] = useState('');
+  const [profileConfirmPassword, setProfileConfirmPassword] = useState('');
+  const [profileNume, setProfileNume] = useState('');
+  const [profileMessage, setProfileMessage] = useState<{type: 'success' | 'error', text: string} | null>(null);
+  const [profileLoading, setProfileLoading] = useState(false);
+  const [verificationCode, setVerificationCode] = useState('');
+  const [verificationLoading, setVerificationLoading] = useState(false);
+  const [verificationMessage, setVerificationMessage] = useState<{type: 'success' | 'error', text: string} | null>(null);
+
+  // Initialize profile name when user loads or changes
+  useEffect(() => {
+    if (authState.user?.nume) setProfileNume(authState.user.nume);
+  }, [authState.user?.nume]);
+
   // Mobile Sidebar State
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
@@ -843,8 +861,8 @@ const App = () => {
   };
 
   useEffect(() => {
-    fetchLLMSettings();
-  }, []);
+    if (authState.user?.rol === 'admin') fetchLLMSettings();
+  }, [authState.user?.rol]);
 
   // Fetch search scopes
   const fetchScopes = async () => {
@@ -1451,6 +1469,7 @@ const App = () => {
     } finally {
       setIsLoading(false);
       setStreamStatus("");
+      refreshAuthUser();
     }
   };
 
@@ -1488,6 +1507,7 @@ const App = () => {
     } finally {
       setIsLoading(false);
       setStreamStatus("");
+      refreshAuthUser();
     }
   };
 
@@ -1728,6 +1748,7 @@ const App = () => {
     } finally {
       setIsLoading(false);
       setStreamStatus("");
+      refreshAuthUser();
     }
   };
 
@@ -1744,6 +1765,8 @@ const App = () => {
     rag: 'Jurisprudență RAG',
     training: 'TrainingAP',
     settings: 'Setări LLM',
+    profile: 'Profil',
+    pricing: 'Planuri & Prețuri',
   };
 
   const renderSidebar = () => (
@@ -1838,7 +1861,10 @@ const App = () => {
 
         <div>
            <div className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3 px-2">Sistem</div>
-           <SidebarItem icon={Settings} label="Setări LLM" active={mode === 'settings'} onClick={() => { setMode('settings'); setSidebarOpen(false); }} />
+           {canAccess('settings') && (
+             <SidebarItem icon={Settings} label="Setări LLM" active={mode === 'settings'} onClick={() => { setMode('settings'); setSidebarOpen(false); }} />
+           )}
+           <SidebarItem icon={Package} label="Planuri & Prețuri" active={mode === 'pricing'} onClick={() => { setMode('pricing'); setSidebarOpen(false); }} />
         </div>
       </nav>
 
@@ -1847,17 +1873,23 @@ const App = () => {
         {authState.user ? (
           <div>
             <div className="flex items-center gap-3">
-              <div className="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center text-white font-bold text-xs shrink-0">
+              <div className="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center text-white font-bold text-xs shrink-0 cursor-pointer hover:ring-2 hover:ring-blue-400 transition-all" onClick={() => { setMode('profile'); setSidebarOpen(false); }} title="Profil">
                 {(authState.user.nume || authState.user.email)[0].toUpperCase()}
               </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-sm text-white font-medium truncate">{authState.user.nume || authState.user.email}</p>
+              <div className="flex-1 min-w-0 cursor-pointer" onClick={() => { setMode('profile'); setSidebarOpen(false); }} title="Profil">
+                <p className="text-sm text-white font-medium truncate hover:text-blue-300 transition-colors">{authState.user.nume || authState.user.email}</p>
                 <p className="text-xs text-slate-400">{PLAN_LABELS[authState.user.rol] || authState.user.rol}</p>
               </div>
               <button onClick={handleLogout} className="text-slate-400 hover:text-white p-1" title="Deconectare">
                 <LogOut size={16} />
               </button>
             </div>
+            {!authState.user.email_verified && (
+              <div className="mt-2 p-2 rounded-lg bg-yellow-500/10 border border-yellow-500/30 cursor-pointer hover:bg-yellow-500/20 transition-colors" onClick={() => { setMode('profile'); setSidebarOpen(false); }}>
+                <p className="text-xs text-yellow-400 font-medium">Email neverificat</p>
+                <p className="text-[10px] text-yellow-500/70">Click pentru verificare</p>
+              </div>
+            )}
             <div className="mt-2">
               <div className="flex justify-between text-xs text-slate-500 mb-1">
                 <span>{authState.user.queries_today}/{authState.user.queries_limit} interogări azi</span>
@@ -1867,7 +1899,7 @@ const App = () => {
               </div>
             </div>
             {/* LLM provider mini-info */}
-            <div className="mt-2 flex items-center gap-2 cursor-pointer hover:bg-slate-800/50 rounded p-1 -mx-1" onClick={() => { setMode('settings'); setSidebarOpen(false); }}>
+            <div className={`mt-2 flex items-center gap-2 rounded p-1 -mx-1 ${canAccess('settings') ? 'cursor-pointer hover:bg-slate-800/50' : ''}`} onClick={() => { if (canAccess('settings')) { setMode('settings'); setSidebarOpen(false); } }}>
               <div className={`w-5 h-5 rounded-full flex items-center justify-center text-white font-bold text-[8px] ${
                 llmSettings?.active_provider === 'anthropic' ? 'bg-orange-500' : llmSettings?.active_provider === 'groq' ? 'bg-purple-500' : llmSettings?.active_provider === 'openai' ? 'bg-green-500' : 'bg-blue-500'
               }`}>AI</div>
@@ -3053,8 +3085,8 @@ const App = () => {
           selected_types: trainingSelectedTypes.length > 0 ? trainingSelectedTypes : undefined,
         },
         (text) => setTrainingResult(prev => prev + text),
-        (meta) => { setTrainingMeta(meta); setTrainingLoading(false); },
-        (error) => { setTrainingResult(prev => prev + `\n\n**Eroare:** ${error}`); setTrainingLoading(false); },
+        (meta) => { setTrainingMeta(meta); setTrainingLoading(false); refreshAuthUser(); },
+        (error) => { setTrainingResult(prev => prev + `\n\n**Eroare:** ${error}`); setTrainingLoading(false); refreshAuthUser(); },
       );
       return;
     }
@@ -3092,6 +3124,7 @@ const App = () => {
 
       setTrainingBatchProgress(null);
       setTrainingLoading(false);
+      refreshAuthUser();
       return;
     }
 
@@ -3102,8 +3135,8 @@ const App = () => {
       '/api/v1/training/generate/stream',
       buildTrainingRequestBody(),
       (text) => setTrainingResult(prev => prev + text),
-      (meta) => { setTrainingMeta(meta); setTrainingLoading(false); },
-      (error) => { setTrainingResult(prev => prev + `\n\n**Eroare:** ${error}`); setTrainingLoading(false); },
+      (meta) => { setTrainingMeta(meta); setTrainingLoading(false); refreshAuthUser(); },
+      (error) => { setTrainingResult(prev => prev + `\n\n**Eroare:** ${error}`); setTrainingLoading(false); refreshAuthUser(); },
     );
   };
 
@@ -3613,6 +3646,336 @@ const App = () => {
               </p>
             </div>
           )}
+        </div>
+      </div>
+    );
+  };
+
+  const renderProfile = () => {
+    const user = authState.user;
+    if (!user) return null;
+
+    const handleUpdateName = async () => {
+      if (!profileNume.trim() || profileNume === user.nume) return;
+      setProfileLoading(true);
+      setProfileMessage(null);
+      try {
+        const res = await authFetch('/api/v1/auth/me', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ nume: profileNume.trim() }),
+        });
+        if (res.ok) {
+          const data = await res.json();
+          setAuthState(prev => ({ ...prev, user: data }));
+          setProfileMessage({ type: 'success', text: 'Numele a fost actualizat' });
+        } else {
+          const err = await res.json();
+          setProfileMessage({ type: 'error', text: err.detail || 'Eroare' });
+        }
+      } catch { setProfileMessage({ type: 'error', text: 'Eroare de rețea' }); }
+      setProfileLoading(false);
+    };
+
+    const handleChangePassword = async () => {
+      if (!profileCurrentPassword || !profileNewPassword) return;
+      if (profileNewPassword !== profileConfirmPassword) {
+        setProfileMessage({ type: 'error', text: 'Parolele noi nu coincid' });
+        return;
+      }
+      if (profileNewPassword.length < 8) {
+        setProfileMessage({ type: 'error', text: 'Parola nouă trebuie să aibă minim 8 caractere' });
+        return;
+      }
+      setProfileLoading(true);
+      setProfileMessage(null);
+      try {
+        const res = await authFetch('/api/v1/auth/change-password', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ current_password: profileCurrentPassword, new_password: profileNewPassword }),
+        });
+        if (res.ok) {
+          setProfileMessage({ type: 'success', text: 'Parola a fost schimbată cu succes' });
+          setProfileCurrentPassword(''); setProfileNewPassword(''); setProfileConfirmPassword('');
+        } else {
+          const err = await res.json();
+          setProfileMessage({ type: 'error', text: err.detail || 'Eroare' });
+        }
+      } catch { setProfileMessage({ type: 'error', text: 'Eroare de rețea' }); }
+      setProfileLoading(false);
+    };
+
+    const handleVerifyEmail = async () => {
+      if (!verificationCode || verificationCode.length !== 6) {
+        setVerificationMessage({ type: 'error', text: 'Introdu codul de 6 cifre' });
+        return;
+      }
+      setVerificationLoading(true);
+      setVerificationMessage(null);
+      try {
+        const res = await authFetch('/api/v1/auth/verify-email', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ code: verificationCode }),
+        });
+        if (res.ok) {
+          setVerificationMessage({ type: 'success', text: 'Email verificat cu succes!' });
+          setVerificationCode('');
+          refreshAuthUser();
+        } else {
+          const err = await res.json();
+          setVerificationMessage({ type: 'error', text: err.detail || 'Eroare' });
+        }
+      } catch { setVerificationMessage({ type: 'error', text: 'Eroare de rețea' }); }
+      setVerificationLoading(false);
+    };
+
+    const handleResendCode = async () => {
+      setVerificationLoading(true);
+      setVerificationMessage(null);
+      try {
+        const res = await authFetch('/api/v1/auth/resend-verification', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+        });
+        if (res.ok) {
+          setVerificationMessage({ type: 'success', text: 'Cod trimis pe email' });
+        } else {
+          const err = await res.json();
+          setVerificationMessage({ type: 'error', text: err.detail || 'Eroare' });
+        }
+      } catch { setVerificationMessage({ type: 'error', text: 'Eroare de rețea' }); }
+      setVerificationLoading(false);
+    };
+
+    return (
+      <div className="h-full overflow-y-auto bg-slate-50/50 p-4 md:p-8">
+        <div className="max-w-2xl mx-auto">
+          <h2 className="text-xl md:text-2xl font-bold text-slate-800 mb-1 flex items-center gap-3">
+            <UserCircle className="text-blue-500" size={24} /> Profil utilizator
+          </h2>
+          <p className="text-sm text-slate-500 mb-6 md:mb-8">Gestionează contul și setările de securitate.</p>
+
+          {/* Account Info */}
+          <div className="bg-white rounded-xl border border-slate-200 p-6 mb-6 shadow-sm">
+            <h3 className="text-sm font-bold text-slate-600 uppercase tracking-wider mb-4">Informații cont</h3>
+            <div className="space-y-3">
+              <div className="flex items-center justify-between py-2 border-b border-slate-100">
+                <span className="text-sm text-slate-500">Email</span>
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-medium text-slate-800">{user.email}</span>
+                  {user.email_verified ? (
+                    <span className="text-[10px] text-green-600 bg-green-50 px-1.5 py-0.5 rounded-full font-medium flex items-center gap-1"><CheckCircle size={10}/> Verificat</span>
+                  ) : (
+                    <span className="text-[10px] text-yellow-600 bg-yellow-50 px-1.5 py-0.5 rounded-full font-medium">Neverificat</span>
+                  )}
+                </div>
+              </div>
+              <div className="flex items-center justify-between py-2 border-b border-slate-100">
+                <span className="text-sm text-slate-500">Plan curent</span>
+                <span className="text-sm font-medium text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full">{PLAN_LABELS[user.rol] || user.rol}</span>
+              </div>
+              <div className="flex items-center justify-between py-2 border-b border-slate-100">
+                <span className="text-sm text-slate-500">Interogări azi</span>
+                <span className="text-sm font-medium text-slate-800">{user.queries_today} / {user.queries_limit}</span>
+              </div>
+              {user.created_at && (
+                <div className="flex items-center justify-between py-2">
+                  <span className="text-sm text-slate-500">Membru din</span>
+                  <span className="text-sm font-medium text-slate-800">{new Date(user.created_at).toLocaleDateString('ro-RO', { year: 'numeric', month: 'long', day: 'numeric' })}</span>
+                </div>
+              )}
+            </div>
+            {user.rol !== 'admin' && (
+              <button onClick={() => { setMode('pricing'); }} className="mt-4 w-full text-sm text-blue-600 bg-blue-50 hover:bg-blue-100 py-2 rounded-lg font-medium transition-colors">
+                Upgrade plan
+              </button>
+            )}
+          </div>
+
+          {/* Email Verification */}
+          {!user.email_verified && (
+            <div className="bg-yellow-50 rounded-xl border border-yellow-200 p-6 mb-6 shadow-sm">
+              <h3 className="text-sm font-bold text-yellow-700 uppercase tracking-wider mb-2 flex items-center gap-2">
+                <Shield size={16} /> Verificare email
+              </h3>
+              <p className="text-sm text-yellow-600 mb-4">Introdu codul de 6 cifre trimis pe adresa <strong>{user.email}</strong></p>
+              <div className="flex gap-3">
+                <input
+                  type="text"
+                  value={verificationCode}
+                  onChange={e => setVerificationCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                  placeholder="000000"
+                  className="flex-1 p-3 rounded-lg bg-white border border-yellow-300 text-center text-lg font-mono tracking-[0.5em] focus:ring-2 focus:ring-yellow-500 outline-none"
+                  maxLength={6}
+                  onKeyDown={e => e.key === 'Enter' && handleVerifyEmail()}
+                />
+                <button onClick={handleVerifyEmail} disabled={verificationLoading} className="px-6 bg-yellow-600 text-white rounded-lg font-medium hover:bg-yellow-700 disabled:opacity-50 transition-colors">
+                  {verificationLoading ? 'Se verifică...' : 'Verifică'}
+                </button>
+              </div>
+              <button onClick={handleResendCode} disabled={verificationLoading} className="mt-3 text-sm text-yellow-600 hover:text-yellow-800 underline transition-colors">
+                Retrimite codul
+              </button>
+              {verificationMessage && (
+                <div className={`mt-3 p-3 rounded-lg text-sm font-medium ${verificationMessage.type === 'success' ? 'bg-green-50 text-green-700 border border-green-200' : 'bg-red-50 text-red-700 border border-red-200'}`}>
+                  {verificationMessage.text}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Edit Name */}
+          <div className="bg-white rounded-xl border border-slate-200 p-6 mb-6 shadow-sm">
+            <h3 className="text-sm font-bold text-slate-600 uppercase tracking-wider mb-4">Editează numele</h3>
+            <input
+              type="text"
+              value={profileNume}
+              onChange={e => setProfileNume(e.target.value)}
+              placeholder={user.nume || 'Introdu numele tău'}
+              className="w-full p-3 rounded-lg bg-slate-50 border border-slate-300 text-sm focus:ring-2 focus:ring-blue-500 outline-none mb-3"
+            />
+            <button onClick={handleUpdateName} disabled={profileLoading || !profileNume.trim()} className="w-full py-2.5 rounded-lg bg-blue-600 text-white font-medium text-sm hover:bg-blue-700 disabled:opacity-50 transition-colors">
+              {profileLoading ? 'Se salvează...' : 'Salvează numele'}
+            </button>
+          </div>
+
+          {/* Change Password */}
+          <div className="bg-white rounded-xl border border-slate-200 p-6 mb-6 shadow-sm">
+            <h3 className="text-sm font-bold text-slate-600 uppercase tracking-wider mb-4 flex items-center gap-2">
+              <Lock size={16} /> Schimbă parola
+            </h3>
+            <div className="space-y-3">
+              <input
+                type="password"
+                value={profileCurrentPassword}
+                onChange={e => setProfileCurrentPassword(e.target.value)}
+                placeholder="Parola curentă"
+                className="w-full p-3 rounded-lg bg-slate-50 border border-slate-300 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+              />
+              <input
+                type="password"
+                value={profileNewPassword}
+                onChange={e => setProfileNewPassword(e.target.value)}
+                placeholder="Parola nouă (minim 8 caractere)"
+                className="w-full p-3 rounded-lg bg-slate-50 border border-slate-300 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+              />
+              <input
+                type="password"
+                value={profileConfirmPassword}
+                onChange={e => setProfileConfirmPassword(e.target.value)}
+                placeholder="Confirmă parola nouă"
+                className="w-full p-3 rounded-lg bg-slate-50 border border-slate-300 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                onKeyDown={e => e.key === 'Enter' && handleChangePassword()}
+              />
+            </div>
+            <button onClick={handleChangePassword} disabled={profileLoading || !profileCurrentPassword || !profileNewPassword} className="w-full mt-4 py-2.5 rounded-lg bg-slate-800 text-white font-medium text-sm hover:bg-slate-900 disabled:opacity-50 transition-colors">
+              {profileLoading ? 'Se schimbă...' : 'Schimbă parola'}
+            </button>
+          </div>
+
+          {/* Messages */}
+          {profileMessage && (
+            <div className={`p-4 rounded-lg mb-4 text-sm font-medium ${profileMessage.type === 'success' ? 'bg-green-50 text-green-700 border border-green-200' : 'bg-red-50 text-red-700 border border-red-200'}`}>
+              {profileMessage.text}
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  };
+
+  const renderPricing = () => {
+    const plans = [
+      {
+        id: 'registered',
+        name: 'Free',
+        price: 'Gratuit',
+        features: ['Chat AI (5 interogări/zi)', 'Dashboard', 'Data Lake', 'Jurisprudență RAG'],
+        color: 'slate',
+      },
+      {
+        id: 'paid_basic',
+        name: 'Basic',
+        price: 'Contactează-ne',
+        features: ['Tot ce include Free', 'Drafter Contestații', 'Red Flags Detector', 'Clarificări', '20 interogări/zi'],
+        color: 'blue',
+        popular: true,
+      },
+      {
+        id: 'paid_pro',
+        name: 'Pro',
+        price: 'Contactează-ne',
+        features: ['Tot ce include Basic', 'TrainingAP', 'Export materiale', '100 interogări/zi'],
+        color: 'purple',
+      },
+      {
+        id: 'paid_enterprise',
+        name: 'Enterprise',
+        price: 'Contactează-ne',
+        features: ['Tot ce include Pro', 'Acces API', 'Interogări nelimitate', 'Suport dedicat'],
+        color: 'amber',
+      },
+    ];
+
+    const currentPlan = authState.user?.rol || 'registered';
+
+    return (
+      <div className="h-full overflow-y-auto bg-slate-50/50 p-4 md:p-8">
+        <div className="max-w-4xl mx-auto">
+          <div className="text-center mb-8">
+            <h2 className="text-xl md:text-2xl font-bold text-slate-800 mb-2">Planuri și prețuri</h2>
+            <p className="text-sm text-slate-500">Alege planul potrivit pentru nevoile tale în achiziții publice.</p>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            {plans.map(plan => {
+              const isCurrent = currentPlan === plan.id;
+              const borderColor = plan.popular ? 'border-blue-500 ring-2 ring-blue-200' : 'border-slate-200';
+              return (
+                <div key={plan.id} className={`bg-white rounded-xl border-2 ${isCurrent ? 'border-green-500 ring-2 ring-green-200' : borderColor} p-6 shadow-sm flex flex-col relative`}>
+                  {plan.popular && !isCurrent && (
+                    <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-blue-600 text-white text-[10px] font-bold px-3 py-1 rounded-full uppercase tracking-wider">Popular</div>
+                  )}
+                  {isCurrent && (
+                    <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-green-600 text-white text-[10px] font-bold px-3 py-1 rounded-full uppercase tracking-wider">Planul tău</div>
+                  )}
+                  <h3 className="text-lg font-bold text-slate-800 mb-1">{plan.name}</h3>
+                  <p className="text-2xl font-bold text-slate-900 mb-4">{plan.price}</p>
+                  <ul className="space-y-2 flex-1 mb-6">
+                    {plan.features.map((f, i) => (
+                      <li key={i} className="text-sm text-slate-600 flex items-start gap-2">
+                        <CheckCircle size={14} className="text-green-500 shrink-0 mt-0.5" />
+                        {f}
+                      </li>
+                    ))}
+                  </ul>
+                  {isCurrent ? (
+                    <div className="w-full py-2.5 rounded-lg bg-green-50 text-green-700 font-medium text-sm text-center border border-green-200">
+                      Plan activ
+                    </div>
+                  ) : plan.id === 'registered' ? (
+                    <div className="w-full py-2.5 rounded-lg bg-slate-50 text-slate-400 font-medium text-sm text-center border border-slate-200">
+                      Plan gratuit
+                    </div>
+                  ) : (
+                    <a href="mailto:contact@expertap.ro?subject=Upgrade%20plan%20ExpertAP%20-%20{plan.name}" className="w-full py-2.5 rounded-lg bg-blue-600 text-white font-medium text-sm text-center hover:bg-blue-700 transition-colors block">
+                      Solicită upgrade
+                    </a>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+
+          <div className="mt-8 bg-white rounded-xl border border-slate-200 p-6 shadow-sm text-center">
+            <h3 className="text-sm font-bold text-slate-600 mb-2">Ai nevoie de un plan personalizat?</h3>
+            <p className="text-sm text-slate-500 mb-4">Contactează-ne pentru oferte speciale pentru firme de avocatură sau echipe mari.</p>
+            <a href="mailto:contact@expertap.ro?subject=Plan%20personalizat%20ExpertAP" className="inline-flex items-center gap-2 text-sm text-blue-600 font-medium hover:text-blue-800 transition-colors">
+              contact@expertap.ro
+            </a>
+          </div>
         </div>
       </div>
     );
@@ -4513,6 +4876,8 @@ const App = () => {
         )}
         {mode === 'training' && renderTraining()}
         {mode === 'settings' && renderSettings()}
+        {mode === 'profile' && renderProfile()}
+        {mode === 'pricing' && renderPricing()}
         </div>
 
         {/* Save Toast */}
