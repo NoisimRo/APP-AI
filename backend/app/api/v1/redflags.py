@@ -1,13 +1,17 @@
 """Red flags detection API endpoints."""
 
 import asyncio
+from typing import Optional
 
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, Request
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.logging import get_logger
+from app.core.deps import require_feature
+from app.core.rate_limiter import require_rate_limit, increment_usage
 from app.db.session import get_session
+from app.models.decision import User
 from app.services.llm.factory import get_active_llm_provider
 from app.services.llm.streaming import create_sse_response
 from app.services.redflags_analyzer import RedFlagsAnalyzer
@@ -63,7 +67,10 @@ class RedFlagsResponse(BaseModel):
 @router.post("/", response_model=RedFlagsResponse)
 async def analyze_red_flags(
     request: RedFlagsRequest,
-    session: AsyncSession = Depends(get_session)
+    http_request: Request,
+    session: AsyncSession = Depends(get_session),
+    rate_user: Optional[User] = Depends(require_rate_limit),
+    _feature: Optional[User] = Depends(require_feature("redflags")),
 ) -> RedFlagsResponse:
     """Analyze procurement document for red flags.
 
@@ -135,6 +142,8 @@ async def analyze_red_flags(
             grounded=request.use_jurisprudence,
         )
 
+        increment_usage(rate_user, http_request)
+
         return RedFlagsResponse(
             red_flags=red_flags,
             total_count=len(red_flags),
@@ -181,7 +190,10 @@ class RedFlagsClarificationRequest(BaseModel):
 @router.post("/clarification/stream")
 async def generate_redflags_clarification_stream(
     request: RedFlagsClarificationRequest,
+    http_request: Request,
     session: AsyncSession = Depends(get_session),
+    rate_user: Optional[User] = Depends(require_rate_limit),
+    _feature: Optional[User] = Depends(require_feature("redflags")),
 ):
     """Generate a formal clarification request from selected red flags via SSE streaming.
 

@@ -210,16 +210,21 @@ Indexes:
 
 # \d users
                               Table "public.users"
-     Column    |            Type             | Collation | Nullable |       Default
----------------+-----------------------------+-----------+----------+--------------------
- id            | uuid                        |           | not null | gen_random_uuid()
- email         | character varying(255)      |           |          |
- nume          | character varying(200)      |           |          |
- rol           | character varying(30)       |           | not null | 'registered'::character varying
- activ         | boolean                     |           | not null | true
- metadata      | jsonb                       |           |          | '{}'::jsonb
- created_at    | timestamp without time zone |           | not null | now()
- updated_at    | timestamp without time zone |           | not null | now()
+         Column        |            Type             | Collation | Nullable |       Default
+-----------------------+-----------------------------+-----------+----------+--------------------
+ id                    | uuid                        |           | not null | gen_random_uuid()
+ email                 | character varying(255)      |           |          |
+ nume                  | character varying(200)      |           |          |
+ password_hash         | character varying(255)      |           |          |
+ rol                   | character varying(30)       |           | not null | 'registered'::character varying
+ activ                 | boolean                     |           | not null | true
+ email_verified        | boolean                     |           | not null | false
+ reset_token           | character varying(255)      |           |          |
+ reset_token_expires   | timestamp without time zone |           |          |
+ metadata              | jsonb                       |           |          | '{}'::jsonb
+ created_at            | timestamp without time zone |           | not null | now()
+ updated_at            | timestamp without time zone |           | not null | now()
+ last_login            | timestamp without time zone |           |          |
 Indexes:
     "users_pkey" PRIMARY KEY, btree (id)
     "users_email_key" UNIQUE CONSTRAINT, btree (email)
@@ -350,7 +355,7 @@ Foreign-key constraints:
 
 ---
 
-# Ultima sincronizare cu producția: 2026-03-15
+# Ultima sincronizare cu producția: 2026-03-16
 
 # Changelog Schema Producție
 
@@ -372,3 +377,8 @@ Foreign-key constraints:
 | 2026-03-15 | `CREATE TABLE documente_generate (...)` + 3 indexuri (user_id, tip, created_at DESC) + FK users | Utilizator | DA |
 | 2026-03-15 | `CREATE TABLE red_flags_salvate (...)` + 2 indexuri (user_id, created_at DESC) + FK users | Utilizator | DA |
 | 2026-03-15 | `CREATE TABLE training_materials (...)` + 3 indexuri (user_id, tip, created_at DESC) + FK users | Utilizator | DA |
+| 2026-03-16 | `ALTER TABLE users ADD COLUMN password_hash VARCHAR(255)` | Utilizator | DA |
+| 2026-03-16 | `ALTER TABLE users ADD COLUMN last_login TIMESTAMP` | Utilizator | DA |
+| 2026-03-16 | `ALTER TABLE users ADD COLUMN email_verified BOOLEAN NOT NULL DEFAULT false` | Utilizator | DA |
+| 2026-03-16 | `ALTER TABLE users ADD COLUMN reset_token VARCHAR(255)` | Utilizator | DA |
+| 2026-03-16 | `ALTER TABLE users ADD COLUMN reset_token_expires TIMESTAMP` | Utilizator | DA |

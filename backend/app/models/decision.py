@@ -503,10 +503,9 @@ class SearchScope(Base):
 # =============================================================================
 
 class User(Base):
-    """User account — prepared for future authentication.
+    """User account with JWT authentication.
 
     Roles: 'admin', 'registered', 'paid_basic', 'paid_pro', 'paid_enterprise'.
-    Auth mechanism (JWT/OAuth) will be implemented in a future session.
     """
 
     __tablename__ = "users"
@@ -518,10 +517,16 @@ class User(Base):
     )
     email: Mapped[Optional[str]] = mapped_column(String(255), unique=True)
     nume: Mapped[Optional[str]] = mapped_column(String(200))
+    password_hash: Mapped[Optional[str]] = mapped_column(String(255))
     rol: Mapped[str] = mapped_column(
         String(30), nullable=False, default="registered"
     )
     activ: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    email_verified: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False
+    )
+    reset_token: Mapped[Optional[str]] = mapped_column(String(255))
+    reset_token_expires: Mapped[Optional[datetime]] = mapped_column(DateTime)
     metadata_: Mapped[Optional[dict]] = mapped_column(
         "metadata", JSONB, default=dict
     )
@@ -533,6 +538,7 @@ class User(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, server_default=func.now(), onupdate=func.now(), nullable=False
     )
+    last_login: Mapped[Optional[datetime]] = mapped_column(DateTime)
 
     # Relationships
     conversatii: Mapped[list["Conversatie"]] = relationship(

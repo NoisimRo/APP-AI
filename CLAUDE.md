@@ -2,7 +2,17 @@
 
 ## Project Overview
 
-ExpertAP is a Romanian public procurement BI platform. Backend is FastAPI (Python), frontend is a single React file (`index.tsx`), deployed on GCP Cloud Run with PostgreSQL + pgvector.
+ExpertAP is a **DaaS (Data as a Service)** platform targeting **Romanian law firms specializing in public procurement litigation** and **public procurement specialists**. Backend is FastAPI (Python), frontend is a single React file (`index.tsx`), deployed on GCP Cloud Run with PostgreSQL + pgvector.
+
+### Business Model — DaaS with Tiered Access
+
+| Role | Features | LLM Queries/Day |
+|------|----------|-----------------|
+| **Free (registered)** | Chat + Dashboard + Data Lake + RAG | 5 |
+| **paid_basic** | + Drafter + Red Flags + Clarificări | 20 |
+| **paid_pro** | + Training + Export | 100 |
+| **paid_enterprise** | Everything + API access | Unlimited |
+| **admin** | Everything + admin panel | Unlimited |
 
 ## Quick Commands
 
@@ -27,6 +37,7 @@ DATABASE_URL="postgresql+asyncpg://..." python scripts/generate_embeddings.py
 - **Backend:** `backend/app/` - FastAPI with async SQLAlchemy
 - **LLM:** Multi-provider (Gemini + Claude + OpenAI + Groq + OpenRouter) via factory pattern (`backend/app/services/llm/factory.py`). Groq = modele open-source gratuite (Llama, GPT-OSS, Qwen, Llama 4 Scout). OpenRouter = 400+ modele, multe gratuite (suffix `:free`). Fiecare provider cu token-aware context truncation (estimare ~4 chars/token, truncare proporțională automată). Embeddings always on Gemini.
 - **RAG Pipeline:** `backend/app/services/rag.py` - vector search on ArgumentareCritica → LLM generation
+- **Auth:** JWT-based (python-jose + bcrypt), `backend/app/core/auth.py` + `deps.py`. Role-based feature gating + in-memory rate limiting per role.
 - **Database Models:** `backend/app/models/decision.py` - DecizieCNSC, ArgumentareCritica, User, Conversatie, MesajConversatie, DocumentGenerat, RedFlagsSalvate, TrainingMaterial, etc.
 
 ## Key Files
@@ -57,6 +68,12 @@ DATABASE_URL="postgresql+asyncpg://..." python scripts/generate_embeddings.py
 | `backend/app/services/export_service.py` | Export materiale DOCX/PDF/MD |
 | `backend/app/api/v1/training.py` | TrainingAP API endpoints (generate, stream, export) |
 | `backend/app/api/v1/saved.py` | Saved content CRUD API (conversations, documents, red flags, training materials) |
+| `backend/app/core/auth.py` | JWT token creation + bcrypt password hashing |
+| `backend/app/core/deps.py` | Auth dependencies (get_current_user, require_role, require_feature) |
+| `backend/app/core/rate_limiter.py` | In-memory daily rate limiter per role |
+| `backend/app/api/v1/auth.py` | Auth API (register, login, refresh, me, change-password) |
+| `backend/app/api/v1/users.py` | Admin user management CRUD |
+| `scripts/create_admin.py` | Bootstrap admin user script |
 
 ## Code Conventions
 
@@ -109,7 +126,7 @@ DATABASE_URL="postgresql+asyncpg://..." python scripts/generate_embeddings.py
 | `legislatie_fragmente` | Fragmente legislație la granularitate maximă (articol/alineat/literă) | Yes (2000-dim) |
 | `llm_settings` | LLM provider config (single-row: active provider, model, encrypted API keys for Gemini/Anthropic/OpenAI/Groq/OpenRouter) | No |
 | `search_scopes` | Saved filter presets for RAG pre-filtering (name, JSONB filters, cached decision_count) | No (pre-filter) |
-| `users` | Conturi utilizatori — pregătit pentru auth multi-user (roluri: admin, registered, paid_*) | No |
+| `users` | Conturi utilizatori cu JWT auth (password_hash, roluri: admin, registered, paid_basic/pro/enterprise) | No |
 | `conversatii` | Conversații chat salvate (titlu, nr mesaje, scope_id, user_id FK) | No |
 | `mesaje_conversatie` | Mesajele individuale din conversații (rol, conținut, citations, ordine) | No |
 | `documente_generate` | Documente generate salvate: contestații, clarificări, RAG memo (tip_document, conținut, referințe) | No |

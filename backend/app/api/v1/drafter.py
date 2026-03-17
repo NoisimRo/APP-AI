@@ -4,15 +4,18 @@ Uses RAG vector search to ground the complaint in actual CNSC jurisprudence.
 """
 
 import time
+from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.logging import get_logger
+from app.core.deps import require_feature
+from app.core.rate_limiter import require_rate_limit, increment_usage
 from app.db.session import get_session
-from app.models.decision import ArgumentareCritica, DecizieCNSC
+from app.models.decision import ArgumentareCritica, DecizieCNSC, User
 from app.services.embedding import EmbeddingService
 from app.services.llm.factory import get_active_llm_provider, get_embedding_provider
 from app.services.llm.streaming import create_sse_response
@@ -210,7 +213,10 @@ INSTRUCȚIUNI DE STIL:
 @router.post("/", response_model=DrafterResponse)
 async def draft_complaint(
     request: DrafterRequest,
+    http_request: Request,
     session: AsyncSession = Depends(get_session),
+    rate_user: Optional[User] = Depends(require_rate_limit),
+    _feature: Optional[User] = Depends(require_feature("drafter")),
 ) -> DrafterResponse:
     """Generate a legal complaint draft using LLM with RAG jurisprudence."""
     logger.info(
@@ -242,6 +248,7 @@ async def draft_complaint(
             length=len(response_text),
             decision_refs=decision_refs,
         )
+        increment_usage(rate_user, http_request)
         return DrafterResponse(content=response_text, decision_refs=decision_refs)
 
     except Exception as e:
@@ -252,10 +259,14 @@ async def draft_complaint(
 @router.post("/stream")
 async def draft_complaint_stream(
     request: DrafterRequest,
+    http_request: Request,
     session: AsyncSession = Depends(get_session),
+    rate_user: Optional[User] = Depends(require_rate_limit),
+    _feature: Optional[User] = Depends(require_feature("drafter")),
 ):
     """Stream a legal complaint draft via SSE."""
     logger.info("draft_complaint_stream_request", facts_length=len(request.facts))
+    increment_usage(rate_user, http_request)
 
     # Resolve scope
     scope_ids = None

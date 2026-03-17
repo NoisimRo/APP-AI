@@ -1,13 +1,16 @@
 """RAG Memo generation API endpoints."""
 
 import time
+from typing import Optional
 
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, Request
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.logging import get_logger
+from app.core.rate_limiter import require_rate_limit, increment_usage
 from app.db.session import get_session
+from app.models.decision import User
 from app.services.rag import RAGService
 from app.services.llm.streaming import create_sse_response
 from app.api.v1.scopes import get_scope_decision_ids
@@ -41,7 +44,9 @@ class RAGMemoResponse(BaseModel):
 @router.post("/", response_model=RAGMemoResponse)
 async def generate_rag_memo(
     request: RAGMemoRequest,
-    session: AsyncSession = Depends(get_session)
+    http_request: Request,
+    session: AsyncSession = Depends(get_session),
+    rate_user: Optional[User] = Depends(require_rate_limit),
 ) -> RAGMemoResponse:
     """
     Generate legal memo based on CNSC jurisprudence.
@@ -89,6 +94,8 @@ async def generate_rag_memo(
             confidence=confidence
         )
 
+        increment_usage(rate_user, http_request)
+
         return RAGMemoResponse(
             memo=response_text,
             topic=request.topic,
@@ -107,7 +114,9 @@ async def generate_rag_memo(
 @router.post("/stream")
 async def generate_rag_memo_stream(
     request: RAGMemoRequest,
+    http_request: Request,
     session: AsyncSession = Depends(get_session),
+    rate_user: Optional[User] = Depends(require_rate_limit),
 ):
     """Stream a legal memo via SSE."""
     logger.info("rag_memo_stream_request", topic=request.topic)
@@ -141,6 +150,8 @@ async def generate_rag_memo_stream(
     n_sources = len(citations)
     if n_sources:
         status_msgs.append(f"Am identificat {n_sources} decizii CNSC relevante")
+
+    increment_usage(rate_user, http_request)
 
     return await create_sse_response(
         llm=rag.llm,

@@ -42,6 +42,11 @@ class Settings(BaseSettings):
     embedding_provider: Literal["vertex", "openai", "local"] = "vertex"
     embedding_model: str = "text-embedding-004"
 
+    # JWT Authentication
+    access_token_expire_minutes: int = 30
+    refresh_token_expire_days: int = 7
+    jwt_algorithm: str = "HS256"
+
     # Rate Limiting
     rate_limit_free_queries_per_day: int = 5
     rate_limit_authenticated_queries_per_day: int = 20
