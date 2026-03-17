@@ -22,7 +22,7 @@ from app.core.deps import get_current_active_user
 from app.core.logging import get_logger
 from app.db.session import get_session
 from app.models.decision import User
-from app.services.email_service import send_verification_email
+from app.services.email_service import send_reset_password_email, send_verification_email
 
 router = APIRouter()
 logger = get_logger(__name__)
@@ -370,12 +370,13 @@ async def forgot_password(
         user.reset_token_expires = datetime.utcnow() + timedelta(hours=1)
         await session.commit()
 
-        # TODO: Send email with reset link containing raw_token
-        logger.info(
-            "password_reset_requested",
-            email=user.email,
-            token=raw_token,  # Log for manual handling until email is integrated
-        )
+        logger.info("password_reset_requested", email=user.email)
+
+        # Send reset email (fire-and-forget, don't reveal if email exists)
+        try:
+            await send_reset_password_email(user.email, raw_token, user.nume)
+        except Exception as e:
+            logger.error("reset_email_failed", email=user.email, error=str(e))
 
     return {"status": "ok", "message": "Dacă adresa există, veți primi un email cu instrucțiuni"}
 

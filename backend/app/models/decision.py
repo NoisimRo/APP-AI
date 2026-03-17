@@ -465,6 +465,7 @@ class SearchScope(Base):
 
     Users create scopes from the Data Lake filter UI to narrow down
     which decisions the AI assistant searches through.
+    Each scope belongs to a user (or is anonymous if user_id is NULL).
     """
 
     __tablename__ = "search_scopes"
@@ -476,6 +477,11 @@ class SearchScope(Base):
     )
     name: Mapped[str] = mapped_column(String(100), nullable=False)
     description: Mapped[Optional[str]] = mapped_column(Text)
+
+    # Owner — NULL for anonymous scopes
+    user_id: Mapped[Optional[str]] = mapped_column(
+        UUID(as_uuid=False), ForeignKey("users.id", ondelete="CASCADE")
+    )
 
     # JSONB filters — mirrors Data Lake filter params
     # Example: {"ruling": "ADMIS", "tip_contestatie": "rezultat",

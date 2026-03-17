@@ -641,13 +641,17 @@ const App = () => {
   // Auth State
   const [authState, setAuthState] = useState<AuthState>({ user: null, loading: true });
   const [showAuthModal, setShowAuthModal] = useState(false);
-  const [authMode, setAuthMode] = useState<'login' | 'register'>('login');
+  const [authMode, setAuthMode] = useState<'login' | 'register' | 'forgotPassword' | 'resetPassword'>('login');
   const [authEmail, setAuthEmail] = useState('');
   const [authPassword, setAuthPassword] = useState('');
   const [authConfirmPassword, setAuthConfirmPassword] = useState('');
   const [authNume, setAuthNume] = useState('');
   const [authError, setAuthError] = useState('');
   const [authLoading, setAuthLoading] = useState(false);
+  const [resetToken, setResetToken] = useState('');
+  const [resetNewPassword, setResetNewPassword] = useState('');
+  const [resetConfirmPassword, setResetConfirmPassword] = useState('');
+  const [forgotPasswordMessage, setForgotPasswordMessage] = useState('');
 
   // Profile State
   const [profileCurrentPassword, setProfileCurrentPassword] = useState('');
@@ -687,7 +691,8 @@ const App = () => {
   // Auth helper: canAccess feature
   const canAccess = (feature: string): boolean => {
     const user = authState.user;
-    if (!user) return ['chat', 'dashboard', 'datalake', 'rag'].includes(feature);
+    // Unregistered users: only chat
+    if (!user) return feature === 'chat';
     const features = ROLE_FEATURES[user.rol];
     if (!features) return false;
     return features.includes(feature);
@@ -768,6 +773,67 @@ const App = () => {
       setShowAuthModal(false);
       setAuthEmail(''); setAuthPassword(''); setAuthConfirmPassword(''); setAuthNume('');
     } catch (e: any) {
+      setAuthError('Eroare de rețea');
+    }
+    setAuthLoading(false);
+  };
+
+  const handleForgotPassword = async () => {
+    setAuthError('');
+    setForgotPasswordMessage('');
+    if (!authEmail.trim()) {
+      setAuthError('Introdu adresa de email');
+      return;
+    }
+    setAuthLoading(true);
+    try {
+      const res = await fetch('/api/v1/auth/forgot-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: authEmail }),
+      });
+      if (res.ok) {
+        setForgotPasswordMessage('Dacă adresa există în sistem, vei primi un email cu codul de resetare.');
+      } else {
+        setAuthError('Eroare la trimiterea cererii');
+      }
+    } catch {
+      setAuthError('Eroare de rețea');
+    }
+    setAuthLoading(false);
+  };
+
+  const handleResetPassword = async () => {
+    setAuthError('');
+    if (!resetToken.trim()) {
+      setAuthError('Introdu codul de resetare din email');
+      return;
+    }
+    if (resetNewPassword.length < 8) {
+      setAuthError('Parola trebuie să aibă minim 8 caractere');
+      return;
+    }
+    if (resetNewPassword !== resetConfirmPassword) {
+      setAuthError('Parolele nu coincid');
+      return;
+    }
+    setAuthLoading(true);
+    try {
+      const res = await fetch('/api/v1/auth/reset-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token: resetToken, new_password: resetNewPassword }),
+      });
+      if (res.ok) {
+        setAuthMode('login');
+        setAuthError('');
+        setResetToken(''); setResetNewPassword(''); setResetConfirmPassword('');
+        setForgotPasswordMessage('Parola a fost resetată cu succes! Autentifică-te cu noua parolă.');
+      } else {
+        const err = await res.json();
+        setAuthError(err.detail || 'Eroare la resetarea parolei');
+      }
+    } catch {
       setAuthError('Eroare de rețea');
     }
     setAuthLoading(false);
@@ -874,11 +940,11 @@ const App = () => {
 
   useEffect(() => {
     fetchScopes();
-  }, []);
+  }, [authState.user?.id]);
 
   const deleteScope = async (id: string) => {
     try {
-      const res = await fetch(`/api/v1/scopes/${id}`, { method: 'DELETE' });
+      const res = await authFetch(`/api/v1/scopes/${id}`, { method: 'DELETE' });
       if (res.ok) {
         if (activeScopeId === id) setActiveScopeId(null);
         await fetchScopes();
@@ -890,7 +956,7 @@ const App = () => {
     try {
       const body: any = { name, description };
       if (filters) body.filters = filters;
-      const res = await fetch(`/api/v1/scopes/${id}`, {
+      const res = await authFetch(`/api/v1/scopes/${id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
@@ -1318,7 +1384,7 @@ const App = () => {
         redflags: '/api/v1/saved/redflags',
         training: '/api/v1/saved/training',
       };
-      const res = await fetch(urlMap[type] || '/api/v1/saved/conversations');
+      const res = await authFetch(urlMap[type] || '/api/v1/saved/conversations');
       const data = await res.json();
       setHistoryItems(data);
     } catch { setHistoryItems([]); }
@@ -1327,7 +1393,7 @@ const App = () => {
 
   const loadConversation = async (id: string) => {
     try {
-      const res = await fetch(`/api/v1/saved/conversations/${id}`);
+      const res = await authFetch(`/api/v1/saved/conversations/${id}`);
       const data = await res.json();
       setChatMessages(data.mesaje.map((m: any) => ({ role: m.rol, text: m.continut, citations: m.citations })));
       setHistoryPanel(null);
@@ -1336,7 +1402,7 @@ const App = () => {
 
   const loadDocument = async (id: string, targetMode: AppMode) => {
     try {
-      const res = await fetch(`/api/v1/saved/documents/${id}`);
+      const res = await authFetch(`/api/v1/saved/documents/${id}`);
       const data = await res.json();
       setGeneratedContent(data.continut);
       setGeneratedDecisionRefs(data.referinte_decizii || []);
@@ -1347,7 +1413,7 @@ const App = () => {
 
   const loadRedFlags = async (id: string) => {
     try {
-      const res = await fetch(`/api/v1/saved/redflags/${id}`);
+      const res = await authFetch(`/api/v1/saved/redflags/${id}`);
       const data = await res.json();
       setRedFlagsResults(data.rezultate);
       setSelectedRedFlags([]);
@@ -1360,7 +1426,7 @@ const App = () => {
 
   const loadTraining = async (id: string) => {
     try {
-      const res = await fetch(`/api/v1/saved/training/${id}`);
+      const res = await authFetch(`/api/v1/saved/training/${id}`);
       const data = await res.json();
       setTrainingResult(data.full_content);
       setTrainingTema(data.tema);
@@ -1384,7 +1450,7 @@ const App = () => {
       training: `/api/v1/saved/training/${id}`,
     };
     try {
-      await fetch(urlMap[type], { method: 'DELETE' });
+      await authFetch(urlMap[type], { method: 'DELETE' });
       setHistoryItems(prev => prev.filter(item => item.id !== id));
     } catch { showSaveToast(false, 'Eroare la ștergere'); }
   };
@@ -1818,8 +1884,20 @@ const App = () => {
         <div>
            <div className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3 px-2">Workspace</div>
            <SidebarItem icon={MessageSquare} label="Asistent AP" active={mode === 'chat'} onClick={() => { setMode('chat'); setSidebarOpen(false); }} />
-           <SidebarItem icon={Filter} label="Filtrare date" active={mode === 'datalake'} onClick={() => { setMode('datalake'); setSidebarOpen(false); }} badge={files.length} />
-           <SidebarItem icon={LayoutDashboard} label="Dashboard" active={mode === 'dashboard'} onClick={() => { setMode('dashboard'); setSidebarOpen(false); }} />
+           {canAccess('datalake') ? (
+             <SidebarItem icon={Filter} label="Filtrare date" active={mode === 'datalake'} onClick={() => { setMode('datalake'); setSidebarOpen(false); }} badge={files.length} />
+           ) : (
+             <div className="opacity-50 cursor-not-allowed" title="Creează un cont gratuit">
+               <SidebarItem icon={Filter} label="Filtrare date" active={false} onClick={() => setShowAuthModal(true)} />
+             </div>
+           )}
+           {canAccess('dashboard') ? (
+             <SidebarItem icon={LayoutDashboard} label="Dashboard" active={mode === 'dashboard'} onClick={() => { setMode('dashboard'); setSidebarOpen(false); }} />
+           ) : (
+             <div className="opacity-50 cursor-not-allowed" title="Creează un cont gratuit">
+               <SidebarItem icon={LayoutDashboard} label="Dashboard" active={false} onClick={() => setShowAuthModal(true)} />
+             </div>
+           )}
         </div>
 
         <div>
@@ -1845,7 +1923,13 @@ const App = () => {
                <SidebarItem icon={Search} label="Clarificări" active={false} onClick={() => setShowAuthModal(true)} />
              </div>
            )}
-           <SidebarItem icon={BookOpen} label="Jurisprudență RAG" active={mode === 'rag'} onClick={() => { setMode('rag'); setSidebarOpen(false); }} />
+           {canAccess('rag') ? (
+             <SidebarItem icon={BookOpen} label="Jurisprudență RAG" active={mode === 'rag'} onClick={() => { setMode('rag'); setSidebarOpen(false); }} />
+           ) : (
+             <div className="opacity-50 cursor-not-allowed" title="Creează un cont gratuit">
+               <SidebarItem icon={BookOpen} label="Jurisprudență RAG" active={false} onClick={() => setShowAuthModal(true)} />
+             </div>
+           )}
         </div>
 
         <div>
@@ -4265,9 +4349,9 @@ const App = () => {
             <div className="p-6">
               <div className="flex items-center justify-between mb-6">
                 <h2 className="text-xl font-bold text-white">
-                  {authMode === 'login' ? 'Autentificare' : 'Creează cont'}
+                  {authMode === 'login' ? 'Autentificare' : authMode === 'register' ? 'Creează cont' : authMode === 'forgotPassword' ? 'Resetare parolă' : 'Parolă nouă'}
                 </h2>
-                <button onClick={() => { setShowAuthModal(false); setAuthError(''); }} className="text-slate-400 hover:text-white">
+                <button onClick={() => { setShowAuthModal(false); setAuthError(''); setForgotPasswordMessage(''); }} className="text-slate-400 hover:text-white">
                   <X size={20} />
                 </button>
               </div>
@@ -4278,8 +4362,64 @@ const App = () => {
                 </div>
               )}
 
-              <div className="space-y-4">
-                {authMode === 'register' && (
+              {forgotPasswordMessage && (
+                <div className="mb-4 p-3 rounded-lg bg-green-500/10 border border-green-500/30 text-green-400 text-sm">
+                  {forgotPasswordMessage}
+                </div>
+              )}
+
+              {/* LOGIN MODE */}
+              {authMode === 'login' && (
+                <div className="space-y-4">
+                  <div>
+                    <label className="text-sm text-slate-400 mb-1 block">Email</label>
+                    <input
+                      type="email"
+                      value={authEmail}
+                      onChange={e => setAuthEmail(e.target.value)}
+                      className="w-full p-3 rounded-lg bg-slate-800 border border-slate-700 text-white text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                      placeholder="email@exemplu.ro"
+                      onKeyDown={e => e.key === 'Enter' && handleLogin()}
+                    />
+                  </div>
+                  <div>
+                    <label className="text-sm text-slate-400 mb-1 block">Parolă</label>
+                    <input
+                      type="password"
+                      value={authPassword}
+                      onChange={e => setAuthPassword(e.target.value)}
+                      className="w-full p-3 rounded-lg bg-slate-800 border border-slate-700 text-white text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                      placeholder="Minim 8 caractere"
+                      onKeyDown={e => e.key === 'Enter' && handleLogin()}
+                    />
+                  </div>
+                  <div className="text-right">
+                    <button onClick={() => { setAuthMode('forgotPassword'); setAuthError(''); setForgotPasswordMessage(''); }} className="text-sm text-blue-400 hover:underline">
+                      Am uitat parola
+                    </button>
+                  </div>
+                  <button
+                    onClick={handleLogin}
+                    disabled={authLoading}
+                    className="w-full py-3 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-medium text-sm transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                  >
+                    {authLoading && <Loader2 size={16} className="animate-spin" />}
+                    Autentifică-te
+                  </button>
+                  <div className="text-center">
+                    <p className="text-sm text-slate-400">
+                      Nu ai cont?{' '}
+                      <button onClick={() => { setAuthMode('register'); setAuthError(''); setForgotPasswordMessage(''); }} className="text-blue-400 hover:underline">
+                        Creează cont
+                      </button>
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {/* REGISTER MODE */}
+              {authMode === 'register' && (
+                <div className="space-y-4">
                   <div>
                     <label className="text-sm text-slate-400 mb-1 block">Nume</label>
                     <input
@@ -4290,30 +4430,26 @@ const App = () => {
                       placeholder="Numele dvs."
                     />
                   </div>
-                )}
-                <div>
-                  <label className="text-sm text-slate-400 mb-1 block">Email</label>
-                  <input
-                    type="email"
-                    value={authEmail}
-                    onChange={e => setAuthEmail(e.target.value)}
-                    className="w-full p-3 rounded-lg bg-slate-800 border border-slate-700 text-white text-sm focus:ring-2 focus:ring-blue-500 outline-none"
-                    placeholder="email@exemplu.ro"
-                    onKeyDown={e => e.key === 'Enter' && authMode === 'login' && handleLogin()}
-                  />
-                </div>
-                <div>
-                  <label className="text-sm text-slate-400 mb-1 block">Parolă</label>
-                  <input
-                    type="password"
-                    value={authPassword}
-                    onChange={e => setAuthPassword(e.target.value)}
-                    className="w-full p-3 rounded-lg bg-slate-800 border border-slate-700 text-white text-sm focus:ring-2 focus:ring-blue-500 outline-none"
-                    placeholder="Minim 8 caractere"
-                    onKeyDown={e => e.key === 'Enter' && authMode === 'login' && handleLogin()}
-                  />
-                </div>
-                {authMode === 'register' && (
+                  <div>
+                    <label className="text-sm text-slate-400 mb-1 block">Email</label>
+                    <input
+                      type="email"
+                      value={authEmail}
+                      onChange={e => setAuthEmail(e.target.value)}
+                      className="w-full p-3 rounded-lg bg-slate-800 border border-slate-700 text-white text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                      placeholder="email@exemplu.ro"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-sm text-slate-400 mb-1 block">Parolă</label>
+                    <input
+                      type="password"
+                      value={authPassword}
+                      onChange={e => setAuthPassword(e.target.value)}
+                      className="w-full p-3 rounded-lg bg-slate-800 border border-slate-700 text-white text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                      placeholder="Minim 8 caractere"
+                    />
+                  </div>
                   <div>
                     <label className="text-sm text-slate-400 mb-1 block">Confirmă parola</label>
                     <input
@@ -4325,35 +4461,112 @@ const App = () => {
                       onKeyDown={e => e.key === 'Enter' && handleRegister()}
                     />
                   </div>
-                )}
+                  <button
+                    onClick={handleRegister}
+                    disabled={authLoading}
+                    className="w-full py-3 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-medium text-sm transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                  >
+                    {authLoading && <Loader2 size={16} className="animate-spin" />}
+                    Creează cont
+                  </button>
+                  <div className="text-center">
+                    <p className="text-sm text-slate-400">
+                      Ai deja cont?{' '}
+                      <button onClick={() => { setAuthMode('login'); setAuthError(''); }} className="text-blue-400 hover:underline">
+                        Autentifică-te
+                      </button>
+                    </p>
+                  </div>
+                </div>
+              )}
 
-                <button
-                  onClick={authMode === 'login' ? handleLogin : handleRegister}
-                  disabled={authLoading}
-                  className="w-full py-3 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-medium text-sm transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
-                >
-                  {authLoading && <Loader2 size={16} className="animate-spin" />}
-                  {authMode === 'login' ? 'Autentifică-te' : 'Creează cont'}
-                </button>
-              </div>
+              {/* FORGOT PASSWORD MODE */}
+              {authMode === 'forgotPassword' && (
+                <div className="space-y-4">
+                  <p className="text-sm text-slate-400">Introdu adresa de email asociată contului tău și vei primi un cod de resetare.</p>
+                  <div>
+                    <label className="text-sm text-slate-400 mb-1 block">Email</label>
+                    <input
+                      type="email"
+                      value={authEmail}
+                      onChange={e => setAuthEmail(e.target.value)}
+                      className="w-full p-3 rounded-lg bg-slate-800 border border-slate-700 text-white text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                      placeholder="email@exemplu.ro"
+                      onKeyDown={e => e.key === 'Enter' && handleForgotPassword()}
+                    />
+                  </div>
+                  <button
+                    onClick={handleForgotPassword}
+                    disabled={authLoading}
+                    className="w-full py-3 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-medium text-sm transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                  >
+                    {authLoading && <Loader2 size={16} className="animate-spin" />}
+                    Trimite codul de resetare
+                  </button>
+                  <button
+                    onClick={() => { setAuthMode('resetPassword'); setAuthError(''); setForgotPasswordMessage(''); }}
+                    className="w-full py-2 text-sm text-blue-400 hover:underline"
+                  >
+                    Am primit codul — introdu parola nouă
+                  </button>
+                  <div className="text-center">
+                    <button onClick={() => { setAuthMode('login'); setAuthError(''); setForgotPasswordMessage(''); }} className="text-sm text-slate-400 hover:text-white">
+                      ← Înapoi la autentificare
+                    </button>
+                  </div>
+                </div>
+              )}
 
-              <div className="mt-4 text-center">
-                {authMode === 'login' ? (
-                  <p className="text-sm text-slate-400">
-                    Nu ai cont?{' '}
-                    <button onClick={() => { setAuthMode('register'); setAuthError(''); }} className="text-blue-400 hover:underline">
-                      Creează cont
+              {/* RESET PASSWORD MODE */}
+              {authMode === 'resetPassword' && (
+                <div className="space-y-4">
+                  <p className="text-sm text-slate-400">Introdu codul primit pe email și noua parolă.</p>
+                  <div>
+                    <label className="text-sm text-slate-400 mb-1 block">Cod de resetare</label>
+                    <input
+                      type="text"
+                      value={resetToken}
+                      onChange={e => setResetToken(e.target.value)}
+                      className="w-full p-3 rounded-lg bg-slate-800 border border-slate-700 text-white text-sm font-mono focus:ring-2 focus:ring-blue-500 outline-none"
+                      placeholder="Codul din email"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-sm text-slate-400 mb-1 block">Parolă nouă</label>
+                    <input
+                      type="password"
+                      value={resetNewPassword}
+                      onChange={e => setResetNewPassword(e.target.value)}
+                      className="w-full p-3 rounded-lg bg-slate-800 border border-slate-700 text-white text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                      placeholder="Minim 8 caractere"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-sm text-slate-400 mb-1 block">Confirmă parola nouă</label>
+                    <input
+                      type="password"
+                      value={resetConfirmPassword}
+                      onChange={e => setResetConfirmPassword(e.target.value)}
+                      className="w-full p-3 rounded-lg bg-slate-800 border border-slate-700 text-white text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                      placeholder="Repetă parola nouă"
+                      onKeyDown={e => e.key === 'Enter' && handleResetPassword()}
+                    />
+                  </div>
+                  <button
+                    onClick={handleResetPassword}
+                    disabled={authLoading}
+                    className="w-full py-3 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-medium text-sm transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                  >
+                    {authLoading && <Loader2 size={16} className="animate-spin" />}
+                    Resetează parola
+                  </button>
+                  <div className="text-center">
+                    <button onClick={() => { setAuthMode('login'); setAuthError(''); setForgotPasswordMessage(''); }} className="text-sm text-slate-400 hover:text-white">
+                      ← Înapoi la autentificare
                     </button>
-                  </p>
-                ) : (
-                  <p className="text-sm text-slate-400">
-                    Ai deja cont?{' '}
-                    <button onClick={() => { setAuthMode('login'); setAuthError(''); }} className="text-blue-400 hover:underline">
-                      Autentifică-te
-                    </button>
-                  </p>
-                )}
-              </div>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </div>
