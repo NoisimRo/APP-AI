@@ -240,15 +240,38 @@ const authFetchStream = async (
   onError: (error: string) => void,
   onStatus?: (status: string) => void,
 ) => {
-  const token = getAccessToken();
+  let token = getAccessToken();
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
   if (token) headers['Authorization'] = `Bearer ${token}`;
 
-  const response = await fetch(url, {
+  let response = await fetch(url, {
     method: 'POST',
     headers,
     body: JSON.stringify(body),
   });
+
+  // Auto-refresh on 401
+  if (response.status === 401 && getRefreshToken()) {
+    const refreshResponse = await fetch('/api/v1/auth/refresh', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ refresh_token: getRefreshToken() }),
+    });
+    if (refreshResponse.ok) {
+      const data = await refreshResponse.json();
+      storeTokens(data.access_token, data.refresh_token);
+      token = data.access_token;
+      headers['Authorization'] = `Bearer ${token}`;
+      response = await fetch(url, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(body),
+      });
+    } else {
+      clearTokens();
+    }
+  }
+
   if (!response.ok) {
     let detail = `HTTP ${response.status}`;
     try {
