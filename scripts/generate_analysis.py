@@ -18,7 +18,8 @@ Usage:
     python scripts/generate_analysis.py --force           # Re-analyze everything
     python scripts/generate_analysis.py --dry-run         # Show what would be analyzed
     python scripts/generate_analysis.py --decision BO2025_1076  # Re-analyze specific decision(s)
-    python scripts/generate_analysis.py --reanalyze-incomplete  # Fix incomplete analyses
+    python scripts/generate_analysis.py --reanalyze-incomplete  # Fix incomplete analyses (text >= 60k only)
+    python scripts/generate_analysis.py --reanalyze-incomplete --include-short-texts  # Include all sizes
     python scripts/generate_analysis.py --reanalyze-incomplete --min-length 60000 --max-length 100000
     python scripts/generate_analysis.py --provider gemini --model gemini-2.5-pro
     python scripts/generate_analysis.py --provider groq --model llama-3.3-70b-versatile
@@ -162,6 +163,12 @@ async def main():
         help="Specific BO reference(s) to analyze/re-analyze (e.g., BO2025_1076 BO2025_823)",
     )
     parser.add_argument(
+        "--include-short-texts",
+        action="store_true",
+        help="With --reanalyze-incomplete: also include decisions < 60k chars "
+             "(these are usually genuinely incomplete source documents, not LLM artifacts)",
+    )
+    parser.add_argument(
         "--min-length",
         type=int,
         help="Only include decisions with text_integral >= this many characters",
@@ -247,36 +254,104 @@ async def main():
             stmt = select(DecizieCNSC).where(bo_conditions)
 
         elif args.reanalyze_incomplete:
-            # Find decisions that have incomplete analyses:
-            # - NULL or empty fields (AC arguments, CNSC reasoning, CNSC elements)
-            # - Fields containing "nu este disponibil" (LLM placeholder when input was truncated)
-            from sqlalchemy import or_
+            # Find decisions that have incomplete analyses caused by LLM input truncation.
+            # When text_integral is too long (>= 60k chars), the LLM context window
+            # may truncate the text before CNSC reasoning, causing placeholder responses.
+            #
+            # Detection: short argumentatie_cnsc (< 250 chars) containing known
+            # placeholder patterns. Only for long decisions (>= 60k) by default,
+            # since short decisions with incomplete fields are genuinely incomplete
+            # source documents, not analysis artifacts.
+            from sqlalchemy import or_, and_
+
+            # Known LLM placeholder patterns when input text was truncated
+            # (observed empirically in production data)
+            INCOMPLETE_PATTERNS = [
+                "%nu rezultă din extrasul furnizat%",
+                "%nu există informații în textul furnizat%",
+                "%nu este disponibil%",
+                "%textul deciziei este incomplet%",
+                "%textul deciziei furnizat este incomplet%",
+                "%nu conține argumentația consiliului%",
+                "%nu conține raționamentul%",
+                "%informație indisponibilă%",
+                "%informație neprezentă%",
+                "%textul se oprește%",
+                "%textul se întrerupe%",
+                "%nu sunt disponibile%",
+                "%nu pot fi extrase%",
+                "%nu poate fi extrasă%",
+                "%nu poate fi extras%",
+            ]
+
+            # Build pattern-matching conditions on argumentatie_cnsc
+            pattern_conditions = [
+                ArgumentareCritica.argumentatie_cnsc.ilike(p)
+                for p in INCOMPLETE_PATTERNS
+            ]
+
+            # Also check for NULL/empty fields
+            field_conditions = [
+                ArgumentareCritica.argumentatie_cnsc.is_(None),
+                ArgumentareCritica.argumentatie_cnsc == "",
+                ArgumentareCritica.elemente_retinute_cnsc.is_(None),
+                ArgumentareCritica.elemente_retinute_cnsc == "",
+            ]
+
+            # Combine: short argumentatie_cnsc with placeholder patterns, OR NULL/empty
+            incomplete_condition = or_(
+                and_(
+                    func.length(ArgumentareCritica.argumentatie_cnsc) < 250,
+                    or_(*pattern_conditions),
+                ),
+                *field_conditions,
+            )
+
+            # By default, only target long decisions (>= 60k chars) where truncation
+            # is the likely cause. Short decisions with incomplete fields are genuinely
+            # incomplete source documents, not LLM artifacts.
+            min_text_length = 60000
+            if args.include_short_texts:
+                min_text_length = 0
+                print("  Including ALL decisions (no text length filter)")
+
             incomplete_ids = (
                 select(ArgumentareCritica.decizie_id)
+                .join(DecizieCNSC, DecizieCNSC.id == ArgumentareCritica.decizie_id)
                 .where(
-                    or_(
-                        ArgumentareCritica.argumente_ac.is_(None),
-                        ArgumentareCritica.argumente_ac == "",
-                        ArgumentareCritica.argumente_ac.ilike("%nu este disponibil%"),
-                        ArgumentareCritica.argumentatie_cnsc.is_(None),
-                        ArgumentareCritica.argumentatie_cnsc == "",
-                        ArgumentareCritica.argumentatie_cnsc.ilike("%nu este disponibil%"),
-                        ArgumentareCritica.elemente_retinute_cnsc.is_(None),
-                        ArgumentareCritica.elemente_retinute_cnsc == "",
-                        ArgumentareCritica.elemente_retinute_cnsc.ilike("%nu este disponibil%"),
+                    and_(
+                        incomplete_condition,
+                        func.length(DecizieCNSC.text_integral) >= min_text_length,
                     )
                 )
                 .distinct()
             )
+
+            # Count affected critici for reporting
+            incomplete_critici_count = await session.scalar(
+                select(func.count())
+                .select_from(ArgumentareCritica)
+                .join(DecizieCNSC, DecizieCNSC.id == ArgumentareCritica.decizie_id)
+                .where(
+                    and_(
+                        incomplete_condition,
+                        func.length(DecizieCNSC.text_integral) >= min_text_length,
+                    )
+                )
+            )
+
             result_incomplete = await session.execute(incomplete_ids)
             incomplete_decision_ids = [row[0] for row in result_incomplete.fetchall()]
 
             if not incomplete_decision_ids:
                 print("No decisions with incomplete analyses found.")
+                if not args.include_short_texts:
+                    print("  (only checked decisions with text >= 60k chars)")
+                    print("  Use --include-short-texts to also check shorter decisions")
                 return
 
-            print(f"  Found {len(incomplete_decision_ids)} decisions with incomplete analyses")
-            print(f"  (includes NULL/empty fields AND 'nu este disponibil' placeholders)")
+            print(f"  Found {len(incomplete_decision_ids)} decisions with {incomplete_critici_count} incomplete critici")
+            print(f"  (text >= {min_text_length:,} chars, placeholder patterns in argumentatie_cnsc)")
             stmt = (
                 select(DecizieCNSC)
                 .where(DecizieCNSC.id.in_(incomplete_decision_ids))
