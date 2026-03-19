@@ -5529,7 +5529,7 @@ const App = () => {
                       <div key={i} className="flex items-center gap-1">
                         {d.status === 'imported' ? <CheckCircle size={10} className="text-emerald-500" /> : <span className="text-amber-500">~</span>}
                         <span className="font-mono">{d.external_id || d.filename}</span>
-                        {d.has_analysis && <span className="text-emerald-500 text-[9px]">(+analiză)</span>}
+                        {d.has_analysis && <span className="text-emerald-500 text-[9px]">(+analiză: {d.analysis_count || '?'} critici)</span>}
                         {d.status === 'skipped' && <span className="text-amber-500 text-[9px]">(deja există)</span>}
                       </div>
                     ))}

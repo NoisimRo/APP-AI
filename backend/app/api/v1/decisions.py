@@ -1114,7 +1114,15 @@ async def _import_single_decision_json(
     session.add(decision)
 
     # Import ArgumentareCritica if provided
-    argumentari = dec_data.get("argumentari", [])
+    # Support multiple key names for the analysis array
+    argumentari = (
+        dec_data.get("argumentari")
+        or dec_data.get("analysis")
+        or dec_data.get("critici")
+        or dec_data.get("argumentare_critica")
+        or dec_data.get("chunks")
+        or []
+    )
     for arg_data in argumentari:
         arg = ArgumentareCritica(
             id=str(uuid4()),
@@ -1139,7 +1147,14 @@ async def _import_single_decision_json(
         "status": "imported",
         "external_id": f"BO{an_bo}_{numar_bo}",
         "has_analysis": len(argumentari) > 0,
+        "analysis_count": len(argumentari),
     })
+    logger.info(
+        "import_decision_json",
+        external_id=f"BO{an_bo}_{numar_bo}",
+        argumentari_count=len(argumentari),
+        keys_in_json=list(dec_data.keys()),
+    )
 
 
 async def _import_from_txt(
