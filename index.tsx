@@ -592,6 +592,8 @@ const App = () => {
   const [showImportModal, setShowImportModal] = useState(false);
   const [importLoading, setImportLoading] = useState(false);
   const [importResult, setImportResult] = useState<any>(null);
+  const [editingDecision, setEditingDecision] = useState<any>(null);
+  const [editDecisionForm, setEditDecisionForm] = useState<Record<string, string>>({});
   const [clarificationClause, setClarificationClause] = useState("");
   const [memoTopic, setMemoTopic] = useState("");
 
@@ -2955,16 +2957,64 @@ const App = () => {
                     </div>
                   </div>
 
-                  {/* Right action: Eye icon (opens analysis view) */}
-                  <div
-                    className="flex items-center justify-center px-5 border-l border-slate-100 group-hover:border-blue-100 transition-colors shrink-0"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      openDecision(`BO${dec.an_bo}_${dec.numar_bo}`, 'analysis');
-                    }}
-                    title="Vezi analiza LLM"
-                  >
-                    <Eye size={22} className="text-slate-300 group-hover:text-blue-500 transition-colors" />
+                  {/* Right actions */}
+                  <div className="flex items-center border-l border-slate-100 group-hover:border-blue-100 transition-colors shrink-0">
+                    <div
+                      className="flex items-center justify-center px-3 py-3 hover:bg-blue-50 cursor-pointer transition-colors"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        openDecision(`BO${dec.an_bo}_${dec.numar_bo}`, 'analysis');
+                      }}
+                      title="Vezi analiza LLM"
+                    >
+                      <Eye size={18} className="text-slate-300 group-hover:text-blue-500 transition-colors" />
+                    </div>
+                    {/* Admin actions: edit + delete */}
+                    {authState.user?.rol === 'admin' && (
+                      <>
+                        <div
+                          className="flex items-center justify-center px-2 py-3 hover:bg-amber-50 cursor-pointer transition-colors"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setEditingDecision(dec);
+                            setEditDecisionForm({
+                              solutie_contestatie: dec.solutie_contestatie || '',
+                              tip_contestatie: dec.tip_contestatie || '',
+                              contestator: dec.contestator || '',
+                              autoritate_contractanta: dec.autoritate_contractanta || '',
+                              cod_cpv: dec.cod_cpv || '',
+                              cpv_descriere: dec.cpv_descriere || '',
+                            });
+                          }}
+                          title="Editează decizia"
+                        >
+                          <Pencil size={14} className="text-slate-300 hover:text-amber-500 transition-colors" />
+                        </div>
+                        <div
+                          className="flex items-center justify-center px-2 py-3 hover:bg-red-50 cursor-pointer transition-colors"
+                          onClick={async (e) => {
+                            e.stopPropagation();
+                            const externalId = `BO${dec.an_bo}_${dec.numar_bo}`;
+                            if (!confirm(`Sigur vrei să ștergi decizia ${externalId}?\nAceastă acțiune va șterge și analiza LLM asociată.`)) return;
+                            try {
+                              const res = await authFetch(`/api/v1/decisions/${externalId}`, { method: 'DELETE' });
+                              if (res.ok) {
+                                fetchDecisions(apiDecisionsPage, fileSearch);
+                                authFetch('/api/v1/decisions/stats/overview').then(r => r.ok ? r.json() : null).then(d => d && setDbStats(d)).catch(() => {});
+                              } else {
+                                const data = await res.json().catch(() => ({}));
+                                alert(`Eroare la ștergere: ${data.detail || res.status}`);
+                              }
+                            } catch (err: any) {
+                              alert(`Eroare: ${err.message}`);
+                            }
+                          }}
+                          title="Șterge decizia"
+                        >
+                          <Trash2 size={14} className="text-slate-300 hover:text-red-500 transition-colors" />
+                        </div>
+                      </>
+                    )}
                   </div>
                 </div>
               );
@@ -5412,6 +5462,77 @@ const App = () => {
         </div>
       )}
 
+      {/* Edit Decision Modal (admin) */}
+      {editingDecision && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={() => setEditingDecision(null)}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg p-6" onClick={(e) => e.stopPropagation()}>
+            <h3 className="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2">
+              <Pencil size={20} className="text-amber-500" />
+              Editare BO{editingDecision.an_bo}_{editingDecision.numar_bo}
+            </h3>
+            <div className="space-y-3 max-h-[60vh] overflow-y-auto">
+              {[
+                { key: 'solutie_contestatie', label: 'Soluție', placeholder: 'ADMIS / ADMIS_PARTIAL / RESPINS' },
+                { key: 'tip_contestatie', label: 'Tip contestație', placeholder: 'documentatie / rezultat' },
+                { key: 'contestator', label: 'Contestator', placeholder: 'Numele contestatorului' },
+                { key: 'autoritate_contractanta', label: 'Autoritate contractantă', placeholder: 'Numele AC' },
+                { key: 'cod_cpv', label: 'Cod CPV', placeholder: '45310000-3' },
+                { key: 'cpv_descriere', label: 'Descriere CPV', placeholder: 'Descrierea codului CPV' },
+              ].map(f => (
+                <div key={f.key}>
+                  <label className="block text-xs font-bold text-slate-600 uppercase mb-1">{f.label}</label>
+                  <input
+                    type="text"
+                    className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-amber-500/40 outline-none"
+                    placeholder={f.placeholder}
+                    value={editDecisionForm[f.key] || ''}
+                    onChange={(e) => setEditDecisionForm(prev => ({ ...prev, [f.key]: e.target.value }))}
+                  />
+                </div>
+              ))}
+            </div>
+            <div className="flex justify-end gap-3 mt-4">
+              <button onClick={() => setEditingDecision(null)} className="px-4 py-2 text-sm text-slate-600 hover:text-slate-800 font-medium">
+                Anulează
+              </button>
+              <button
+                onClick={async () => {
+                  const externalId = `BO${editingDecision.an_bo}_${editingDecision.numar_bo}`;
+                  // Build update payload: only non-empty changed fields
+                  const payload: Record<string, any> = {};
+                  for (const [k, v] of Object.entries(editDecisionForm)) {
+                    if (v && v.trim()) payload[k] = v.trim();
+                  }
+                  if (Object.keys(payload).length === 0) {
+                    setEditingDecision(null);
+                    return;
+                  }
+                  try {
+                    const res = await authFetch(`/api/v1/decisions/${externalId}`, {
+                      method: 'PATCH',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify(payload),
+                    });
+                    if (res.ok) {
+                      setEditingDecision(null);
+                      fetchDecisions(apiDecisionsPage, fileSearch);
+                    } else {
+                      const data = await res.json().catch(() => ({}));
+                      alert(`Eroare: ${data.detail || res.status}`);
+                    }
+                  } catch (err: any) {
+                    alert(`Eroare: ${err.message}`);
+                  }
+                }}
+                className="px-4 py-2 text-sm bg-amber-500 text-white rounded-lg hover:bg-amber-600 font-medium transition"
+              >
+                Salvează
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Import Decisions Modal */}
       {showImportModal && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={() => setShowImportModal(false)}>
@@ -5529,7 +5650,7 @@ const App = () => {
                       <div key={i} className="flex items-center gap-1">
                         {d.status === 'imported' ? <CheckCircle size={10} className="text-emerald-500" /> : <span className="text-amber-500">~</span>}
                         <span className="font-mono">{d.external_id || d.filename}</span>
-                        {d.has_analysis && <span className="text-emerald-500 text-[9px]">(+analiză)</span>}
+                        {d.has_analysis && <span className="text-emerald-500 text-[9px]">(+analiză: {d.analysis_count || '?'} critici)</span>}
                         {d.status === 'skipped' && <span className="text-amber-500 text-[9px]">(deja există)</span>}
                       </div>
                     ))}
