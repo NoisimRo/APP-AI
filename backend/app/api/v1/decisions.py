@@ -12,8 +12,9 @@ from sqlalchemy import select, func, or_, cast, String
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.logging import get_logger
+from app.core.deps import require_role
 from app.db.session import get_session, is_db_available
-from app.models.decision import DecizieCNSC, ArgumentareCritica, NomenclatorCPV
+from app.models.decision import DecizieCNSC, ArgumentareCritica, NomenclatorCPV, User
 from app.services.parser import CNSCDecisionParser
 
 router = APIRouter()
@@ -1216,6 +1217,117 @@ async def _import_from_txt(
         "external_id": parsed.external_id,
         "has_analysis": False,
     })
+
+
+# =============================================================================
+# ADMIN CRUD: UPDATE / DELETE
+# =============================================================================
+
+
+class DecisionUpdate(BaseModel):
+    """Fields that an admin can update on a decision."""
+    solutie_contestatie: str | None = None
+    tip_contestatie: str | None = None
+    coduri_critici: list[str] | None = None
+    cod_cpv: str | None = None
+    cpv_descriere: str | None = None
+    cpv_categorie: str | None = None
+    cpv_clasa: str | None = None
+    contestator: str | None = None
+    autoritate_contractanta: str | None = None
+    numar_decizie: int | None = None
+    complet: str | None = None
+    data_decizie: str | None = None
+    motiv_respingere: str | None = None
+
+
+@router.patch("/{decision_id}", tags=["admin"])
+async def update_decision(
+    decision_id: str,
+    body: DecisionUpdate,
+    session: AsyncSession = Depends(get_session),
+    _admin: User = Depends(require_role("admin")),
+):
+    """Update metadata of a decision. Admin only."""
+    if not is_db_available():
+        raise HTTPException(status_code=503, detail="Baza de date nu este disponibilă")
+
+    # Resolve by external ID or UUID
+    bo_match = re.match(r'^BO(\d{4})[_\-](\d+)$', decision_id, re.IGNORECASE)
+    if bo_match:
+        an_bo = int(bo_match.group(1))
+        numar_bo = int(bo_match.group(2))
+        query = select(DecizieCNSC).where(DecizieCNSC.an_bo == an_bo, DecizieCNSC.numar_bo == numar_bo)
+    else:
+        query = select(DecizieCNSC).where(DecizieCNSC.id == decision_id)
+
+    result = await session.execute(query)
+    decision = result.scalar_one_or_none()
+    if not decision:
+        raise HTTPException(status_code=404, detail="Decizia nu a fost găsită")
+
+    # Apply only provided (non-None) fields
+    update_data = body.model_dump(exclude_none=True)
+    if not update_data:
+        raise HTTPException(status_code=400, detail="Niciun câmp de actualizat")
+
+    # Handle data_decizie conversion
+    if "data_decizie" in update_data:
+        try:
+            update_data["data_decizie"] = datetime.fromisoformat(update_data["data_decizie"])
+        except (ValueError, TypeError):
+            raise HTTPException(status_code=400, detail="Format dată invalid (așteptat: YYYY-MM-DD)")
+
+    for field, value in update_data.items():
+        setattr(decision, field, value)
+
+    # Force updated_at
+    decision.updated_at = datetime.utcnow()
+    await session.commit()
+
+    logger.info("admin_update_decision", decision_id=decision_id, fields=list(update_data.keys()))
+    return {
+        "status": "updated",
+        "external_id": decision.external_id,
+        "updated_fields": list(update_data.keys()),
+    }
+
+
+@router.delete("/{decision_id}", tags=["admin"])
+async def delete_decision(
+    decision_id: str,
+    session: AsyncSession = Depends(get_session),
+    _admin: User = Depends(require_role("admin")),
+):
+    """Delete a decision and all its associated ArgumentareCritica. Admin only.
+
+    Accepts UUID or external ID (e.g., BO2026_650).
+    """
+    if not is_db_available():
+        raise HTTPException(status_code=503, detail="Baza de date nu este disponibilă")
+
+    bo_match = re.match(r'^BO(\d{4})[_\-](\d+)$', decision_id, re.IGNORECASE)
+    if bo_match:
+        an_bo = int(bo_match.group(1))
+        numar_bo = int(bo_match.group(2))
+        query = select(DecizieCNSC).where(DecizieCNSC.an_bo == an_bo, DecizieCNSC.numar_bo == numar_bo)
+    else:
+        query = select(DecizieCNSC).where(DecizieCNSC.id == decision_id)
+
+    result = await session.execute(query)
+    decision = result.scalar_one_or_none()
+    if not decision:
+        raise HTTPException(status_code=404, detail="Decizia nu a fost găsită")
+
+    external_id = decision.external_id
+    await session.delete(decision)  # CASCADE deletes ArgumentareCritica too
+    await session.commit()
+
+    logger.info("admin_delete_decision", external_id=external_id)
+    return {
+        "status": "deleted",
+        "external_id": external_id,
+    }
 
 
 # --- Dynamic path endpoints ---
