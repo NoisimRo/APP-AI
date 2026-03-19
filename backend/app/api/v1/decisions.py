@@ -1,6 +1,10 @@
 """Decisions API endpoints."""
 
+import json
 import re
+from datetime import datetime
+from typing import Optional
+from uuid import uuid4
 
 from fastapi import APIRouter, HTTPException, UploadFile, File, Query, Depends
 from pydantic import BaseModel, Field
@@ -10,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.logging import get_logger
 from app.db.session import get_session, is_db_available
 from app.models.decision import DecizieCNSC, ArgumentareCritica, NomenclatorCPV
+from app.services.parser import CNSCDecisionParser
 
 router = APIRouter()
 logger = get_logger(__name__)
@@ -861,32 +866,341 @@ async def get_cpv_top_grouped(
     ]
 
 
-@router.post("/upload")
-async def upload_decision(
-    file: UploadFile = File(..., description="Decision file (.txt or .pdf)"),
+class ImportResult(BaseModel):
+    """Result of a decision import operation."""
+    imported: int = 0
+    skipped: int = 0
+    errors: list[str] = Field(default_factory=list)
+    details: list[dict] = Field(default_factory=list)
+
+
+@router.post("/import", response_model=ImportResult)
+async def import_decisions(
+    file: UploadFile = File(..., description="Decision file (.json or .txt)"),
+    session: AsyncSession = Depends(get_session),
 ):
-    """
-    Upload a new CNSC decision for processing.
+    """Import one or more CNSC decisions from a JSON or .txt file.
 
-    The decision will be parsed, metadata extracted, and indexed for search.
-    """
-    logger.info("upload_decision", filename=file.filename, content_type=file.content_type)
+    **JSON format** — can contain pre-analyzed decisions with ArgumentareCritica:
+    ```json
+    {
+      "decisions": [
+        {
+          "filename": "BO2025_1234_R2_CPV_55520000-1_A.txt",
+          "text_integral": "...",
+          "numar_bo": 1234,
+          "an_bo": 2025,
+          "coduri_critici": ["R2"],
+          "cod_cpv": "55520000-1",
+          "solutie_contestatie": "ADMIS",
+          "tip_contestatie": "rezultat",
+          "contestator": "...",
+          "autoritate_contractanta": "...",
+          "argumentari": [
+            {
+              "cod_critica": "R2",
+              "argumente_contestator": "...",
+              "argumente_ac": "...",
+              "argumentatie_cnsc": "...",
+              "castigator_critica": "contestator"
+            }
+          ]
+        }
+      ]
+    }
+    ```
 
+    **TXT format** — raw decision text, parsed using the standard CNSC parser.
+    The filename must follow the convention: BO{AN}_{NR_BO}_{CRITICI}_CPV_{CPV}_{SOLUTIE}.txt
+    """
     if not file.filename:
-        raise HTTPException(status_code=400, detail="Filename is required")
+        raise HTTPException(status_code=400, detail="Numele fișierului este obligatoriu")
 
-    if not file.filename.endswith((".txt", ".pdf")):
+    fname = file.filename.lower()
+    if not fname.endswith((".json", ".txt")):
         raise HTTPException(
             status_code=400,
-            detail="Only .txt and .pdf files are supported",
+            detail="Doar fișiere .json și .txt sunt acceptate",
         )
 
-    # TODO: Implement file processing
-    return {
-        "status": "accepted",
-        "filename": file.filename,
-        "message": "Decision uploaded for processing",
-    }
+    if not is_db_available():
+        raise HTTPException(status_code=503, detail="Baza de date nu este disponibilă")
+
+    content_bytes = await file.read()
+    try:
+        content = content_bytes.decode("utf-8")
+    except UnicodeDecodeError:
+        content = content_bytes.decode("latin-1")
+
+    result = ImportResult()
+
+    if fname.endswith(".json"):
+        await _import_from_json(content, session, result)
+    else:
+        await _import_from_txt(content, file.filename, session, result)
+
+    await session.commit()
+    logger.info(
+        "import_decisions_complete",
+        imported=result.imported,
+        skipped=result.skipped,
+        errors=len(result.errors),
+    )
+    return result
+
+
+@router.post("/import/batch", response_model=ImportResult)
+async def import_decisions_batch(
+    files: list[UploadFile] = File(..., description="Multiple decision files (.json or .txt)"),
+    session: AsyncSession = Depends(get_session),
+):
+    """Import multiple decision files at once (batch upload)."""
+    if not is_db_available():
+        raise HTTPException(status_code=503, detail="Baza de date nu este disponibilă")
+
+    result = ImportResult()
+
+    for file in files:
+        if not file.filename:
+            result.errors.append("Fișier fără nume — ignorat")
+            continue
+
+        fname = file.filename.lower()
+        if not fname.endswith((".json", ".txt")):
+            result.errors.append(f"{file.filename}: format neacceptat (doar .json/.txt)")
+            continue
+
+        content_bytes = await file.read()
+        try:
+            content = content_bytes.decode("utf-8")
+        except UnicodeDecodeError:
+            content = content_bytes.decode("latin-1")
+
+        try:
+            if fname.endswith(".json"):
+                await _import_from_json(content, session, result)
+            else:
+                await _import_from_txt(content, file.filename, session, result)
+        except Exception as e:
+            result.errors.append(f"{file.filename}: {str(e)}")
+
+    await session.commit()
+    logger.info(
+        "import_batch_complete",
+        files=len(files),
+        imported=result.imported,
+        skipped=result.skipped,
+        errors=len(result.errors),
+    )
+    return result
+
+
+async def _import_from_json(
+    content: str,
+    session: AsyncSession,
+    result: ImportResult,
+) -> None:
+    """Import decisions from JSON content."""
+    try:
+        data = json.loads(content)
+    except json.JSONDecodeError as e:
+        result.errors.append(f"JSON invalid: {str(e)}")
+        return
+
+    # Support both {"decisions": [...]} and direct [...]
+    decisions_data = data if isinstance(data, list) else data.get("decisions", [])
+
+    if not decisions_data:
+        result.errors.append("Nu s-au găsit decizii în fișierul JSON")
+        return
+
+    for i, dec_data in enumerate(decisions_data):
+        try:
+            await _import_single_decision_json(dec_data, session, result)
+        except Exception as e:
+            ref = dec_data.get("filename", f"decizia #{i+1}")
+            result.errors.append(f"{ref}: {str(e)}")
+
+
+async def _import_single_decision_json(
+    dec_data: dict,
+    session: AsyncSession,
+    result: ImportResult,
+) -> None:
+    """Import a single decision from JSON dict."""
+    filename = dec_data.get("filename", "")
+    numar_bo = dec_data.get("numar_bo")
+    an_bo = dec_data.get("an_bo")
+    text_integral = dec_data.get("text_integral", "")
+
+    if not text_integral:
+        result.errors.append(f"{filename}: text_integral lipsește")
+        return
+
+    # If filename follows convention, try to parse it for missing fields
+    parser = CNSCDecisionParser()
+    parsed = None
+    if filename and re.match(r"^BO\d{4}_", filename, re.IGNORECASE):
+        try:
+            parsed = parser.parse_text(text_integral, source_file=filename)
+        except Exception:
+            pass
+
+    # Determine numar_bo and an_bo
+    if not numar_bo and parsed:
+        numar_bo = parsed.numar_bo
+    if not an_bo and parsed:
+        an_bo = parsed.an_bo
+    if not numar_bo or not an_bo:
+        result.errors.append(f"{filename}: numar_bo și an_bo sunt obligatorii")
+        return
+
+    # Check if already exists
+    existing = await session.execute(
+        select(DecizieCNSC.id).where(
+            DecizieCNSC.an_bo == an_bo,
+            DecizieCNSC.numar_bo == numar_bo,
+        )
+    )
+    if existing.scalar_one_or_none():
+        result.skipped += 1
+        result.details.append({"filename": filename, "status": "skipped", "reason": "already_exists"})
+        return
+
+    # Build the decision model
+    if not filename:
+        filename = f"BO{an_bo}_{numar_bo}_import.txt"
+
+    # Parse date
+    data_decizie = None
+    if dec_data.get("data_decizie"):
+        try:
+            data_decizie = datetime.fromisoformat(dec_data["data_decizie"])
+        except (ValueError, TypeError):
+            pass
+    elif parsed and parsed.data_decizie:
+        data_decizie = parsed.data_decizie
+
+    coduri_critici = dec_data.get("coduri_critici", [])
+    if not coduri_critici and parsed:
+        coduri_critici = parsed.coduri_critici
+
+    tip_contestatie = dec_data.get("tip_contestatie", "documentatie")
+    if not tip_contestatie and parsed:
+        tip_contestatie = parsed.tip_contestatie.value
+
+    decision = DecizieCNSC(
+        id=str(uuid4()),
+        filename=filename,
+        numar_bo=numar_bo,
+        an_bo=an_bo,
+        numar_decizie=dec_data.get("numar_decizie") or (parsed.numar_decizie if parsed else None),
+        complet=dec_data.get("complet") or (parsed.complet if parsed else None),
+        data_decizie=data_decizie,
+        tip_contestatie=tip_contestatie,
+        coduri_critici=coduri_critici,
+        cod_cpv=dec_data.get("cod_cpv") or (parsed.cod_cpv if parsed else None),
+        cpv_descriere=dec_data.get("cpv_descriere"),
+        solutie_contestatie=dec_data.get("solutie_contestatie") or (
+            parsed.solutie_contestatie.value if parsed and parsed.solutie_contestatie else None
+        ),
+        contestator=dec_data.get("contestator") or (parsed.contestator if parsed else None),
+        autoritate_contractanta=dec_data.get("autoritate_contractanta") or (
+            parsed.autoritate_contractanta if parsed else None
+        ),
+        text_integral=text_integral,
+        parse_warnings=dec_data.get("parse_warnings", []),
+    )
+    session.add(decision)
+
+    # Import ArgumentareCritica if provided
+    argumentari = dec_data.get("argumentari", [])
+    for arg_data in argumentari:
+        arg = ArgumentareCritica(
+            id=str(uuid4()),
+            decizie_id=decision.id,
+            cod_critica=arg_data.get("cod_critica", "N/A"),
+            ordine_in_decizie=arg_data.get("ordine_in_decizie"),
+            argumente_contestator=arg_data.get("argumente_contestator"),
+            jurisprudenta_contestator=arg_data.get("jurisprudenta_contestator", []),
+            argumente_ac=arg_data.get("argumente_ac"),
+            jurisprudenta_ac=arg_data.get("jurisprudenta_ac", []),
+            argumente_intervenienti=arg_data.get("argumente_intervenienti"),
+            elemente_retinute_cnsc=arg_data.get("elemente_retinute_cnsc"),
+            argumentatie_cnsc=arg_data.get("argumentatie_cnsc"),
+            jurisprudenta_cnsc=arg_data.get("jurisprudenta_cnsc", []),
+            castigator_critica=arg_data.get("castigator_critica", "unknown"),
+        )
+        session.add(arg)
+
+    result.imported += 1
+    result.details.append({
+        "filename": filename,
+        "status": "imported",
+        "external_id": f"BO{an_bo}_{numar_bo}",
+        "has_analysis": len(argumentari) > 0,
+    })
+
+
+async def _import_from_txt(
+    content: str,
+    filename: str,
+    session: AsyncSession,
+    result: ImportResult,
+) -> None:
+    """Import a single decision from raw TXT content using the CNSC parser."""
+    parser = CNSCDecisionParser()
+    try:
+        parsed = parser.parse_text(content, source_file=filename)
+    except Exception as e:
+        result.errors.append(f"{filename}: eroare la parsare — {str(e)}")
+        return
+
+    if not parsed.numar_bo or not parsed.an_bo:
+        result.errors.append(f"{filename}: nu s-au putut extrage numar_bo și an_bo")
+        return
+
+    # Check if already exists
+    existing = await session.execute(
+        select(DecizieCNSC.id).where(
+            DecizieCNSC.an_bo == parsed.an_bo,
+            DecizieCNSC.numar_bo == parsed.numar_bo,
+        )
+    )
+    if existing.scalar_one_or_none():
+        result.skipped += 1
+        result.details.append({"filename": filename, "status": "skipped", "reason": "already_exists"})
+        return
+
+    decision = DecizieCNSC(
+        id=str(uuid4()),
+        filename=parsed.filename,
+        numar_bo=parsed.numar_bo,
+        an_bo=parsed.an_bo,
+        numar_decizie=parsed.numar_decizie,
+        complet=parsed.complet,
+        data_decizie=parsed.data_decizie,
+        tip_contestatie=parsed.tip_contestatie.value,
+        coduri_critici=parsed.coduri_critici,
+        cod_cpv=parsed.cod_cpv,
+        cpv_source=parsed.cpv_source,
+        solutie_filename=parsed.solutie_filename.value if parsed.solutie_filename else None,
+        solutie_contestatie=parsed.solutie_contestatie.value if parsed.solutie_contestatie else None,
+        motiv_respingere=parsed.motiv_respingere,
+        contestator=parsed.contestator,
+        autoritate_contractanta=parsed.autoritate_contractanta,
+        intervenienti=parsed.intervenienti,
+        text_integral=parsed.text_integral,
+        parse_warnings=parsed.parse_warnings,
+    )
+    session.add(decision)
+    result.imported += 1
+    result.details.append({
+        "filename": filename,
+        "status": "imported",
+        "external_id": parsed.external_id,
+        "has_analysis": False,
+    })
 
 
 # --- Dynamic path endpoints ---

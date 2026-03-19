@@ -585,7 +585,13 @@ const App = () => {
   const [generatedDecisionRefs, setGeneratedDecisionRefs] = useState<string[]>([]);
 
   // Specialized Input States
-  const [drafterContext, setDrafterContext] = useState({ facts: "", authorityArgs: "", legalGrounds: "" });
+  const [drafterContext, setDrafterContext] = useState({ facts: "", authorityArgs: "", legalGrounds: "", remediiSolicitate: "", detaliiProcedura: "", numarDecizieCnsc: "" });
+  const [drafterDocType, setDrafterDocType] = useState<'contestatie' | 'plangere'>('contestatie');
+
+  // Import States (Data Lake)
+  const [showImportModal, setShowImportModal] = useState(false);
+  const [importLoading, setImportLoading] = useState(false);
+  const [importResult, setImportResult] = useState<any>(null);
   const [clarificationClause, setClarificationClause] = useState("");
   const [memoTopic, setMemoTopic] = useState("");
 
@@ -1576,6 +1582,10 @@ const App = () => {
           authority_args: drafterContext.authorityArgs,
           legal_grounds: drafterContext.legalGrounds,
           scope_id: activeScopeId || undefined,
+          doc_type: drafterDocType,
+          remedii_solicitate: drafterContext.remediiSolicitate || undefined,
+          detalii_procedura: drafterContext.detaliiProcedura || undefined,
+          numar_decizie_cnsc: drafterContext.numarDecizieCnsc || undefined,
         },
         (chunk) => {
           setGeneratedContent(prev => prev + chunk);
@@ -2399,6 +2409,13 @@ const App = () => {
                 <span className="text-[11px] px-2 py-0.5 rounded-full font-medium bg-blue-50 text-blue-600 border border-blue-200">
                   PostgreSQL
                 </span>
+                <button
+                  onClick={() => { setShowImportModal(true); setImportResult(null); }}
+                  className="flex items-center gap-1 bg-indigo-50 text-indigo-700 px-2.5 py-0.5 rounded-full border border-indigo-200 text-[11px] font-medium hover:bg-indigo-100 transition cursor-pointer"
+                >
+                  <Upload size={11} />
+                  Import
+                </button>
               </div>
             </div>
 
@@ -3030,8 +3047,30 @@ const App = () => {
       <div className="w-full md:w-1/3 border-r border-slate-200 p-6 overflow-y-auto bg-slate-50/50">
         <h2 className="text-lg font-bold text-slate-800 mb-4 flex gap-2 items-center">
           <Scale className="text-blue-600" size={20}/>
-          Configurare Contestație
+          {drafterDocType === 'contestatie' ? 'Configurare Contestație' : 'Configurare Plângere'}
         </h2>
+
+        {/* Document Type Selector */}
+        <div className="flex gap-2 mb-4">
+          <button
+            onClick={() => setDrafterDocType('contestatie')}
+            className={`flex-1 text-xs font-semibold py-2.5 rounded-lg border transition ${drafterDocType === 'contestatie' ? 'bg-blue-600 text-white border-blue-600 shadow-sm' : 'bg-white text-slate-600 border-slate-300 hover:bg-slate-50'}`}
+          >
+            Contestație CNSC
+          </button>
+          <button
+            onClick={() => setDrafterDocType('plangere')}
+            className={`flex-1 text-xs font-semibold py-2.5 rounded-lg border transition ${drafterDocType === 'plangere' ? 'bg-purple-600 text-white border-purple-600 shadow-sm' : 'bg-white text-slate-600 border-slate-300 hover:bg-slate-50'}`}
+          >
+            Plângere instanță
+          </button>
+        </div>
+        <p className="text-[10px] text-slate-400 mb-4">
+          {drafterDocType === 'contestatie'
+            ? 'Generează o contestație către CNSC împotriva actelor autorității contractante.'
+            : 'Generează o plângere la Curtea de Apel împotriva unei decizii CNSC.'}
+        </p>
+
         <ScopeSelector compact />
         <ActiveScopeIndicator />
 
@@ -3065,21 +3104,38 @@ const App = () => {
               </div>
             )}
           </div>
+
+          {/* Plângere-specific: CNSC decision number */}
+          {drafterDocType === 'plangere' && (
+            <div>
+              <label className="block text-xs font-bold text-slate-700 uppercase mb-2">Nr. Decizie CNSC atacată</label>
+              <input
+                type="text"
+                className="w-full p-3 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-purple-500 outline-none transition shadow-sm"
+                placeholder="Ex: Decizia nr. 1234/C8/5678 din 10.01.2026"
+                value={drafterContext.numarDecizieCnsc}
+                onChange={(e) => setDrafterContext({...drafterContext, numarDecizieCnsc: e.target.value})}
+              />
+            </div>
+          )}
+
           <div>
-            <label className="block text-xs font-bold text-slate-700 uppercase mb-2">Situația de Fapt</label>
+            <label className="block text-xs font-bold text-slate-700 uppercase mb-2">
+              {drafterDocType === 'contestatie' ? 'Situația de Fapt' : 'Motivele Plângerii'}
+            </label>
             <textarea
               className={`w-full p-3 border rounded-lg text-sm h-32 focus:ring-2 focus:ring-blue-500 outline-none transition shadow-sm ${drafterContext.facts.length > 200000 ? 'border-red-400 bg-red-50' : 'border-slate-300'}`}
-              placeholder="Descrie cronologia evenimentelor sau încarcă un document..."
+              placeholder={drafterDocType === 'contestatie' ? 'Descrie cronologia evenimentelor sau încarcă un document...' : 'Descrie motivele pentru care decizia CNSC este nelegală/netemeinică...'}
               value={drafterContext.facts}
               onChange={(e) => setDrafterContext({...drafterContext, facts: e.target.value})}
             />
             <CharCounter value={drafterContext.facts} maxLength={200000} />
           </div>
           <div>
-            <label className="block text-xs font-bold text-slate-700 uppercase mb-2">Argumentele Autorității</label>
+            <label className="block text-xs font-bold text-slate-700 uppercase mb-2">Argumentele Autorității / CNSC</label>
             <textarea
-              className={`w-full p-3 border rounded-lg text-sm h-32 focus:ring-2 focus:ring-blue-500 outline-none transition shadow-sm ${drafterContext.authorityArgs.length > 200000 ? 'border-red-400 bg-red-50' : 'border-slate-300'}`}
-              placeholder="Ce motive a invocat autoritatea pentru respingere?"
+              className={`w-full p-3 border rounded-lg text-sm h-24 focus:ring-2 focus:ring-blue-500 outline-none transition shadow-sm ${drafterContext.authorityArgs.length > 200000 ? 'border-red-400 bg-red-50' : 'border-slate-300'}`}
+              placeholder={drafterDocType === 'contestatie' ? 'Ce motive a invocat autoritatea pentru respingere?' : 'Ce a reținut CNSC în decizia atacată?'}
               value={drafterContext.authorityArgs}
               onChange={(e) => setDrafterContext({...drafterContext, authorityArgs: e.target.value})}
             />
@@ -3096,13 +3152,43 @@ const App = () => {
             />
             <CharCounter value={drafterContext.legalGrounds} maxLength={50000} />
           </div>
-          
-          <button 
+
+          {/* Collapsible advanced fields */}
+          <details className="group">
+            <summary className="text-xs font-semibold text-slate-500 uppercase cursor-pointer hover:text-blue-600 transition flex items-center gap-1">
+              <ChevronRight size={12} className="group-open:rotate-90 transition-transform" />
+              Câmpuri avansate (opțional)
+            </summary>
+            <div className="space-y-4 mt-3 pl-1">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase mb-2">Detalii Procedură</label>
+                <textarea
+                  className="w-full p-3 border border-slate-300 rounded-lg text-sm h-20 focus:ring-2 focus:ring-blue-500 outline-none transition shadow-sm"
+                  placeholder="Tip procedură, valoare estimată, criteriu atribuire, nr. oferte..."
+                  value={drafterContext.detaliiProcedura}
+                  onChange={(e) => setDrafterContext({...drafterContext, detaliiProcedura: e.target.value})}
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase mb-2">Remedii Solicitate</label>
+                <textarea
+                  className="w-full p-3 border border-slate-300 rounded-lg text-sm h-20 focus:ring-2 focus:ring-blue-500 outline-none transition shadow-sm"
+                  placeholder="Ex: Anularea actului, reevaluarea ofertelor, refacerea documentației..."
+                  value={drafterContext.remediiSolicitate}
+                  onChange={(e) => setDrafterContext({...drafterContext, remediiSolicitate: e.target.value})}
+                />
+              </div>
+            </div>
+          </details>
+
+          <button
             onClick={handleDrafting}
             disabled={isLoading}
-            className="w-full bg-slate-900 text-white py-4 rounded-xl font-medium hover:bg-slate-800 transition flex justify-center items-center gap-2 shadow-lg hover:shadow-xl mt-4"
+            className={`w-full text-white py-4 rounded-xl font-medium transition flex justify-center items-center gap-2 shadow-lg hover:shadow-xl mt-4 ${
+              drafterDocType === 'plangere' ? 'bg-purple-700 hover:bg-purple-600' : 'bg-slate-900 hover:bg-slate-800'
+            }`}
           >
-            {isLoading ? <><Loader2 className="animate-spin" size={18} /> <span className="text-sm">{streamStatus || "Se procesează..."}</span></> : "Generează Proiect"}
+            {isLoading ? <><Loader2 className="animate-spin" size={18} /> <span className="text-sm">{streamStatus || "Se procesează..."}</span></> : drafterDocType === 'contestatie' ? 'Generează Contestație' : 'Generează Plângere'}
           </button>
         </div>
       </div>
@@ -3112,7 +3198,7 @@ const App = () => {
           <div className="max-w-3xl mx-auto">
              <div className="flex justify-end gap-3 mb-4">
                 <button className="text-sm text-blue-600 font-medium hover:underline">Descarcă .DOCX</button>
-                <button onClick={() => saveDocument('contestatie', drafterContext.facts.slice(0, 200) || 'Contestație', generatedContent, generatedDecisionRefs, { facts: drafterContext.facts, authorityArgs: drafterContext.authorityArgs, legalGrounds: drafterContext.legalGrounds })} className="text-sm text-green-600 font-medium hover:underline flex items-center gap-1"><Save size={12} /> Salvează</button>
+                <button onClick={() => saveDocument(drafterDocType === 'plangere' ? 'plangere' : 'contestatie', drafterContext.facts.slice(0, 200) || (drafterDocType === 'plangere' ? 'Plângere' : 'Contestație'), generatedContent, generatedDecisionRefs, { facts: drafterContext.facts, authorityArgs: drafterContext.authorityArgs, legalGrounds: drafterContext.legalGrounds, docType: drafterDocType })} className="text-sm text-green-600 font-medium hover:underline flex items-center gap-1"><Save size={12} /> Salvează</button>
                 <button onClick={() => loadHistory('contestatie')} className="text-sm text-slate-500 font-medium hover:underline flex items-center gap-1"><Bookmark size={12} /> Istoric</button>
              </div>
              <div className="prose prose-slate max-w-none font-serif text-slate-800 leading-loose bg-white" dangerouslySetInnerHTML={{ __html: formatMarkdown(generatedContent) }} />
@@ -5322,6 +5408,150 @@ const App = () => {
                 ))}
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Import Decisions Modal */}
+      {showImportModal && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={() => setShowImportModal(false)}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg p-6" onClick={(e) => e.stopPropagation()}>
+            <h3 className="text-lg font-bold text-slate-800 mb-2 flex items-center gap-2">
+              <Upload size={20} className="text-indigo-600" />
+              Import Decizii CNSC
+            </h3>
+            <p className="text-xs text-slate-500 mb-4">
+              Importă decizii din fișiere <strong>.json</strong> (cu sau fără analiză) sau <strong>.txt</strong> (text brut, se parsează automat).
+            </p>
+
+            <div className="bg-slate-50 rounded-lg p-3 border border-slate-200 mb-4">
+              <div className="text-xs font-bold text-slate-500 uppercase mb-2">Format JSON acceptat</div>
+              <pre className="text-[10px] text-slate-600 overflow-x-auto whitespace-pre-wrap leading-relaxed">{`{
+  "decisions": [{
+    "filename": "BO2025_1234_R2_CPV_55520000-1_A.txt",
+    "text_integral": "...",
+    "numar_bo": 1234, "an_bo": 2025,
+    "coduri_critici": ["R2"],
+    "solutie_contestatie": "ADMIS",
+    "argumentari": [{ "cod_critica": "R2", "argumentatie_cnsc": "...", "castigator_critica": "contestator" }]
+  }]
+}`}</pre>
+            </div>
+
+            <div className="mb-4">
+              <input
+                type="file"
+                accept=".json,.txt"
+                multiple
+                onChange={async (e) => {
+                  const files = e.target.files;
+                  if (!files || files.length === 0) return;
+                  setImportLoading(true);
+                  setImportResult(null);
+
+                  const formData = new FormData();
+                  if (files.length === 1) {
+                    formData.append('file', files[0]);
+                  } else {
+                    Array.from(files).forEach(f => formData.append('files', f));
+                  }
+
+                  try {
+                    const endpoint = files.length === 1 ? '/api/v1/decisions/import' : '/api/v1/decisions/import/batch';
+                    const token = localStorage.getItem('access_token');
+                    const headers: Record<string, string> = {};
+                    if (token) headers['Authorization'] = `Bearer ${token}`;
+                    const res = await fetch(endpoint, { method: 'POST', headers, body: formData });
+                    const data = await res.json();
+                    if (!res.ok) {
+                      setImportResult({ error: data.detail || `Eroare HTTP ${res.status}` });
+                    } else {
+                      setImportResult(data);
+                      // Refresh Data Lake after import
+                      if (data.imported > 0) {
+                        fetchDecisions(1, fileSearch);
+                        // Refresh stats
+                        authFetch('/api/v1/decisions/stats/overview').then(r => r.ok ? r.json() : null).then(d => d && setDbStats(d)).catch(() => {});
+                      }
+                    }
+                  } catch (err: any) {
+                    setImportResult({ error: err.message || 'Eroare de rețea' });
+                  } finally {
+                    setImportLoading(false);
+                    e.target.value = '';
+                  }
+                }}
+                className="block w-full text-sm text-slate-600
+                  file:mr-4 file:py-2 file:px-4
+                  file:rounded-lg file:border-0
+                  file:text-xs file:font-semibold
+                  file:bg-indigo-50 file:text-indigo-700
+                  hover:file:bg-indigo-100 file:cursor-pointer"
+              />
+              <p className="text-[10px] text-slate-400 mt-1">Poți selecta mai multe fișiere simultan (.json sau .txt)</p>
+            </div>
+
+            {importLoading && (
+              <div className="flex items-center gap-2 text-indigo-600 text-sm mb-4">
+                <Loader2 className="animate-spin" size={16} /> Se importă...
+              </div>
+            )}
+
+            {importResult && !importResult.error && (
+              <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-3 mb-4">
+                <div className="flex items-center gap-2 text-emerald-700 font-semibold text-sm mb-2">
+                  <CheckCircle size={16} /> Import finalizat
+                </div>
+                <div className="grid grid-cols-3 gap-2 text-center">
+                  <div className="bg-white rounded p-2 border border-emerald-100">
+                    <div className="text-lg font-bold text-emerald-700">{importResult.imported}</div>
+                    <div className="text-[10px] text-emerald-600">Importate</div>
+                  </div>
+                  <div className="bg-white rounded p-2 border border-amber-100">
+                    <div className="text-lg font-bold text-amber-600">{importResult.skipped}</div>
+                    <div className="text-[10px] text-amber-500">Existente</div>
+                  </div>
+                  <div className="bg-white rounded p-2 border border-red-100">
+                    <div className="text-lg font-bold text-red-600">{importResult.errors?.length || 0}</div>
+                    <div className="text-[10px] text-red-500">Erori</div>
+                  </div>
+                </div>
+                {importResult.errors?.length > 0 && (
+                  <div className="mt-2 text-xs text-red-600 space-y-0.5 max-h-24 overflow-y-auto">
+                    {importResult.errors.map((err: string, i: number) => (
+                      <div key={i} className="flex items-start gap-1"><XCircle size={10} className="shrink-0 mt-0.5" /> {err}</div>
+                    ))}
+                  </div>
+                )}
+                {importResult.details?.length > 0 && (
+                  <div className="mt-2 text-xs text-slate-600 space-y-0.5 max-h-24 overflow-y-auto">
+                    {importResult.details.map((d: any, i: number) => (
+                      <div key={i} className="flex items-center gap-1">
+                        {d.status === 'imported' ? <CheckCircle size={10} className="text-emerald-500" /> : <span className="text-amber-500">~</span>}
+                        <span className="font-mono">{d.external_id || d.filename}</span>
+                        {d.has_analysis && <span className="text-emerald-500 text-[9px]">(+analiză)</span>}
+                        {d.status === 'skipped' && <span className="text-amber-500 text-[9px]">(deja există)</span>}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {importResult?.error && (
+              <div className="bg-red-50 border border-red-200 rounded-lg p-3 mb-4 text-red-700 text-sm flex items-start gap-2">
+                <XCircle size={16} className="shrink-0 mt-0.5" /> {importResult.error}
+              </div>
+            )}
+
+            <div className="flex justify-end">
+              <button
+                onClick={() => setShowImportModal(false)}
+                className="px-4 py-2 text-sm text-slate-600 hover:text-slate-800 font-medium"
+              >
+                Închide
+              </button>
+            </div>
           </div>
         </div>
       )}
