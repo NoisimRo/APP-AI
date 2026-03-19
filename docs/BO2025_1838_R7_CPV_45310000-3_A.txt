@@ -1,0 +1,1270 @@
+În conformitate cu prevederile art. 14 alin. (2) din Legea nr.
+101/2016 privind remediile și căile de atac în materie de
+atribuire a contractelor de achiziție publică, a contractelor
+sectoriale și a contractelor de concesiune de lucrări și concesiune
+de servicii, precum și pentru organizarea și funcționarea
+Consiliului Național de Soluționare a Contestațiilor, cu
+modificările    și  completările   ulterioare,  Consiliul    adoptă
+următoarea:
+
+                                     DECIZIE
+                     Nr. 1838/C1/1575,1626, 1637
+                           Data: 01.07.2025
+
+       Prin contestația nr. 270/05.05.2025 înregistrată la Consiliul
+Național de Soluționare a Contestațiilor sub nr. 28462/05.05.2025,
+formulată de ......... SRL (dosar nr. 1575/2025), cu sediul în
+localitatea ........., nr. 629, județul ........., înmatriculată la Registrul
+Comerțului cu nr. ........., având cod unic de înregistrare RO .........,
+reprezentată legal prin ........., împotriva rezultatului procedurii
+comunicat prin adresa nr. 2137/29.04.2025, emisă de către autoritatea
+contractantă COMUNA ........., cu sediul în localitatea .........,
+str. ..........., județul ........., în cadrul procedurii simplificate, organizată
+în vederea atribuirii contractului de achiziție având ca obiect: „Lucrări de
+execuție pentru investiția - Dezvoltarea sistemelor inteligente de
+management local în comuna ........., județul ......... - Componenta CIO -
+Fondul local; Axa de investiții 1.1.2. - Asigurarea infrastructurii pentru
+transportul verde - ITS/Alte infrastructuri TIC (Sisteme inteligente de
+management urban/local", comuna ........., județul .........”, cod CPV
+45222300-2, s-a solicitat:
+       1. admiterea prezentei contestații, întocmai cum a fost formulată,
+anularea adresei nr. 2137/29.04.2025 comunicare rezultat procedură de
+atribuire și a tuturor actelor subsecvente, anularea raportului procedurii
+de atribuire nr. 2135/29.04.2025, în care apare înscrisă mențiunea de
+anulare a procedurii.
+       2. obligarea autorității contractante la anularea deciziei de anulare
+a procedurii de atribuire și reevaluarea ofertei depuse de ......... SRL, în
+considerarea tuturor aspectelor descrise în prezenta contestație.
+       Prin contestația înregistrată la Consiliul Național de Soluționare a
+Contestațiilor sub nr. 29064/06.05.2025, formulată de ......... SRL,
+(dosar nr. 1626/2025) cu sediul în .........-Napoca, .........,
+județul ........., înmatriculată la Registrul Comerțului cu nr. ........., având
+cod unic de înregistrare RO ........., reprezentată prin ........., împotriva
+rezultatului procedurii comunicat prin adresa nr. 2138/ 29.04.2025,
+
+                                                                Pagina 1 din 36
+emisă de către autoritatea contractantă COMUNA ........., cu sediul în
+localitatea ........., str. Principală, nr. 685, județul ........., în cadrul
+aceleiași proceduri, s-a solicitat anularea comunicatului nr. 2138/
+29.04.2025 și a raportului procedurii nr. 2135/29.04.2025 luând în
+considerare argumentele ce urmează să le expună mai jos și procedarea
+la remedierea actelor ce afectează procedura de atribuire.
+       Prin contestația nr. 397/05.05.2025, înregistrată la Consiliul
+Național de Soluționare a Contestațiilor sub nr. 29274/07.05.2025,
+formulată de ......... SRL în calitate de lider al Asocierii ......... SRL
+– .............................SRL (dosar nr. 1637/2025), cu sediul
+în ........., ........., județul ........., înmatriculată la Registrul Comerțului cu
+nr. ........., având cod unic de înregistrare RO ........., reprezentată
+prin ........., împotriva rezultatului procedurii comunicat prin adresa nr.
+2136/29.04.2025,              emisă      de    către    autoritatea     contractantă
+COMUNA ........., cu sediul în localitatea ........., str. ..............,
+județul ........., în cadrul aceleiași proceduri, s-a solicitat:
+       - obligarea autorității contractante la revocarea/anularea
+comunicării rezultatului procedurii - adresa nr. 2136/29.04.2025 și la
+revocarea/ anularea raportului procedurii nr. 2 după reevaluare în urma
+contestațiilor, având nr. 2135/ 29.04.2025, în partea ce vizează oferta
+Asocierii,       întrucât,      oferta      prezentată     de   Asocierea     .........
+- .............................SRL trebuia declarată admisibilă și câștigătoare;
+       - obligarea autorității contractante la reevaluarea ofertei sale cu
+luarea în considerare a documentelor și explicațiilor prezentate în cele ce
+urmează și obligarea autorității contractante să nu anuleze procedura de
+achiziție publică.
+      Conform prevederilor art. 17 alin. (2) din Legea nr. 101/2016,
+contestațiile care fac obiectul dosarelor nr. 1575/2025, nr. 1626/2025 și
+nr. 1637/2025 au fost conexate pentru a se pronunța o soluție unitară
+deoarece acestea sunt formulate în cadrul aceleiași proceduri de
+atribuire.
+      În luarea deciziei, CONSILIUL, legal investit, a avut în vedere
+următoarele:
+      ......... SRL arată că, ulterior postării în SEAP de către autoritatea
+contractantă       a     anunțului    de    participare   simplificat   SCN
+1156905/09.12.2024, societatea sa a depus ofertă.
+      Criteriul de atribuire ales de autoritatea contractantă este descris în
+fișa de date a achiziției astfel:
+      „II. 2.5 Criterii de atribuire
+      Cel mai bun raport calitate - preț
+      Denumire factor evaluare Descriere Pondere
+      Prețul ofertei Componenta financiară 40%
+      Punctaj maxim factor: 40
+      Algoritm de calcul: Punctajul se acorda astfel:
+      a) Pentru cel mai scăzut dintre prețuri se acordă punctajul maxim
+alocat;
+      b) Pentru celelalte prețuri ofertate punctajul P(n) se calculează
+proporțional, astfel: P(n) = (Preț minim ofertat / Preț n) x punctaj
+maxim alocat.
+      Perioada de garanție Perioada de garanție 30%
+      Punctaj maxim factor: 30
+      Algoritm de calcul: a) Pentru oferta admisibilă care acordă garanție
+lucrărilor (produselor și lucrărilor de punere în funcțiune a sistemului de
+supraveghere video) pentru un interval de 5 ani (3 ani garanție
+obligatorie + 2 ani garanție extinsă) - se acorda 30 puncte.
+      b) Pentru oferta admisibilă care acordă garanție lucrărilor
+(produselor și lucrărilor de punere în funcțiune a sistemului de
+supraveghere video) pentru un interval de 4 ani (3 ani garanție
+obligatorie + 1 an garanție extinsă) - se acorda 20 puncte.
+      c) ofertele care acordă strict cei 3 ani garanție (produselor și
+lucrărilor de punere în funcțiune a sistemului de supraveghere video),
+impuși ca minim prin documentația de atribuire se punctează cu 10
+puncte
+      d) ofertele ce nu îndeplinesc condiția minimă din caietul de sarcini
+(3 ani garanție obligatorie) se declară neconforme.
+      Pentru ofertele care acordă garanție peste 5 ani, punctajul va fi
+maximul acordat, respectiv 30 de puncte.
+      Timpul de intervenție. Timpul de intervenție 30%
+      Punctaj maxim factor: 30.
+
+                                                            Pagina 3 din 36
+      Algoritm de calcul:
+      a) Pentru cel mai mic timp de intervenție ofertat (Tmin) se acordă
+punctajul maxim alocat = 30 puncte.
+      b) Pentru celelalte oferte, punctajul P(n) se calculează proporțional,
+astfel: P(n) = (Tmin / To) x punctaj maxim alocat (30 puncte). Tmin =
+cel mai mic timp de intervenție ofertat; To = timpul de intervenție
+ofertat. Timp de intervenție minim :15 minute.
+      Punctaj maxim total: 100”.
+      Precizează că, la data de 27.02.2025, a primit o primă comunicare
+a rezultatului procedurii de atribuire - nr. 786, societatea sa fiind
+desemnată câștigătoare, fără a i se solicita informații detaliate cu privire
+la termenul de intervenție ofertat, fiind suficient răspunsul prezentat de
+ofertant la momentul acela.
+      Ulterior, pe rolul CNSC au fost depuse contestații de către .........
+SRL și Asocierea ......... SRL & .............................SRL, împotriva
+primului raport al procedurii de atribuire nr. 785/27.02.2025 și a
+comunicărilor de rezultat, autoritatea contractantă dispunând reluarea
+evaluării ofertelor de la faza propunerilor tehnice.
+      În aplicarea măsurilor de remediere, autoritatea contractantă a
+transmis societății sale 2 solicitări de clarificare vizând timpul de
+intervenție ofertat, la care a răspuns în termen și mai mult decât era
+necesar, pentru lămurirea comisiei de evaluare.
+      La data de 29.04.2025, prin adresa nr. 2137, autoritatea
+contractantă îi comunică respingerea ofertei, ca inacceptabilă și
+neconformă, în temeiul art. 134 și 137 din HG nr. 395/2016.
+      Totodată, la data de 29.04.2025, autoritatea contractantă postează
+raportul procedurii nr. 2/2135, în conținutul căruia, la pagina 21, este
+înscrisă propunerea comisiei de evaluare de anulare a procedurii de
+atribuire, în temeiul art. 212 alin. (1) din Legea nr. 98/2016, întrucât, nu
+a fost depusă nicio ofertă admisibilă.
+       Solicită CNSC să rețină faptul că, în adresa de comunicare a
+rezultatului procedurii de atribuire nr. 2137/29.04.2025 nu este adusă la
+cunoștința societății sale și decizia de anulare a procedurii.
+       Pentru acest motiv, ......... SRL înțelege să conteste adresa de
+comunicare a rezultatului procedurii de atribuire nr. 2137/29.04.2025,
+precum și raportul procedurii nr. 2/2135/29.04.2025, ambele acte, în
+opinia sa, fiind nelegale, valabilitatea și legalitatea acestora fiind
+intercondiționate.
+       Consideră oferta ......... SRL ca fiind admisibilă și conformă, motiv
+pentru care, consideră că aceasta trebuie supusă reevaluării, în
+consecință, nefiind incident niciun temei legal și/sau justificare pentru
+autoritatea contractantă de anulare a procedurii de atribuire.
+       În susținerea temeiniciei contestației sale, prezintă Consiliului
+motivele pentru care apreciază că oferta sa este conformă, admisibilă și
+acceptabilă, fapt ce demonstrează, implicit, atât nelegalitatea adresei de
+comunicare rezultat, precum și nelegalitatea deciziei de anulare a
+procedurii de atribuire.
+       1. Descriere cu privire la nelegalitatea activității comisiei de
+evaluare a ofertelor; argumente pentru demonstrarea conformității
+ofertei ......... SRL.
+       În continuarea celor prezentate mai-sus, pentru claritatea
+expunerii, contestatorul susține că se va referi inițial la etapa de
+solicitare clarificări, urmând ca, ulterior, să demonstreze nelegalitatea
+adresei de comunicare rezultat nr. 2137/29.04.2025, astfel:
+       Prin adresa nr. 1668/07.04.2025, autoritatea contractantă a
+solicitat ......... SRL clarificări în ceea ce privește timpul de intervenție
+ofertat - 15 minute, sub aspectul corelării propunerii tehnice cu cea
+financiară.
+       Prin adresa nr. 218/08.04.2025, societatea sa a răspuns autorității
+contractante, oferind lămuriri sub toate aspectele solicitate de aceasta,
+particularizat pe modalitatea de ofertare, precum și întemeiat pe
+dispoziții ale documentației de atribuire, condiții de contract (model pus
+la dispoziție în SEAP) și legislație incidentă.
+       Analizând răspunsul ......... SRL, autoritatea contractantă stabilește
+că este necesară transmiterea unei noi adrese de solicitare clarificări,
+sens în care, la data de 09.04.2025, a primit solicitarea de clarificare nr.
+2 - 1736, prin care Primăria Comunei ......... revine cu aceeași întrebare
+către ofertant, motivat de faptul că, în aprecierea acesteia, răspunsul
+anterior nu a fost suficient de concludent, prin raportare la deținerea de
+către ......... SRL a unui singur angajat cu domiciliu în zonă.
+
+                                                            Pagina 5 din 36
+       Cu bune intenții și în scopul lămuririi autorității contractante,
+precizează că a răspuns și acestei solicitări de clarificare, prin adresa nr.
+227/10.04.2025, menținând aceeași argumentare, însă mai detaliată
+față de răspunsul anterior din data de 08.04.2025.
+       Pentru societatea sa, rămâne un aspect neînțeles faptul că, inițial,
+la prima evaluare a aceleiași oferte depuse de ......... SRL,
+Primăria ......... a adresat societății sale o singură solicitare de clarificare
+cu privire la termenul de intervenție, pentru ca, ulterior, în baza unor
+contestații nesoluționate pe fond de CNSC, aceeași autoritate, sub
+pretextul dispunerii unor măsuri de remediere, să insiste obsesiv pentru
+clarificarea termenului de intervenție și, totodată, să opteze, în final,
+pentru anularea procedurii de atribuire.
+       În ceea ce privește procedura de solicitare clarificări solicită a se
+reține în soluționare, de către Consiliu, următoarele:
+       Autoritatea contractantă a solicitat clarificări societății sale
+interpretând în mod subiectiv cerințele documentației de atribuire. Până
+la data depunerii ofertelor, documentația de atribuire nu a fost
+modificată prin emiterea vreunei erate care să îndreptățească autoritatea
+contractantă la o interpretare contrară față de cea cunoscută tuturor
+ofertanților. În acest context, autoritatea este obligată la respectarea
+cerințelor propriei documentații de atribuire, fiind nelegal ca aceasta să
+modifice în evaluarea ofertelor documentația ce a stat la baza întocmirii
+ofertelor.
+       În niciuna dintre solicitările de clarificare, autoritatea contractantă
+nu a identificat nicio abatere, neconformitate a ofertei sale, ci, a insistat
+fără niciun temei de fapt sau de drept, în a clarifica termenul de
+intervenție ofertat, conduită ce ar putea arăta, în opinia sa, intenția
+acesteia de a crea condiții artificiale pentru anularea procedurii de
+atribuire.
+       Solicitările de clarificări transmise către ofertant nu au fost clare,
+precise și să definească, în mod explicit și suficient de detaliat, în ce
+constă solicitarea comisiei de evaluare, autoritatea contractantă
+neindicând ce documente justificative solicită să îi fie puse la dispoziție și
+ce anume înțelege prin dovezi în sprijinul afirmațiilor.
+       ......... SRL susține că a fost de bună-credință și a furnizat
+răspunsurile necesare autorității contractante, dar în același timp, a pus
+în vederea acesteia faptul că nu a fost solicitată în documentația de
+atribuire prezentarea de informații cu privire la timpul de remediere sau
+rezolvare a situației critice (a se vedea pagina 2 din adresa PGV nr.
+218/08.04.2025). De asemenea, nu au existat cerințe cu privire la
+fundamentarea economică a timpului de intervenție/remediere, ofertanții
+fiind liberi să coteze aceste cheltuieli în funcție de propriile capacități
+tehnice și economice.
+       În aceste condiții, consideră că nu i se poate imputa ofertantului
+modalitatea de răspuns, aceasta din urma fiind rezultatul interpretării
+dată de ofertant solicitării primite. Or, lipsa unei solicitări de clarificări
+formulată în conformitate cu dispozițiile legale/documentația de atribuire
+l-a pus în imposibilitatea transmiterii unui răspuns care să fie apreciat ca
+fiind concludent de către autoritate, existând riscul respingerii ofertei în
+baza subiectivismului comisiei de evaluare.
+       Față de acest aspect, invocă Decizia civilă nr. 1995 din 11
+octombrie 2021, emisă de Curtea de Apel București.
+       Totodată, a apreciat important de evidențiat în răspunsurile
+transmise comisiei de evaluare și diferența semnificativă dintre definiția
+termenului/timpului de intervenție și definiția termenului/timpului de
+remediere.
+       În urma analizării ambelor răspunsuri oferite de societatea sa,
+autoritatea contractantă decide că oferta ......... SRL este inacceptabilă
+(art. 134 alin. (5) și (6) din HG nr. 395/2016), pentru că, răspunsurile la
+solicitările de clarificare sunt neconcludente și modifică conținutul
+propunerii tehnice. Totodată, oferta societății este apreciată și
+neconformă (art. 137, alin. (3) lit. d) din HG nr. 395/2016), întrucât,
+propunerea financiară nu este corelată cu elementele propunerii tehnice.
+       Contestatorul arată că motivele prezentate de Primăria
+Comunei ......... în adresa de comunicare rezultat nr. 2137/29.04.2025,
+sunt:
+       a) Ofertantul a modificat prin răspunsul nr. 227/10.04.2025
+propunerea tehnică, în conținutul căreia a oferit 5 ani de garanție pentru
+lucrări și echipamente iar prin adresa nr. 227/10.04.2025, acest termen
+a fost prezentat/schimbat/diminuat la 36 de luni;
+
+                                                             Pagina 7 din 36
+      b) Ofertantul nu a reușit să răspundă concludent la întrebarea:
+„Cum explicați faptul că acest angajat nu poate beneficia de concediu de
+odihnă/concediu de boală, etc pentru că este obligat să răspundă în orice
+moment la solicitările autorității contractante în termen de 15 minute?";
+      c) Ofertantul nu poate justifica costurile cu personalul/1 tehnician
+ce va sta nemijlocit la dispoziția autorității contractante (...), prin
+raportare la dispozițiile Ordinului nr. 1568/15.10.2002,
+      d) Existența unui risc major de neîndeplinire sau îndeplinire
+defectuoasă a contractului din cauza nealocării resurselor financiare
+suficiente pentru a asigura timpul de intervenție de 15 minute cu un
+angajat care să fie permanent la dispoziția autorității contractante.
+      În demonstrarea conformității ofertei sale, contestatorul solicită
+Consiliului să rețină, în soluționare, următoarele:
+      Cerința din documentația de atribuire referitoare la timpul de
+intervenție este cea prevăzută la criteriul de atribuire menționat la pag.
+2-3 ale prezentei contestații. Subliniază faptul că, timpul de 15 minute
+pentru intervenție, a fost specificat chiar de autoritatea contractantă în
+detalierea algoritmului de acordare punctaj, situație ce arată că, inclusiv,
+autoritatea contractantă apreciază drept sustenabil un astfel de termen.
+      Pentru îndeplinirea cerinței, ......... SRL a depus în oferta sa, în
+cadrul Propunerii tehnice, următoarele documente:
+      - la pagina 789 din Propunerea tehnică - Declarație disponibilitate
+electrician autorizat GR IIB ..............., domiciliat în localitatea Mociu,
+județul .........;
+      - la pagina 790 din Propunerea tehnică - copie carte de
+identitate .............., din care reiese că expertul propus poate interveni
+în 15 minute de la domiciliul acestuia;
+       - la pagina 791 din Propunerea tehnica - extras din Lista
+electricienilor autorizați de pe site-ul Autorității Naționale de
+Reglementare          în       Domeniul         Energiei       (ANRE)       -
+https://spv.anre.ro/autorizatii-electricieni/.
+       Totodată, consideră esențial pentru soluționarea speței de față, a
+se înțelege distincția dintre noțiunea timpului de intervenție în
+comparație cu noțiunea de termen de remediere.
+       Termenul de intervenție este perioada de timp în care executantul
+se deplasează la oricare dintre obiectivele contractului pentru a constata
+problemele notificate de autoritatea contractantă. În acest sens,
+electricianul nominalizat de societatea sa, în baza declarației sale de
+disponibilitate, se va deplasa în locul indicat de autoritatea contractantă,
+domiciliul acestuia permițând susținerea termenului de intervenție
+ofertat. După cum a specificat și în conținutul adreselor de răspuns la
+solicitările de clarificare: „Timpul de intervenție reprezintă durata
+necesară pentru ca o echipă sau un sistem să reacționeze și să înceapă
+acțiunile necesare în urma unui eveniment sau a unei probleme. Acesta
+măsoară rapiditatea cu care se inițiază răspunsul.
+       Timpul de remediere (cunoscut și ca timp de rezolvare) reprezintă
+durata totală necesară pentru a rezolva complet o problemă sau pentru a
+restabili un sistem la starea sa normală de funcționare. Acesta include
+timpul de intervenție, diagnosticarea problemei, implementarea soluției
+și verificarea rezultatului. În esență, diferența principală dintre cele două
+este: Timpul de intervenție: Se concentrează pe cât de repede se începe
+acțiunea. Timpul de remediere: Se concentrează pe cât de mult durează
+până când problema este complet rezolvată”.
+       Din interpretarea autorității contractante, astfel cum se conturează
+aceasta din adresele de solicitare clarificări și comunicare rezultat, reiese
+că, aceasta, fie confundă cele 2 noțiuni, fie le cumulează, deși, prin
+documentația de atribuire, punctajul a fost acordat doar pentru termenul
+de intervenție, nefiind specificate niciun fel de cerințe pentru timpul de
+remediere.
+       Cu privire la primul motiv de respingere a ofertei ......... SRL (lit.
+a), contestatorul susține că dovedește netemeinicia acestuia prin simpla
+lecturare a răspunsului nr. 227/10.04.2025. În conținutul acestui
+răspuns, societatea sa s-a limitat a preciza/ilustra întocmai clauza de
+contract existentă în modelul contractului postat în SEAP - Clauza nr.
+19.1. Propunerea tehnică a ofertantului nu a fost modificată, termenul de
+garanție este de 5 ani, acesta trebuind a fi introdus în contractul de
+achiziție publică la momentul semnării acestuia cu ofertantul desemnat
+câștigător și în funcție de termenul ofertat de acesta.
+       Contestatorul susține că intenția societății sale a fost de a
+convinge, o dată în plus, autoritatea contractantă, că, obligația asigurării
+
+                                                            Pagina 9 din 36
+termenului de intervenție derivă și din clauza contractuală ce prevede
+garanția lucrărilor, în niciun moment, ......... SRL nu și-a modificat
+termenul de garanție ofertat, acesta fiind de 5 ani și nu 36 de luni, cum
+a reținut autoritatea contractantă, în mod eronat.
+      Față de acest aspect, solicită să se constate netemeinicia motivului
+de respingere a ofertei ......... SRL.
+      Referitor la cel de-al doilea motiv de respingere a ofertei .........
+SRL (lit. b), argumentează nelegalitatea acestuia, după cum urmează:
+      - în documentația de atribuire nu există nicio cerință în
+conformitate cu care ofertantul, în perioada de notificare defecțiuni,
+trebuie să asigure autorității contractante, cu titlu de permanență, 1
+tehnician care să fie la dispoziția acesteia 24 ore/7 zile săptămână/365
+zile/5 ani perioada de garanție;
+      - alegațiile cu privire la posibilitatea accesării de către angajat a
+diferitelor tipuri de concedii, acordate în baza legii și nu a voinței
+angajatorului, sunt lipsite de orice sens, fundament tehnic, juridic și
+chiar logic. Întocmai cum a răspuns și solicitărilor de clarificare,
+societatea sa respectă toate drepturile angajaților săi, iar, în raport cu
+diverși beneficiari publici, cum este și cazul Primăriei Comunei .........,
+aceste obligații nu se transferă, ele rămân în continuare în sarcina
+ofertantului spre a fi îndeplinite, atât sub aspectul sarcinilor de serviciu,
+cât și din punct de vedere financiar.
+      Față de cele indicate, solicită să se constate nelegalitatea motivului
+de respingere a ofertei ......... SRL.
+      Referitor la cel de-al treilea și al patrulea motiv de respingere a
+ofertei ......... SRL (lit. c și lit. d), evidențiază următoarele:
+      - reiterează argumentul de mai-sus: în documentația de atribuire
+nu există nicio cerință în conformitate cu care ofertantul, în perioada de
+notificare defecțiuni, trebuie să asigure autorității contractante cu titlu de
+permanență 1 tehnician care să fie la dispoziția acesteia 24 ore/7 zile
+săptămână/365 zile/5 ani perioada de garanție;
+      - în documentația de atribuire - modalitatea de întocmire a
+propunerii financiare, nu se regăsesc mențiuni care să oblige ofertantul
+la detalierea costurilor ocazionate de respectarea termenului de
+intervenție ofertat;
+      - Ordinul nr. 1568/15.10.2002 nu are caracter de lege și, implicit,
+nu poate fi temei pentru respingere oferte, atâta vreme cât acest fapt nu
+este specificat în mod clar la nivelul documentației de atribuire.
+Reprezentând un ghid, după cum îi spune și titulatura, acesta poate fi
+folosit/aplicat de la caz la caz, în funcție de aprecierile fiecărei societăți
+prin raportare la dotările și tehnologiile deținute. În acest sens, invocă
+prevederile capitolului 3.3.3. din ordin: „Cheltuielile indirecte la nivelul
+unui deviz pe categorii de lucrări se determină prin aplicarea unei cote
+aferente acestora la valoarea TOTAL - CHELTUIELI DIRECTE. Această
+cotă se stabilește de către fiecare unitate de execuție pe baza propriilor
+analize”. În măsura în care „cota cheltuielilor indirecte se stabilește de
+către fiecare unitate de execuție pe baza propriilor analize", consideră
+că, la elaborarea propunerii financiare, fiecare ofertant este obligat să se
+raporteze și la prevederile fișei de date a achiziției/caietului de sarcini
+aferent procedurii supuse atribuirii și nu doar la structura devizului
+prezentat de Ordinul nr. 1568/15.10.2002, fapt îndeplinit de ......... SRL.
+      Mai mult, subliniază caracterul eronat al raționamentului prezentat
+de autoritatea contractantă cu privire la presupusele costuri cu
+tehnicianul care va sta nemijlocit la dispoziția Primăriei.
+      În primul rând, pentru a fi valid raționamentul, acesta ar implica și
+prezența identică a unui reprezentant din partea autorității contractante,
+care timp de 24 ore/7 zile săptămână/365 zile/5 ani perioada de garanție
+să fie prezent în toate locațiile unde sunt instalate sistemele de
+supraveghere, fie să le monitorizeze de la distanță, însă în același
+interval temporar pretins de autoritatea contractantă ofertantului.
+      În al doilea rând, autoritatea contractantă ignoră perioada
+contractuală în care se va pune în aplicare termenul de intervenție,
+respectiv, în perioada de notificare defecțiuni, mai exact ulterior semnării
+procesului verbal de recepție la terminarea lucrărilor. La momentul
+efectuării recepției la terminare, obiectul predat beneficiarului este
+funcțional, posibilitatea apariției unor defecțiuni fiind destul de scăzută,
+din acest punct de vedere nefiind justificată pretenția autorității
+contractante de a avea la dispoziție nemijlocită un reprezentant al
+executantului.
+
+                                                            Pagina 11 din 36
+      Nu în ultimul rând, consideră că autoritatea contractantă, prin
+raționamentul ilustrat, nesocotește/îngrădește libertatea ofertantului de
+a conveni un raport de muncă cu tehnicianul responsabil cu realizarea
+intervenției. În funcție de înțelegerea părților, angajat și angajator,
+acestea pot stabili oricare modalitate de prestare a serviciului necesar
+intervenției, sub aspectul orelor lucrate și a tarifului/salariului plătit,
+bineînțeles cu respectarea tuturor rigorilor legale.
+      În ceea ce privește concluzia autorității contractante, cu privire la
+existența unui risc major de neîndeplinire/îndeplinire defectuoasă a
+contractului, motivat de presupusa nealocare de resurse financiare
+suficiente pentru asigurarea timpului de intervenție, apreciază că aceasta
+este imposibil de a se realiza, acest risc existând doar în viziunea
+beneficiarului. În conformitate cu art. 22 din HG nr. 343/2017: „(1)
+Investitorul preia construcția de la executant în baza procesului-verbal
+de recepție la terminarea lucrărilor”. De asemenea, în considerarea
+dispozițiilor articolul 21 din același act normativ: „După încheierea
+procesului-verbal de recepție la terminarea lucrărilor, investitorul nu
+poate emite alte solicitări de remediere de lucrări, penalizări, diminuări
+de valori și altele asemenea decât cele consemnate în procesul-verbal de
+recepție la terminarea lucrărilor. Fac excepție viciile ascunse descoperite
+în termenul stabilit conform legii, precum și viciile structurii de rezistență
+rezultate din nerespectarea normelor de proiectare și de execuție în
+vigoare la data realizării construcției, descoperite pe toată durata de
+existență a construcției‟.
+      Astfel, de la semnarea procesului-verbal de recepție la terminarea
+lucrărilor, executantul este responsabil doar pentru remedierea
+defecțiunilor cauzate de execuția necorespunzătoare a lucrărilor.
+       Evidențiază asupra faptului că beneficiarul, în situația dezastruoasă
+închipuită de acesta, deține în prealabil, prerogativul de a recepționa sau
+nu, lucrarea la terminare. Perioada de remediere, perioadă contractuală
+în care devine incident termenul de intervenție, este o perioadă
+ULTERIOARĂ recepției la terminare, adică a momentului în care
+beneficiarul este asigurat că deține în exploatare un obiectiv funcțional
+fără niciun risc major de neîndeplinire sau îndeplinire neconformă.
+Recepția la terminarea lucrărilor exclude orice risc major ulterior
+efectuării acesteia.
+       În acest context, în opinia sa, este util a se prezenta și un alt
+scenariu pe care autoritatea contractantă nu l-a avut în vedere în
+raționamentul ce a stat la baza respingerii ofertei sale, respectiv: în
+urma intervenției în cele 15 minute, tehnicianul executantului poate
+constata că defecțiunea se datorează unei acțiuni/fapte neimputabile
+acestuia, spre exemplu, o neglijență a autorității contractante în
+exploatarea sistemelor sau o avariere a acestora în cadrul unei
+vandalizări. Pentru aceste situații prezentate ipotetic, executantul nu va
+fi ținut la niciun cost de remediere.
+       Cu toate că scenariul de mai-sus este prezentat cu titlu ipotetic,
+acesta are rolul de a demonstra erorile autorității contractante cu privire
+la calculul sumei pretins a fi neacoperită prin resurse financiare în
+oferta ......... SRL.
+       Având în vedere argumentele prezentate, solicită CNSC să constate
+nelegalitatea motivelor 3 și 4 de respingere a ofertei ......... SRL.
+       Concluzionând, după prezentarea tuturor argumentelor privitoare la
+nelegalitatea/netemeinicia      respingerii   ofertei     sale,    punctează
+următoarele aspecte:
+       - atât din oferta tehnică, cât și din răspunsurile la clarificările
+solicitate de autoritatea contractantă, ......... SRL a făcut dovada că
+dispune de toate resursele necesare tehnice, economice și materiale
+precum și că are experiența necesară executării obiectului contractului.
+       Apreciază că este important pentru autoritatea contractantă ca
+participanții la procedură să facă dovada, prin propunerea tehnică, că au
+înțeles obiectul contractului și că au cunoștințele și capacitatea necesară
+realizării acestuia, iar acest aspect a fost demonstrat prin propunerea
+tehnică întocmită, aspect pentru care respingerea ofertei este nefondată.
+       - din punct de vedere tehnic, șansele ivirii unor defecte sau
+remedieri cu prejudicii/efecte DE RISC MAJOR pentru autoritate din vina
+executantului, după semnarea procesului verbal de recepție la
+terminarea lucrărilor, data de la care începe garanția de bună execuție,
+sunt extrem de mici; chiar și în cazul în care s-ar admite ipoteza
+autorității contractante, în sensul că pot apărea situații ce impun
+remedieri a viciilor/defecțiunilor rezultate din vina executantului în
+
+                                                           Pagina 13 din 36
+perioada de garanție a lucrării, societatea sa a făcut dovada îndeplinirii
+tuturor exigențelor solicitate prin documentația de atribuire.
+      - în fișa de date și caietul de sarcini nu există vreo referire la
+necesitatea     defalcării   timpului   de   intervenție    în   timp    de
+mobilizare/deplasare - timp de constatare și timp de minimă intervenție;
+      Atâta vreme cât nu a existat nicio precizare referitoare la
+defalcarea timpului de intervenție pe operațiuni, respectiv mobilizare/
+deplasare/intervenție minimă, în opinia sa că nicio ofertă nu putea și nu
+poate fi evaluată pe aceste criterii.
+      - în adresa de comunicare rezultat procedură de atribuire,
+autoritatea contractantă a eșuat în a arăta în mod concret care sunt
+elementele/informațiile care lipsesc din oferta prezentată de noi,
+limitându-se la a pretinde că răspunsul oferit este neconcludent.
+      - autoritatea contractantă a evaluat, în mod vădit nelegal,
+oferta ......... SRL, cu încălcarea propriilor cerințe/reguli din
+documentația de atribuire și cu încălcarea prevederilor legale incidente.
+      - autoritatea contractantă a încălcat principiul proporționalității,
+sancțiunea dispusă de autoritate cu privire la oferta sa fiind nu doar
+excesivă, ci și de natură a conduce la anularea procedurii de atribuire.
+      În concluzie, solicită să se constate modul nelegal în care
+autoritatea contractantă a evaluat oferta ......... SRL, acționând cu rea-
+credință și cu încălcarea dispozițiilor legale din materia achizițiilor
+publice. Apreciază ca autoritatea contractantă, în mod abuziv, a optat
+pentru respingerea ofertei sale, încălcând principiile tratamentului egal și
+nediscriminării, pe baza unor cerințe inexistente în documentația de
+atribuire. Aceasta deoarece, pentru a putea respinge o ofertă în
+conformitate cu prevederile art. 137 HG nr. 395/2016, comisia de
+evaluare are obligația de a se raporta la unele dintre cerințele expres
+prevăzute în documentație. În speța supusă soluționării, cerințele în baza
+cărora a fost dispusă respingerea ofertei sale nu sunt prevăzute în
+documentația de atribuire, deci, participanții la procedura de atribuire nu
+aveau obligația de a face dovada îndeplinirii acestora, iar, în același
+timp, nici comisia de evaluare nu putea condiționa admisibilitatea
+ofertelor de aceste cerințe inexistente.
+      2. Descriere cu privire la nelegalitatea deciziei de anulare a
+procedurii de atribuire.
+      Cu titlu prealabil, reiterează cele precizate la începutul contestației
+sale. La data de 29.04.2025, autoritatea contractantă postează Raportul
+procedurii nr. 2/2135, în conținutul căruia, la pagina 21, este înscrisă
+propunerea comisiei de evaluare de anulare a procedurii de atribuire, în
+temeiul art. 212 alin. (1) din Legea nr. 98/2016, întrucât, nu a fost
+depusă nicio ofertă admisibilă.
+      Pentru acest motiv, ......... SRL înțelege să conteste Raportul
+procedurii nr. 2/2135/29.04.2025, atât sub aspectul nelegalității
+evaluării ofertei sale, precum și sub aspectul nelegalității deciziei de
+anulare a procedurii de atribuire.
+      În conformitate cu cele înscrise în raportul procedurii nr. 2/2135/
+29.04.2025, motivul ce a stat la baza deciziei de anulare a procedurii
+este reprezentat de inexistența unor oferte admisibile.
+      Astfel, prin raportare la temeinicia argumentelor prezentate
+de ......... SRL în fața CNSC pentru demonstrarea conformității ofertei
+sale, apreciază că decizia autorității contractante de anulare a procedurii
+de atribuire este nelegală și rămasă fără fundament, atâta vreme cât
+oferta societății sale este admisibilă.
+      În sprijinul netemeiniciei deciziei de anulare a procedurii, în afara
+argumentelor        prezentate      pentru    demonstrarea      conformității
+ofertei ......... SRL, invocă și următoarele:
+      - Scopul autorității contractante s-a dovedit a fi unul nelegal,
+respectiv acela de anulare a procedurii de atribuire și nu cel de finalizare
+a acesteia, prin semnarea contractului de achiziție publică;
+      - Inadmisibilitatea ofertei sale, respingerea acesteia și anularea
+procedurii de atribuire s-au stabilit de către autoritatea contractantă fără
+a conferi securitate juridică, printr-un mod de analiză și evaluare aflat în
+afara cadrului documentației de atribuire;
+      - Prin decizia de anulare a procedurii de atribuire, autoritatea
+contractantă a încălcat principiul proporționalității, în aplicarea căruia
+actele instituțiilor nu trebuie să depășească limitele a ceea ce este
+adecvat și necesar în scopul realizării obiectivelor urmărite, înțelegând-se
+că, în cazul în care este posibilă o alegere între mai multe măsuri
+adecvate, trebuie să se recurgă la cea mai puțin constrângătoare, iar,
+
+                                                           Pagina 15 din 36
+inconvenientele cauzate nu trebuie să fie disproporționate în raport cu
+scopurile urmărite (Hotărârea Curții din 5 mai 1998, National Far mers'
+Union și alții, C-57/96, pct. 60), sens în care drepturile autorităților
+contractante nu trebuie privite precum o cauză de eliminare a tuturor
+celorlalți competitori (...), scopul urmărit fiind acela de a asigura o
+competiție adecvată în cadrul procedurii.
+       Cu privire la aplicarea principiului proporționalității, invocă
+jurisprudența Consiliului.
+       Contestatorul susține că, prin decizia de anulare a procedurii de
+atribuire, autoritatea contractantă a încălcat principiul fundamental al
+eficienței utilizării fondurilor care trebuie să guverneze conduita unei
+administrări eficiente, ceea ce presupune că nu ar trebui să excludă cu
+multă ușurință o ofertă care putea avantaja interesul public. Autoritatea
+contractantă trebuie să asigure o largă concurență în materia achizițiilor,
+pentru a valorifica concursul a cât mai multe oferte, concurența trebuind
+să se rezume la aspecte obiective și nu subiective.
+       Față de cele prezentate, consideră că anularea procedurii s-a făcut
+fără a avea la bază un motiv concret, ferm, real, obiectiv, ci, este
+datorată doar culpei autorității contractante care a apreciat, în mod pur
+subiectiv, că se impune anularea procedurii. Numai existența unor
+împrejurări total independente de voința autorității contractante pot
+justifica anularea procedurii de atribuire potrivit art. 212 din Legea nr.
+98/2016, deoarece, actul normativ vorbește despre o imposibilitate;
+desigur, această imposibilitate nu se poate datora modului superficial de
+evaluare a ofertelor depuse și nici interpretării eronate a normelor legale
+aplicabile principiul utilizării eficiente a fondurilor, dar și principiul
+proporționalității deciziilor sale.
+      Solicită Consiliului să dispună cele precizate în partea introductivă a
+deciziei.
+      Prin contestația înregistrată la Consiliul Național de Soluționare a
+Contestațiilor sub nr. 29064/06.05.2025, ......... SRL (dosar nr.
+1626/2025) critică rezultatul procedurii comunicat prin adresa nr.
+2138/29.04.2025, solicitând cele precizate în preambulul prezentei.
+      În fapt, contestatorul precizează că, în data de 29.04.2025, a luat
+la cunoștință despre faptul că oferta sa a fost declarată inacceptabilă
+pentru răspunsuri neconcludente la clarificările referitoare la timpul de
+intervenție.
+      În acest context, prezintă cerințele formulate de autoritatea
+contractantă.
+       „Timp de intervenție: 30% punctaj maxim factor: 30.
+      Algoritm de calcul: Punctajul se acordă astfel; a) Pentru cel mai mic
+timp de intervenție ofertat (Tmin) se acordă punctajul maxim alocat = 30
+puncte. b) Pentru celelalte oferte, punctajul P(n) se calculează
+proporțional astfel: P(n) = (Tmin/To) x punctaj maxim alocat (30 puncte).
+Tmin. = cel mai mic termen de intervenție ofertat; T o = timpul de
+intervenție ofertat. Timp de intervenție minim: 15 minute”.
+      Societatea sa a înțeles să oferteze un timp de intervenție de 15
+minute și să îndeplinească această cerință prin angajarea domnului Varro
+Ștefan, acesta având ca unică atribuție intervențiile la solicitarea
+autorităților contractante. Acest angajat este dispus să presteze muncă
+suplimentară în schimbul unei contraprestații. Intervențiile nu presupun
+reparații de lungă durată, ci, implică o deplasare de scurtă durată,
+constatarea problemei care face obiectul garanției, urmând ca
+soluționarea acesteia să fie realizată de către producător, într-un service
+specializat. În ipoteza desemnării societății sale ca fiind câștigătoare,
+această obligație asumată - de a interveni în termen de 15 minute - este
+garantată pe toată perioada de derulare a contractului de achiziție
+publică, inclusiv, prin constituirea garanției de bună execuție.
+      Contestatorul arată că obiectul prezentei proceduri de achiziție
+publică se referă la executarea unei lucrări - montarea unui sistem de
+supraveghere video. Întreaga documentație de atribuire, formularele de
+propunere financiară, precum și devizele financiare depuse în procedură
+și obligatorii pentru ofertanți, se referă la acest obiect.
+      În plus, arată că față de obligația principală, societatea sa și-a
+asumat două obligații accesorii: asigurarea garanției sistemului pe o
+perioadă de 5 ani și intervenția într-un termen de 15 minute. Aceste
+două obligații se vor îndeplini ulterior finalizării lucrării. Așadar, în cazul
+în care va fi desemnată câștigătoare, societatea sa va executa lucrarea,
+aceasta va fi recepționată și va emite o factură pentru suma ofertată,
+sumă care apare în devize. Celelalte două obligații accesorii vor fi
+
+                                                             Pagina 17 din 36
+îndeplinite ulterior și vor fi garantate prin reținerea garanției de bună
+execuție.
+       Referitor la modul de fundamentare economică a costurilor
+corelative obligației de intervenție, dorește să menționeze că aceste
+costuri nu au fost incluse la capitolul de cheltuieli indirecte, deoarece, nu
+reprezintă nici cheltuieli de interes general, nici cheltuieli administrativ-
+gospodărești, nici cheltuieli neproductive, nici cheltuieli privind
+asigurarea lucrărilor de construcții, așa cum ar susține autoritatea
+contractantă. În ceea ce îl privește pe tehnicianul .............., acesta nu
+este implicat în execuția lucrărilor; activitatea lui se va desfășura la
+finalizarea lucrărilor, după ce acestea vor fi finalizate.
+       La momentul ofertării ar fi fost imposibil de cuantificat, cheltuielile
+salariale, deoarece taxele salariale sunt în continuă schimbare, salariul
+este negociabil, astfel că, la momentul ofertării, nu avea cum să
+anticipeze valoarea finală aferentă salariului oricărui angajat.
+       În orice caz, precizează că a ținut cont de costurile legate de
+tehnicianul care asigură intervenția în 15 minute. Aceste costuri au fost
+incluse la capitolul de profit din devize, precum și în adaosul calculat la
+echipamentele ofertate.
+       Fata de considerentele evidențiate, apreciază argumentele sale ca
+fiind pe deplin fundamentate, sens în care, solicita admiterea contestației
+formulate.
+       Prin contestația nr. 397/05.05.2025, înregistrată la Consiliul
+Național        de         Soluționare    a    Contestațiilor     sub        nr.
+29274/07.05.2025, ......... SRL în calitate de lider al Asocierii ......... SRL
+– .............................SRL (dosar nr. 1637/2025) critică rezultatul
+procedurii comunicat prin adresa nr. 2136/29.04.2025 solicitând cele
+precizate în preambulul deciziei.
+       În urma publicării în SICAP a comunicării rezultatului procedurii -
+adresa nr. 2136/29.04.2025 și a raportului procedurii nr. 2 după
+reevaluare în urma contestațiilor, nr. 2135/ 29.04.2025, a fost informat
+că oferta sa este declarată inacceptabilă, conform art. 134 alin. (5) din
+HG nr. 395/2016 pentru răspuns neconcludent la clarificări si
+neconformă, în conformitate cu prevederile art. 137 alin. (3) lit. d) din
+HG nr. 395/2016, deoarece, propunerea financiară nu este corelată cu
+elementele propunerii tehnice, ceea ce, după părerea comisiei de
+evaluare a autorității contractante, ar putea conduce la executarea
+defectuoasă a contractului. De asemenea, comisia de evaluare a
+constatat că și ceilalți doi ofertanți prezintă oferte inacceptabile și
+neconforme și decide anularea procedurii.
+       Solicită Consiliului să oblige autoritatea contractantă la anularea
+raportului procedurii nr. 2 după reevaluare în urma contestațiilor, nr.
+2135/29.04.2025 în partea care vizează oferta sa, la anularea
+comunicării rezultatului procedurii - adresa nr. 2136/29.04.2025, la
+reevaluarea ofertei Asocierii cu luarea in considerare a argumentelor si
+dovezilor cuprinse în prezenta contestație, întrucât:
+       - oferta Asocierii ......... SRL - .............................SRL nu trebuia
+respinsă ca inacceptabilă în conformitate cu art. art. 134 alin. (5) din HG
+nr. 395/2016, întrucât a răspuns concludent la toate solicitările de
+clarificări ale autorității contractante:
+       - asocierea a justificat în cadrul a două adrese diferite timpul de
+intervenție ofertat de 15 minute - atât din punct de vedere operațional,
+cât și logistic cu documente suport, inclusiv cu justificarea costurilor.
+       - oferta asocierii ......... SRL - .............................SRL nu trebuia
+respinsă, ca neconformă, în baza prevederilor art. 137 alin. (3) lit. d) din
+HG nr. 395/2016, întrucât, propunerea financiară depusă de asociere
+este corelată cu toate elementele propunerii tehnice și asocierea are
+capacitatea de a executa corespunzător contractul în conformitate cu
+cerințele din documentația de atribuire:
+       - asocierea a prezentat costurile cu personalul pentru intervenția în
+termen de 15 minute în comuna ........., acestea fiind incluse în oferta
+depusă și justificate cu documente, la solicitarea autorității contractante;
+       - oferta sa trebuia declarată câștigătoare, întrucât, asocierea și-a
+asumat timpul de intervenție de 15 minute solicitat de autoritatea
+contractantă pentru alocarea punctajului maxim și a demonstrat, atât în
+oferta depusă, cât și prin răspunsul la clarificări, că, asocierea poate
+interveni în termenul declarat și costurile sunt incluse în oferta depusă.
+       În fapt, contestatorul face o scurtă prezentare a derulării procedurii
+până la 12.03.2025 când CNSC emite Decizia nr. 649/C1/704,729 din
+
+                                                                  Pagina 19 din 36
+12.03.2025 prin care respinge, ca rămasă fără obiect, contestația
+formulată de către ......... SRL în contradictoriu cu comuna ..........
+       În data de 07.04.2025 autoritatea contractantă i-a solicitat
+clarificări privind oferta tehnică, prin adresa nr. 1667/07.04.2025 (Anexa
+nr. 4), solicitarea vizând transmiterea documentelor justificative în
+vederea susținerii termenului de intervenție. Susține că asocierea a
+răspuns în termenul stabilit prin adresa nr. 312/07.04.2025 (Anexa nr.
+5) și a anexat documente doveditoare.
+       De asemenea, arată că, în data de 09.04.2025, comisia de evaluare
+i-a solicitat prin adresa nr. 1735/09.04.2025 (Anexa nr. 6),
+argumentarea și susținerea, cu documente justificative, a timpului de
+intervenție ofertat și argumentarea modalității de îndeplinire a cerințelor
+din punctul de vedere al costurilor pentru deplasarea echipei de
+intervenție/cazarea muncitorilor nelocalnici, etc. Asocierea a răspuns în
+termenul stabilit prin adresa nr. 327/10.04.2025 (Anexa nr. 7).
+       Solicită revocarea/anularea raportului procedurii nr. 2 după
+reevaluare în urma contestațiilor, nr. 2135/29.04.2025, în partea care
+vizează oferta sa și anularea comunicării rezultatului, întrucât:
+       I. Oferta Asocierii ......... SRL - .............................SRL nu trebuia
+declarata inacceptabilă, întrucât, asocierea a răspuns concludent tuturor
+solicitărilor de clarificări ale autorității contractante și nu trebuia
+declarată neconformă întrucât oferta tehnică este corelată cu oferta
+financiară depusă:
+       a. Prin adresa nr. 1667/07.04.2025 autoritatea i-a solicitat să
+argumenteze timpul de intervenție ofertat de 15 minute și să transmită
+documente justificative, cât și să argumenteze modalitatea de îndeplinire
+a costurilor pentru deplasarea echipei de intervenție/cazarea muncitorilor
+pentru respectarea prevederilor HG nr. 907/2016.
+       b. Prin adresa nr. 312/07.04.2025, precizează că a explicat:
+       i. Asocierea are o echipă tehnică pentru aria geografică ......... -Tg.
+Mureș care deservește și alte obiective aflate sub contract cu Asocierea
+aparținând SNGN Romgaz SA și aceasta va fi relocată la ......... - în cazul
+în care oferta sa este declarată câștigătoare, pentru a deservi și sistemul
+din comuna .......... În sprijinul celor declarate a prezentat și documente
+justificative - extras din contractul multi-anual cu SNGN din Romgaz SA
+și lista locațiilor (64 locații) din zona numită.
+       ii. A prezentat calculul maximal cu cheltuielile aferente sistemului
+ce urmează a fi instalat la comuna ......... - de unde rezultă un total de
+35.897,75 lei pentru 60 de luni.
+       iii. A explicat că organizarea locală și susținerea cheltuielilor din
+toate contractele aflate în derulare i-a permis întocmirea unei oferte
+competitive. A explicat că a inclus costurile pentru asigurarea garanției în
+prețul unitar al echipamentelor – întrucât, devizele puse la dispoziție de
+autoritatea contractanta nu cuprind un formular sau măcar un articol de
+deviz unde acestea puteau fi evidențiate.
+       iv. Între valoarea de achiziție a echipamentelor - dovedită cu oferte
+de la furnizori prezentate în justificarea prețului adresa nr.
+109/07.02.2025 (Anexa nr. 8) și valoarea declarată în formularul F4,
+există o diferență de 151.618 lei, în care sunt incluse toate costurile
+enumerate de autoritate, în conformitate cu prevederile HG nr.
+907/2016.
+       v. A precizat, de asemenea, că, în cheltuielile indirecte a inclus
+costurile cu asigurarea SSM.
+       c. Nemulțumită de răspunsul primit – deși, acesta a fost concludent
+și susținut cu documente, studiind cu superficialitate documentele
+primite, autoritatea contractantă reia solicitarea de clarificări în cadrul
+adresei nr. 1735/09.04.2025. Adresa are o formă generală și
+nedetaliată, fără a-i oferi repere clare de urmărit în răspunsul său, dar îl
+informează că prezentarea contractului încheiat cu SNGN Romgaz SA nu
+poate fi luată în considerare, afirmând că acesta nu poate constitui un
+argument.
+       d. Prin adresa nr. 327/10.04.2025 susține că reia explicațiile oferite
+- subliniind următoarele:
+       i. echipa tehnică alocată în zonă este formată din 3 specialiști
+(conform calculelor prezentate), dintre care, unul este în permanență
+prezent la punctul din ......... și poate asigura intervențiile în termen de
+15 minute.
+       ii. Mai mult, susține că, a reiterat faptul că societatea sa asigură, în
+prezent, intervenții pentru peste 60 de obiective de importanță
+
+                                                             Pagina 21 din 36
+strategică pentru economia națională și prezența sa în zona îi permite
+respectarea termenului de 15 minute asumat, cât și faptul că a explicat
+politica de prioritizare în funcție de nivelul de urgență. În mod evident,
+contractul cu SNGN Romgaz SA este relevant în acest caz, întrucât,
+modul său de organizare i-a permis o împărțire eficientă a personalului și
+a costurilor. La întrebarea autorității, cum poate echipa de intervenție
+plecată la Sighișoara să intervină în 15 minute la ........., a explicat
+foarte clar că un membru al echipei rămâne la punctul din .........;
+       iii. A prevăzut o sumă tampon de 151.618 lei (diferența între prețul
+de achiziție al echipamentelor și valoarea declarată în formularul F4)
+pentru asigurarea garanției și intervențiilor - mai mult decât acoperitoare
+pentru cheltuielile de 35.897,75 lei, necesare pentru asigurarea
+intervențiilor la sistemul video din comuna ..........
+       iv. Dorește să sublinieze că autoritatea contractantă nu a solicitat
+nicăieri în documentație un angajat din partea operatorilor economici
+DEDICAT la dispoziția autorității pe perioada de garanție!!! Solicitarea a
+fost ca, în caz de defecțiune, IN GARANTIE, executantul să intervină într-
+un timp de 15 minute - pentru punctaj maxim.
+       e. În comunicarea rezultatului procedurii nr. 2136/29.04.2025
+arată că autoritatea îi prezintă niște supoziții ce nu au susținere în
+realitate, supoziții pentru care oferta asocierii este respinsă, ca
+inacceptabilă și neconformă:
+       i. pornind de la premisa că acum era obligatoriu să aibă o persoană
+dedicată pentru contractul cu comuna .........:
+       - autoritatea face un calcul propriu, din care rezultă că ar fi trebuit
+să aloce o sumă de 248.467,50 lei pentru asigurarea intervențiilor: așa
+cum a explicat, orice operator își optimizează costurile și le acoperă din
+toate contractele în derulare, suma reală pentru asigurarea intervențiilor
+fiind cea prezentata de asociere;
+      ii. după ce, în cele 2 solicitări de clarificări a numit, ca temei legal,
+HG nr. 907/2016, pentru devize, acum autoritatea indică un Ordin nr.
+1568/2002 - de acum mai bine de 20 de ani - pentru a spune că suma
+astronomică de 248.467,50 lei aferentă asigurării intervențiilor în
+perioada de garanție trebuia cuprinsă în cheltuielile indirecte în devizele
+prezentate
+      1. Ordinul nr. 1568/2002 este ordinul pentru aprobarea unui GHID
+pentru elaborarea devizelor un act normativ cu caracter intern, elaborat
+pentru evaluarea investițiilor publice și fundamentarea bugetelor,
+adresându-se în special autorităților contractante și nu conține obligații
+directe pentru ofertanți în cadrul procedurilor de achiziție publică;
+      2. suma calculată de autoritatea contractantă reprezintă 17,74%
+din valoarea estimată a contractului. Procentul din partea de lucrări a
+devizului (formular F3), recomandat pentru cheltuielile indirecte, nu
+depășește 12%, în general și rubrica conține TOATE cheltuielile indirecte:
+amortizare, salarii conducere, logistica, etc. - mai jos extras de pe site-ul
+ministerului de finanțe în acest sens.
+      „7.1. Cheltuieli indirecte - pot fi cuprinse în intervalele de mai jos.
+      Cheltuieli indirecte: Între 7,00%-12,00% pentru lucrări de
+construcții, în funcție de mărimea și importanța lucrării și între 9,00%-
+15,00% pentru lucrări de instalații care au valoarea mai mică datorită
+valorii reduse a materialelor”.
+      Consideră respingerea ofertei asocierii o decizie abuzivă și nelegală
+a autorității contractante, care refuză să ia în considerare răspunsurile și
+dovezile prezentate de asociere:
+      1. este singurul ofertant care are în zonă o echipă tehnică ce poate
+asigura intervențiile;
+      2. termenul de intervenție de 15 minute a fost inclus în oferta
+depusă, în cadrul factorilor de evaluare și nu este un element nou
+introdus;
+      3.    costurile cu echipa de intervenție așa cum au fost prezentate
+au fost incluse în oferta financiară, așa cum a arătat - existând o sumă
+tampon de 151.618 lei. De asemenea, cheltuielile indirecte din devizele
+prezentate de asociere au o valoare de 42.167,30 lei:
+      Nu există obligativitatea pentru ofertanți, în legislația achizițiilor
+publice, pentru respectarea Ghidului aprobat prin Ordinul nr. 1568/2002,
+care nu a mai fost actualizat;
+      4. În calculul prezentat, autoritatea pornește de la premise greșite
+și nu ia în considerare răspunsurile oferite - mai mult face niște afirmații
+contrazise de documente și legislația în vigoare, în speță HG nr.
+907/2016 - afirmând că suma de 151.618 lei, indicată de el pentru
+
+                                                             Pagina 23 din 36
+acoperirea garanției, ar fi de fapt profitul societății sale; nimic mai fals -
+profitul societății sale se regăsește pe formularele F3.
+       În concluzie, consideră decizia autorității de respingere a ofertei
+sale și de anulare a procedurii, una abuzivă și nelegală, întrucât:
+       1. asocierea dispune de personal și a demonstrat că poate asigura
+intervenții în 15 minute - motiv pentru care autoritatea ar fi trebuit să îi
+acorde punctajul maxim de 30 de puncte;
+       2. costurile pentru asigurarea intervențiilor au fost prezentate
+detaliat la solicitarea autorității contractante și se regăsesc în oferta
+financiară depusă;
+       3. decizia autorității de a respinge oferta sa, după ce inițial a
+considerat-o admisibilă, este una abuzivă și nelegală întrucât în cuprinsul
+răspunsurilor la clarificări a prezentat toate informațiile și documentele
+solicitate și oferta tehnică este corelată perfect cu oferta financiară, așa
+cum rezultă din cele arătate.
+       Având în vedere cele expuse mai sus, solicită Consiliului cele
+precizate în partea introductivă a deciziei.
+       De asemenea, solicită Consiliului acordul pentru studierea dosarului
+procedurii, astfel încât, să poată prezenta documente suplimentare ce
+dovedesc cele susținute, conform art. 19 alin. (1) din Legea nr.
+101/2016.
+       În drept, invocă Legea nr. 98/2016, Legea nr. 101/2016 și HG nr.
+395/2016.
+       Prin adresa nr. 2579/21.05.2025, înregistrată la Consiliu sub nr.
+33919/23.05.2025, autoritatea contractantă transmite punctul de vedere
+la contestațiile formulate de ......... SRL, ......... SRL și ......... SRL prin
+care solicită respingerea contestațiilor, ca nefondate.
+       Referitor la cele trei contestații autoritatea contractantă prezintă
+următoarele:
+       În cadrul Formular-cadru Propunere Tehnică din cadrul
+documentației de atribuire postata în SEAP, susține că, la punctul 9, s-au
+solicitat următoarele:
+       „1. MASURI APLICATE DE OFERTANT PENTRU SUPRAVEGHEREA
+LUCRĂRILOR ÎN PERIOADA DE GARANŢIE ACORDATĂ.
+       [Structurați informația, după cum urmează:]
+Potențiale  Modalitate      Măsura         Termenul     Durata    de   Resurse
+defecte     de              luată     pe   de           remediere a    alocate
+datorate    intervenție     perioada       intervenți   potențialelo   (financiare,
+viciului de                 execuției      e            r defecțiuni   materiale,
+execuție                    pentru                      datorate       echipament
+                            eliminarea                  viciilor  de   e          și
+                            apariției                   execuție       personal)
+                            defecțiunii
+[introduceţ   [introduceţ   [introduceţ    [introduc    [introduceţi   [introduceţi
+i]            i]            i]             eţi]         ]              ]
+
+      Ca urmare a acestei solicitări, consideră că ofertantul avea obligația
+să țină cont și de resursele financiare necesare pentru susținerea unui
+anumit timp de intervenție.
+      Autoritatea contractantă precizează că nu a impus un timp limită,
+timpul de intervenție încadrându-se între 15 minute și 24 de ore, pentru
+ca ofertanții să își dimensioneze corect resursele tehnice și financiare.
+      Conform Fișei de date a achiziției IV.4.1 Modul de prezentare al
+propunerii tehnice, s-au solicitat următoarele:
+      «Propunerea tehnică elaborată de ofertant va conține: 1.
+Prezentarea modului de realizare a lucrărilor prin care ofertantul va
+demonstra că va executa toate lucrările prevăzute în documentația de
+atribuire cu respectarea tuturor prevederilor caietului de sarcini -
+CONFORM FORMULAR PROPUNERE TEHNICA ATAŞATA.(…)
+      6. Ofertantul (ofertant unic, asociați, subcontractanți) vor prezenta
+o declarație pe proprie răspundere a ofertantului din care să rezulte
+faptul că, la elaborarea ofertei, ofertantul a ținut cont de obligațiile
+referitoare la condițiile de mediu, sociale și cu privire la relațiile de
+muncă pe toată durata de îndeplinire a contractului de lucrări (model -
+formularul nr. 5). care sunt în vigoare în România, precum și că le va
+respecta în vederea implementării contractului. Informații detaliate
+privind reglementările care sunt în vigoare la nivel național și se refera la
+condițiile de muncă și protecția muncii, securității și sănătății în muncă,
+se    pot    obține     de   la   Inspecția    Muncii    sau     pe   site-ul
+http://www.inspectmun.ro/legislatie/ legislație.html. Informații privind
+reglementările care sunt în vigoare la nivel național și se refera la
+
+                                                                  Pagina 25 din 36
+condițiile de mediu, se pot obține de la Agenția Naționala pentru
+Protecția      Mediului    sau      de    pe    site-ul:   http://www.anpm.
+ro/web/guest/legislatie.
+       Cu excepția eventualelor constrângeri de natură tehnică și/sau
+legală, în cazul în care vor exista limitări, condiționări sau restricții
+impuse de ofertant în raport cu cerințele caietului de sarcini, oferta va fi
+declarată ca fiind neconformă. Specificațiile tehnice aferente caietului de
+sarcini reprezintă cerințe minimale referitoare la nivelul calitativ, tehnic
+si de performantă, scop în care soluțiile ofertate în cadrul propunerii
+tehnice pot face referire la atingerea unor niveluri superioare. în cazul în
+care pe parcursul îndeplinirii contractului se constată faptul că nu sunt
+respectate elemente ale propunerii tehnice (sunt inferioare sau nu
+corespund cerințelor prevăzute în caietul de sarcini), autoritatea
+contractantă își rezervă dreptul de a denunța unilateral contractul ori de
+a solicita sistarea executării lucrărilor până la remedierea situației
+constatate. Autoritatea contractantă își rezervă dreptul de a analiza și
+verifica conformitatea valorilor/propunerilor/activităților ofertate/propuse
+de operatorii economici din punctul de vedere al îndeplinirii cerințelor
+solicitate prin caietul de sarcini, cu scopul protejării acesteia împotriva
+ofertelor ce conțin valori/propuneri/activități care intră în contradicție cu
+specificațiile tehnice stabilite și/sau care nu pot fi fundamentate. Ofertele
+care nu pot fi fundamentate din punct de vedere tehnic, logistic și a
+resurselor prevăzute în ofertă, de natură să nu asigure satisfacerea
+cerințelor din caietul de sarcini, vor fi respinse ca neconforme».
+       Prin urmare, consideră că rezultă fără putință de tăgadă că nu este
+permisă nicio abatere de la prevederile minime ale caietului de sarcini,
+parte integrantă din documentația de atribuire.
+       În conformitate cu prevederile art. 3 lit. hh) din Legea nr. 98/2016,
+oferta reprezintă actul juridic prin care operatorul economic își manifestă
+voința de a se angaja din punct de vedere juridic într-un contract de
+achiziție publică. Oferta cuprinde propunerea financiară, propunerea
+tehnică, precum și alte documente stabilite prin documentația de
+atribuire, iar în conformitate cu prevederile art. 124 din HG 395/2016,
+„Oferta are caracter obligatoriu, din punctul de vedere al conținutului, pe
+toată perioada de valabilitate stabilită de către autoritatea contractantă
+și asumată de ofertant”.
+       Totodată, arată că, documentația de atribuire la care se adaugă
+clarificările postate în SEAP, nu a fost contestată de niciun operator
+economic, drept pentru care, toate prevederile ei și-au consolidat forța
+obligatorie, atât pentru autoritatea contractantă, cât mai ales pentru
+operatorii economici participanți la procedura de atribuire, inclusiv,
+pentru contestatori. La acest moment, nu pot fi emise pretenții sau critici
+vizavi de prevederile documentației de atribuire, întrucât, ar fi vădit
+tardive, raportat la termenul prescris de Legea nr. 101/2016.
+       Prin depunerea ofertelor la procedură, se presupune că ofertanții și-
+au însușit documentația de atribuire fără rezerve, ceea ce, înseamnă că
+nu li se poate scuza nicio abatere de la prescripțiile ei, opozabile în cel
+mai mic detaliu, iar, principiul egalității de tratament presupune ca toți
+participanții la o procedură de atribuire să beneficieze de aplicarea
+acelorași condiții impuse de autoritate, astfel încât, să se garanteze că
+este înlăturat orice risc de favoritism și de arbitrar din partea autorității.
+       Având în vedere cele de mai sus și ținând cont că societăților le-au
+fost solicitate mai multe clarificări pentru a-și justifica timpul de
+intervenție din punctul de vedere al corelării timpului de intervenție cu
+resursele alocate umane și financiare, tocmai pentru a clarifica toate
+aspectele neclare, iar, aceștia prin răspunsurile la solicitările de clarificări
+nu au reușit să demonstreze, fără putință de tăgadă, că propunerea
+tehnică prezentată este corelată cu propunerea financiară, adică, nu au
+demonstrat că acest timp de intervenție este real și poate fi susținut pe
+întreaga perioadă de garanție, ceea ce înseamnă că propunerea
+financiară nu este corelată cu elementele propunerii tehnice ceea ce ar
+putea conduce la executarea defectuoasă a contractului.
+       Având în vedere cele de mai sus, solicită Consiliului să respingă
+contestațiile depuse ca nefondate.
+       Anexat punctului de vedere transmite dosarul achiziției, parțial pe
+format de hârtie, parțial în format electronic, pe CD.
+       Ca urmare a studierii dosarului cauzei la Consiliu(documentele din
+dosarul cauzei privind evaluarea ofertelor), ......... SRL a transmis
+Concluzii scrise prin adresa nr. 541/12.06.2025, înregistrată la CNSC sub
+nr. 39138/13.06.2025.
+
+                                                              Pagina 27 din 36
+      Contestatorul precizează că, în urma studierii dosarului procedurii,
+consideră pe deplin întemeiate și menține toate solicitările sale din cadrul
+contestației. Astfel:
+      1. Asocierea a răspuns concludent la toate solicitările de clarificări
+ale autorității contractante și a justificat timpul de intervenție asumat de
+15 minute atât din punct de vedere operațional, logistic și financiar,
+răspunsul fiind susținut de documente doveditoare suport, așa cum a
+arătat în cuprinsul contestației.
+      2. Asocierea a inclus costurile cu asigurarea garanției în oferta
+depusă, existând o sumă tampon de 151.618 lei între prețul de achiziție
+al echipamentelor ofertate (ofertele de preț fiind prezentate autorității
+contractante în răspunsul cu privire la prețul aparent nejustificat de mic
+ofertat de asociere), suma care acoperă costurile cu personalul necesar
+pentru a asigura intervenția în termenul asumat, așa cum a arătat în
+răspunsurile la clarificări și in cuprinsul contestației.
+      3. Formularele financiare au fost puse la dispoziția operatorilor
+economici în cadrul documentației de atribuire, și în cadrul acestor
+formulare nu a fost prevăzut nicăieri un rând/câmp separat pentru
+costurile cu asigurarea mentenanței - cu toate acestea, asocierea a luat
+în calcul aceste cheltuieli și le-a inclus în oferta depusă în cadrul
+formularului F4.
+      4. Oferta depusa de asociere respectă, în totalitate, cerințele
+impuse prin documentația de atribuire, inclusiv, cerințele cu privire la
+asigurarea garanției.
+      a. În punctul de vedere înaintat, autoritatea prezintă, la pag. 26-27
+un tabel (cuprins în secțiunea tehnica a documentației) cu privire la
+asigurarea garanției și afirmă că avea obligația să țină cont și de
+resursele financiare necesare pentru susținerea unui anumit timp de
+intervenție - și considera că nu a respectat această cerință, motiv pentru
+care, a respins oferta sa. Redă tabelul în discuție.
+       b. Contestatorul susține că asocierea sa a respectat întocmai
+această cerință a autorității, așa cum rezultă din cele prezentate în oferta
+depusă în cadrul Metodologiei prezentate, la pag. 25-26:
+       „8. Măsuri aplicate de Ofertant pentru supravegherea lucrărilor în
+perioada de garanție acordată: redă în continuare tabelul prezentat.
+       Având în vedere că formularul a fost solicitat în secțiunea tehnică,
+nu a precizat costurile în tabelul prezentat, însă le-a inclus în oferta
+financiară pe formularul F4, așa cum a arătat prin răspunsurile la
+clarificări și în contestația depusă.
+       5. Contestatorul precizează că diferența între costul de achiziție al
+echipamentelor și valoarea ofertată în F4 nu reprezintă profitul societății,
+ci, reprezintă o sumă tampon pentru asigurarea garanției echipamentelor
+cuprinse în același formular. Profitul societății este evidențiat în
+formularele F3.
+       Acest aspect este foarte clar prezentat de legiuitor în HG nr.
+907/2016 și este solicitat și prin formularele puse la dispoziție de
+autoritatea contractantă.
+       6. În urma tuturor explicațiilor oferite, consideră că autoritatea
+contractantă decide, în mod abuziv și nelegal, respingerea ofertei sale,
+deși - dacă ar fi aplicat criteriile impuse chiar de aceasta prin
+documentația de atribuire - oferta Asocierii s-ar fi clasat pe primul loc cu
+100 de puncte, obținând 60 de puncte la tehnic și 40 la financiar.
+       Pentru toate aceste motive, menține solicitările sale în fața
+Consiliului       și      consideră    că    oferta    Asocierii   ......... SRL
+- .............................SRL îndeplinește toate cerințele așa cum au fost
+acestea descrise în documentația de atribuire și nu trebuia respinsă ca
+inacceptabilă în conformitate cu prevederile de la art. 134 alin. (5) din
+HG.nr. 395/2016, întrucât Asocierea a răspuns concludent la toate
+solicitările de clarificări ale autorității contractante și nu trebuia respinsă
+ca neconformă în baza prevederilor art. 137 alin. (3) lit. d) din HG nr.
+395/2016, deoarece propunerea financiară a Asocierii este corelată cu
+toate elementele propunerii tehnice depuse, astfel Asocierea poate
+executa corespunzător contractul.
+       Prin adresa nr.280/08.05.2025, înregistrată la CNSC cu nr.
+30581/12.05.2025, ......... SRL depune, în original, recipisa de
+consemnare a cauțiunii nr. 211280566/1 din 07.05.2025, emisă de CEC
+Bank – Sucursala Baia Mare, în valoare de 28.015,00 lei.
+       Prin       corespondența        înregistrată    la     CNSC       cu   nr.
+30209/09.05.2025, ......... SRL depune, în original, recipisa de
+
+
+                                                              Pagina 29 din 36
+consemnare a cauțiunii nr. 211284852/1 din 08.05.2025, emisă de CEC
+Bank – Sucursala ........., în valoare de 28.015,00 lei.
+      Anexat contestației în original, înregistrată la CNSC cu nr.
+29819/08.05.2025, ......... SRL depune, în original, recipisa de
+consemnare a cauțiunii nr. 211261960/1 din 30.04.2025, emisă de CEC
+Bank – Unitatea ........., în valoare de 28.014,90 lei.
+      Analizând susținerile și documentele depuse la dosarul cauzei,
+CONSILIUL constată următoarele:
+      COMUNA ......... în calitate de autoritate contractantă, a organizat
+procedura simplificată pentru atribuirea contractului având ca obiect
+„Lucrări de execuție pentru investiția - Dezvoltarea sistemelor inteligente
+de management local în comuna ........., județul ......... - Componenta
+CIO - Fondul local; Axa de investiții 1.1.2. - Asigurarea infrastructurii
+pentru transportul verde - ITS/Alte infrastructuri TIC (Sisteme
+inteligente        de      management       urban/local", comuna      .........,
+județul .........”, cod CPV 45222300-2, elaborând, în acest sens,
+documentația de atribuire aferentă și publicând în SEAP, anunțul de
+participare simplificat nr. SCN1156905/09.12.2025, conform căruia
+valoarea estimată a procedurii este 1.400.745,11 lei. Conform cap.
+II.2.5 din anunț, criteriul de atribuire al contractului este „cel mai bun
+raport calitate preț”.
+      Anterior, în cadrul aceleiași proceduri de atribuire, autoritatea
+contractantă a desemnat câștigătoare oferta ......... SRL, pe locul 2
+clasându-se oferta ......... SRL și pe locul 3 oferta Asocierii ......... SRL
+– .............................SRL, aspecte consemnate în raportul procedurii
+nr. 785/27.02.2025.
+       Împotriva acestui rezultat al procedurii au formulat contestații
+ofertanții situați pe locurile 2 și 3, primul dintre aceștia, criticând oferta
+desemnată câștigătoare sub mai multe aspecte, printre care și punctajul
+obținut la factorul de evaluare tehnic „timpul de intervenție”, iar, cel de-
+al doilea susținând că nu i s-a acordat punctajul maxim pentru factorul
+de evaluare tehnic „timpul de intervenție”, astfel cum susține că i s-a s-
+ar fi cuvenit.
+       Consiliul reține că, urmare a celor 2 contestații menționate anterior,
+autoritatea contractantă a adoptat măsuri de remediere, motiv pentru
+care, a pronunțat Decizia nr. 649/C1/704, 729 din data 12.03.2025, prin
+care a respins, ca rămase fără obiect, cele 2 contestații.
+       După pronunțarea Deciziei nr. 649/C1/704, 729 din data de
+12.03.2025, autoritatea contractantă a solicitat clarificări tuturor celor 3
+ofertanți enumerați mai sus, a respins toate ofertele pe considerentul că
+niciunul dintre ofertanți nu a justificat timpul de intervenție ofertat și a
+anulat procedura, aspect consemnat în raportul procedurii nr. 2135/
+29.04.2025 (pag. 1338-1360).
+Ulterior luării la cunoștință a acestui din urmă rezultat al
+procedurii, ......... SRL, ......... SRL și ......... SRL au formulat
+contestațiile care fac obiectul prezentei, susținând că au răspuns
+concludent la solicitările de clarificare formulate de autoritatea
+contractantă.
+       Având în vedere că ofertele tuturor celor 3 contestatori au fost
+respinse pentru același motiv, respectiv, pentru pretinsa lipsă de
+concludență a justificărilor timpului de intervenție ofertat, Consiliul reține
+că, potrivit mențiunilor de la secțiunea II.2.5) Criterii de atribuire din
+anunțul de participare simplificat, autoritatea contractantă a ales să
+aplice criteriul de atribuire „Cel mai bun raport calitate – preț”, în cadrul
+căruia a alocat 40 din punctaj factorului de evaluare financiar „prețul
+ofertei” și câte 30 din punctaj factorilor de evaluare „Perioada de
+garanție” și „Timpul de intervenție”.
+       Algoritmul de acordare a punctajului pentru factorul de evaluare
+„Timpul de intervenție” a fost stabilit, prin anunțul de participare
+simplificat, astfel:
+       „a) Pentru cel mai mic timp de intervenție ofertat (Tmin) se acorda
+punctajul maxim alocat = 30 puncte.
+       b) Pentru celelalte oferte, punctajul P(n) se calculează proporțional,
+astfel:
+       P(n) = (Tmin / To) x punctaj maxim alocat (30 puncte).
+       Tmin = cel mai mic timp de intervenție ofertat;
+       To = timpul de intervenție ofertat.
+       Timp de intervenție minim :15 minute”.
+
+
+                                                            Pagina 31 din 36
+      Din analiza dosarului achiziției, transmis de autoritatea
+contractantă la dosarul cauzei, Consiliul reține că, în raportul procedurii
+nr. 785/27.02.2025 (pag. 893-902, vol. 3 al dosarului cauzei), emis
+urmare a primei evaluări a ofertelor, autoritatea contractantă a acordat
+câte 30 de puncte ofertelor ......... SRL și ......... SRL, la factorul de
+evaluare „timpul de intervenție”, motivat de faptul că aceștia au ofertat
+timpul de intervenție de 15 minute.
+      În      ceea        ce     privește   oferta   Asocierii   ......... SRL
+– .............................SRL, autoritatea contractantă i-a acordat 0,31
+puncte, corespunzător timpului de intervenție 24 de ore.
+      În contestațiile care au făcut obiectul dosarelor CNSC nr. 704/2025
+și nr. 729/2025, soluționate prin Decizia nr. 649/C1/704, 729 din data
+12.03.2025, ......... SRL a criticat, printre altele, timpul de intervenție din
+oferta desemnată câștigătoare la acel moment, aparținând ......... SRL,
+argumentând că, în calitate de operator economic care a elaborat
+proiectul tehnic, cunoaște cel mai bine investiția și că autoritatea
+contractantă nu ar fi trebuit să accepte timpul de intervenție de 15
+minute fără probe temeinice, iar, ......... SRL a susținut că i s-ar fi
+cuvenit punctajul maxim, deoarece, ar fi ofertat timpul de intervenție 15
+minute, nu o zi cum a consemnat autoritatea contractantă în raportul
+procedurii.
+      Consiliul reține că autoritatea contractantă și-a însușit aceste critici,
+formulate de către ambii contestatori, sens în care, a solicitat clarificări,
+iar, ulterior, a respins toate ofertele, motivat de faptul că propunerile
+financiare nu ar fi conținut costurile necesare salariului unei persoane
+care să fie la dispoziția autorității contractante pentru intervenție în
+perioada de garanție.
+        Aceste costuri au fost determinate de autoritatea contractantă prin
+formula 60 luni x 1 persoană x 4.050 =243.000 lei brut, aspect
+menționat în adresele de comunicare a rezultatului către toți cei 3
+contestatori (pag. 1361-1366, vol. 4 al dosarului cauzei).
+       Consiliul nu va putea valida raționamentul autorității contractante,
+motivat de faptul că, în documentația de atribuire nu a fost stipulată
+nicio condiție cu privire la disponibilitatea exclusivă a unei persoane
+pentru intervenție în perioada de garanție.
+       Astfel cum s-a reținut anterior, autoritatea contractantă s-a limitat
+la precizarea algoritmului de calcul aferent factorului de evaluare tehnic
+„timpul de intervenție”, fără a impune condiții suplimentare privind
+disponibilitatea    personalului      ofertantului    în    vederea    asigurării
+intervenției.
+       În aceste condiții, Consiliul reține că raționamentul financiar în baza
+căruia au fost respinse ofertele excedează prevederilor documentației de
+atribuire.
+       Câtă vreme autoritatea contractantă nu a impus, prin documentația
+de atribuire, ca ofertantul desemnat câștigător să plătească un om timp
+de 5 ani de zile doar pentru a fi pregătit să intervină în cazul defectării
+echipamentelor ofertate, Consiliul reține că aceasta nu avea dreptul de a
+respinge ofertele, în etapa de evaluare a ofertelor, pentru simplul motiv
+că nu au fost alocate resurse financiare pentru asigurarea acestei
+disponibilități exclusive.
+       Se mai reține faptul că 2 din cei 3 ofertanți au argumentat, prin
+răspunsurile la solicitările de clarificări, sustenabilitatea timpului de
+intervenție de 15 minute ofertat, prin faptul că persoana desemnată ar
+avea domiciliul în proximitate (......... SRL) sau că au deja în zonă o
+echipă pentru intervenții pentru altă beneficiar (......... SRL), situații care
+nu presupun alocarea unui salariat exclusiv pentru intervențiile la
+prezenta investiție și, implicit, nici sumele calculate de autoritatea
+contractantă.
+Consiliul apreciază că, în situația în care, după toate clarificările
+solicitate, comisia de evaluare mai are totuși neclarități privind unele
+aspecte logistice de natura celor indicate în punctul de vedere (ce se
+întâmplă dacă persoana nominalizată este în concediu, dacă i s-a alocat
+altă activitate sau dacă este deja în cursul intervenției la alt beneficiar
+etc.), aceasta poate să solicite, concret, clarificări punctuale respectivilor
+ofertanți, scopul acestor clarificări fiind lămurirea unor aspecte fără de
+care nu pot fi evaluate ofertele și evitarea unor situații, precum, cea din
+speța de față, în care, ofertele ......... SRL și ......... SRL au fost respinse
+oferte în baza unor simple supoziții.
+Pe de altă parte, Consiliul constată că ofertantul ......... SRL susține, în
+contestație, că ar fi angajat o persoană care să aibă ca unică atribuție
+
+                                                              Pagina 33 din 36
+intervențiile pentru autoritatea contractantă, aspect de natură să
+valideze raționamentul autorității contractante, însă, menționează că nu
+a fost în măsură să cuantifice cheltuielile salariale, pentru motive legate
+de lipsa de predictibilitate a salariului, taxelor etc.
+Or, raportat la aceste argumente, Consiliul nu a identificat, în contestația
+formulată de ......... SRL, argumente privind pretinsa nelegalitate a
+motivelor de respingere a ofertei sale, motiv pentru care, în temeiul art.
+26 alin. (6) din Legea nr. 101/2016, o va respinge, ca nefondată.
+Faptul că ......... SRL a avut calitatea de proiectant în cadrul prezentei
+investiții a influențat comisia de evaluare în exercitarea atribuțiilor sale
+prevăzute la art. 127 alin. (1) din HG nr. 395/2016, motivat de faptul că,
+aceasta a asimilat situația ......... SRL, care a justificat timpul de
+intervenție       pe  considerente      de     exclusivitate   a    persoanei
+responsabile/desemnate, cu situația celorlalți ofertanți, care au transmis
+alte justificări.
+      Consiliul apreciază că ponderea mare, de 30% din totalul
+punctajului, alocată factorului de evaluare „timpul de intervenție”,
+impune asupra comisiei de evaluare verificări detaliate, astfel încât,
+rezultatul procedurii să nu fie viciat prin ofertarea unor timpi de
+intervenție care nu pot fi îndepliniți, însă, această verificare trebuie să se
+efectueze prin raportare la documentația de atribuire, nu la ofertele
+depuse de alți ofertanți, indiferent dacă aceștia au avut sau nu calitatea
+de proiectant.
+În ceea ce privește motivul de respingere a ofertei ......... SRL din cauza
+modificării duratei de garanție din propunerea tehnică, Consiliul reține
+că, prin adresa nr. 227/10.04.2025 (pag. 1281-1286, vol. 4 al dosarului
+cauzei), acest ofertant nu și-a modificat durata de garanție de 5 ani
+ofertată, ci, a reprodus, în scopul argumentării obligațiilor asumate,
+clauza privind garanția din modelul de contract referitoare la garanție,
+aspect evidențiat prin textul aplecat (italic), plasat între ghilimele.
+       Pentru motivele de fapt și de drept reținute anterior, Consiliul, în
+temeiul art. 26 alin. (2) și (5) din Legea nr. 101/2016, cu modificările și
+completările ulterioare, va admite contestațiile formulate de ......... SRL
+și ......... SRL în contradictoriu cu autoritatea contractantă
+COMUNA ........., iar, pe cale de consecință, va anula raportul procedurii
+și actele subsecvente și va obliga autoritatea contractantă la reevaluarea
+ofertelor       aparținând       .........  SRL    și   Asocierii  ......... SRL
+– .............................SRL, de la faza de evaluare a propunerilor tehnice
+în conformitate cu criteriile de atribuire, cu respectarea prevederilor
+legale, a documentației de atribuire și a considerentelor din prezenta
+decizie, în termen de 10 zile de la comunicare.
+
+                            Pentru aceste motive
+                   în baza documentelor depuse de părți,
+         CONSILIUL NAȚIONAL DE SOLUȚIONARE A CONTESTAȚIILOR
+
+                                       DECIDE:
+
+        Respinge, ca nefondată, contestația formulată de ......... SRL în
+contradictoriu cu autoritatea contractantă COMUNA ..........
+        Admite contestațiile formulate de ......... SRL și ......... SRL în
+contradictoriu cu autoritatea contractantă COMUNA ........., iar, pe cale
+de consecință, anulează raportul procedurii și actele subsecvente și
+obligă        autoritatea        contractantă      la      reevaluarea    ofertelor
+aparținând           .........    SRL      și    Asocierii     ......... SRL      –
+.............................SRL, de la faza de evaluare a propunerilor tehnice în
+conformitate cu criteriile de atribuire, cu respectarea prevederilor legale,
+a documentației de atribuire și a considerentelor din prezenta decizie, în
+termen de 10 zile de la comunicare.
+        Obligatorie.
+        Împotriva prezentei decizii se poate formula plângere în termen de
+10 zile de la comunicare.
+
+                      Complet de soluționare a contestațiilor
+                         în domeniul achizițiilor publice:
+
+ Consilier de soluționare             PREȘEDINTE           Consilier de soluționare
+      ...................      ......................      ...................
+
+
+
+
+                                                                Pagina 35 din 36
+                                                      Redactat practicaua deciziei
+                                                               ...................
+Redactată în 6 (șase) exemplare originale, conține 27(douăzecișișapte) pagini
+
