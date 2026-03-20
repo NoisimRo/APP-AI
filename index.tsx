@@ -5932,6 +5932,12 @@ const App = () => {
                       </div>
                     ) : decisionAnalysis?.chunks?.length > 0 ? (
                       <div className="space-y-4">
+                        {decisionAnalysis?.rezumat && (
+                          <div className="bg-blue-50 rounded-lg border border-blue-200 p-5">
+                            <h4 className="font-bold text-blue-800 text-sm mb-2">Rezumat</h4>
+                            <p className="text-sm text-slate-700 leading-relaxed">{decisionAnalysis.rezumat}</p>
+                          </div>
+                        )}
                         {decisionAnalysis.chunks.map((chunk: any, i: number) => (
                           <div key={i} className="bg-slate-50 rounded-lg border border-slate-200 p-5">
                             {/* Chunk header */}
