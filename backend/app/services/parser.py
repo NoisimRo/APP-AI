@@ -200,6 +200,9 @@ class ParsedDecision:
     # Full content
     text_integral: str = ""
 
+    # Contract object (extracted from introductory text)
+    obiect_contract: Optional[str] = None
+
     # Sections (populated by section parser)
     sectiuni: list[DecisionSection] = field(default_factory=list)
 
@@ -426,10 +429,13 @@ class CNSCDecisionParser:
         # Stage 3: Extract parties
         self._extract_parties(decision, text)
 
-        # Stage 4: Extract solution from dispositive
+        # Stage 4: Extract contract object from introductory text
+        self._extract_contract_object(decision, text)
+
+        # Stage 5: Extract solution from dispositive
         self._extract_solution(decision, text)
 
-        # Stage 5: Validate and reconcile
+        # Stage 6: Validate and reconcile
         self._validate_and_reconcile(decision, warnings)
 
         decision.parse_warnings = warnings
@@ -648,6 +654,81 @@ class CNSCDecisionParser:
         name = name.strip()
         name = re.sub(r"\s+", " ", name)
         return name[:500]  # Limit length
+
+    # Pattern 1: Quoted contract object near "având ca obiect" or similar markers
+    # Matches: având ca obiect: „Servicii de pază..." or având ca obiect „Echipamente..."
+    _CONTRACT_OBJECT_QUOTED = re.compile(
+        r"(?:având\s+ca\s+obiect|obiectul\s+(?:contractului|achiziției|acordului[\s-]+cadru)"
+        r"|obiect\s+(?:al\s+)?(?:contractului|achiziției))"
+        r"[:\s]*"
+        "[\u201e\"«]"  # opening quote: „ " «
+        r"(.{5,500}?)"
+        "[\u201d\u201c\"»]",  # closing quote: " " " »
+        re.IGNORECASE,
+    )
+
+    # Pattern 2: Unquoted contract object after marker, delimited by period/comma+keyword
+    _CONTRACT_OBJECT_UNQUOTED = re.compile(
+        r"(?:"
+        r"obiectul\s+(?:contractului|achiziției|acordului[\s-]+cadru)"
+        r"|obiect\s+(?:al\s+)?(?:contractului|achiziției)"
+        r"|privind\s+(?:achiziția\s+de|furnizarea\s+de|prestarea\s+de|execuția)"
+        r"|în\s+vederea\s+(?:încheierii|atribuirii)\s+(?:(?:unui\s+)?(?:acord|acordului)[\s-]+"
+        r"cadru|contractului)(?:\s+(?:de|pentru)\s+)?"
+        r"(?:furnizare|servicii|lucrări|prestare|execuția)?"
+        r")"
+        r"[:\s]+(.{10,300}?)"
+        r"(?:,\s*(?:cod|CPV|finanțat|în\s+valoare|estimat|organizată|publicat|înregistrat|lotul|lot\s|loturile)"
+        r"|\.\s|,\s+s-a\s+solicitat)",
+        re.IGNORECASE,
+    )
+
+    # Pattern 3: "având ca obiect" as standalone — look for the next meaningful text
+    _CONTRACT_OBJECT_FALLBACK = re.compile(
+        r"având\s+ca\s+obiect[:\s]+"
+        r"(.{10,200}?)"
+        r"(?:,\s*(?:cod|CPV|s-a\s+solicitat|anunț|publicat)|[.]\s)",
+        re.IGNORECASE,
+    )
+
+    def _extract_contract_object(self, decision: ParsedDecision, text: str) -> None:
+        """Extract contract object description from introductory text.
+
+        Searches the first 5000 characters for common patterns like:
+        - "având ca obiect: «Servicii de...»"
+        - "obiectul contractului: ..."
+        - "în vederea încheierii acordului-cadru de furnizare ..."
+
+        This is purely regex-based (no LLM). The extracted text can be used
+        for CPV deduction via embedding similarity against nomenclator_cpv.
+        """
+        # Normalize whitespace (line breaks → spaces) for better regex matching
+        intro = re.sub(r"\s+", " ", text[:5000])
+
+        # Strategy 1: Look for quoted text near markers (most reliable)
+        match = self._CONTRACT_OBJECT_QUOTED.search(intro)
+        if match:
+            obj = match.group(1).strip()
+            if len(obj) >= 5:
+                decision.obiect_contract = obj
+                return
+
+        # Strategy 2: Unquoted text after specific markers, delimited by keywords
+        match = self._CONTRACT_OBJECT_UNQUOTED.search(intro)
+        if match:
+            obj = match.group(1).strip()
+            if len(obj) >= 10:
+                decision.obiect_contract = obj
+                return
+
+        # Strategy 3: Broadest fallback — "având ca obiect" + any text until delimiter
+        match = self._CONTRACT_OBJECT_FALLBACK.search(intro)
+        if match:
+            obj = match.group(1).strip()
+            # Clean: remove leading quotes if partial
+            obj = obj.lstrip('\u201e\u201c"«')
+            if len(obj) >= 10:
+                decision.obiect_contract = obj
 
     def _extract_solution(self, decision: ParsedDecision, text: str) -> None:
         """Extract solution from dispositive section.

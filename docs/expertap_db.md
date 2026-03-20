@@ -51,6 +51,8 @@
  autoritate_contractanta | character varying(500)      |           |          |
  intervenienti           | json                        |           |          |
  text_integral           | text                        |           | not null |
+ obiect_contract         | text                        |           |          |
+ rezumat                 | text                        |           |          |
  parse_warnings          | json                        |           |          |
  created_at              | timestamp without time zone |           | not null | now()
  updated_at              | timestamp without time zone |           | not null | now()
@@ -361,7 +363,7 @@ Foreign-key constraints:
 
 ---
 
-# Ultima sincronizare cu producția: 2026-03-17
+# Ultima sincronizare cu producția: 2026-03-20
 
 # Changelog Schema Producție
 
@@ -392,3 +394,5 @@ Foreign-key constraints:
 | 2026-03-17 | `ALTER TABLE users ADD COLUMN verification_code_expires TIMESTAMP` | Utilizator | DA |
 | 2026-03-17 | `ALTER TABLE search_scopes ADD COLUMN user_id UUID REFERENCES users(id) ON DELETE CASCADE;` | Utilizator | DA |
 | 2026-03-17 | `CREATE INDEX ix_search_scopes_user_id ON search_scopes(user_id);` | Utilizator | DA |
+| 2026-03-20 | `ALTER TABLE decizii_cnsc ADD COLUMN obiect_contract TEXT;` | Pending | - |
+| 2026-03-20 | `ALTER TABLE decizii_cnsc ADD COLUMN rezumat TEXT;` | Pending | - |
