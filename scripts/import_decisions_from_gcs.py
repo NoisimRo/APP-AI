@@ -207,6 +207,7 @@ class DecisionImporter:
                 autoritate_contractanta=parsed.autoritate_contractanta,
                 intervenienti=parsed.intervenienti,
                 text_integral=parsed.text_integral,
+                obiect_contract=parsed.obiect_contract,
                 parse_warnings=parsed.parse_warnings,
             )
 

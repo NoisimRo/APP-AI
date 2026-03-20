@@ -51,6 +51,8 @@
  autoritate_contractanta | character varying(500)      |           |          |
  intervenienti           | json                        |           |          |
  text_integral           | text                        |           | not null |
+ obiect_contract         | text                        |           |          |
+ rezumat                 | text                        |           |          |
  parse_warnings          | json                        |           |          |
  created_at              | timestamp without time zone |           | not null | now()
  updated_at              | timestamp without time zone |           | not null | now()
@@ -105,15 +107,18 @@ Foreign-key constraints:
 ---------------------+-----------------------------+-----------+----------+---------
  cod_cpv             | character varying(20)       |           | not null |
  descriere           | text                        |           | not null |
+ denumire_en         | character varying(200)      |           |          |
  categorie_achizitii | character varying(50)       |           |          |
  clasa_produse       | character varying(200)      |           |          |
  cod_parinte         | character varying(20)       |           |          |
  nivel               | integer                     |           |          |
  created_at          | timestamp without time zone |           | not null | now()
+ embedding           | vector(2000)                |           |          |
 Indexes:
     "nomenclator_cpv_pkey" PRIMARY KEY, btree (cod_cpv)
     "ix_cpv_categorie" btree (categorie_achizitii)
     "ix_cpv_clasa" btree (clasa_produse)
+    "ix_cpv_embedding" hnsw (embedding vector_cosine_ops)
 
 
 # \d acte_normative
@@ -361,7 +366,7 @@ Foreign-key constraints:
 
 ---
 
-# Ultima sincronizare cu producția: 2026-03-17
+# Ultima sincronizare cu producția: 2026-03-20
 
 # Changelog Schema Producție
 
@@ -392,3 +397,7 @@ Foreign-key constraints:
 | 2026-03-17 | `ALTER TABLE users ADD COLUMN verification_code_expires TIMESTAMP` | Utilizator | DA |
 | 2026-03-17 | `ALTER TABLE search_scopes ADD COLUMN user_id UUID REFERENCES users(id) ON DELETE CASCADE;` | Utilizator | DA |
 | 2026-03-17 | `CREATE INDEX ix_search_scopes_user_id ON search_scopes(user_id);` | Utilizator | DA |
+| 2026-03-20 | `ALTER TABLE decizii_cnsc ADD COLUMN obiect_contract TEXT;` | Utilizator | DA |
+| 2026-03-20 | `ALTER TABLE decizii_cnsc ADD COLUMN rezumat TEXT;` | Utilizator | DA |
+| 2026-03-20 | `ALTER TABLE nomenclator_cpv ADD COLUMN embedding vector(2000);` | Utilizator | DA |
+| 2026-03-20 | `CREATE INDEX ix_cpv_embedding ON nomenclator_cpv USING hnsw (embedding vector_cosine_ops);` | Utilizator | DA |

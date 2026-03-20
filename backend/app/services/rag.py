@@ -764,25 +764,62 @@ class RAGService:
         self,
         query: str,
         session: AsyncSession,
+        query_vector: list[float] | None = None,
     ) -> list[str]:
-        """Find CPV codes matching domain keywords in the query.
+        """Find CPV codes matching the query via vector search + keyword fallback.
 
-        Searches nomenclator_cpv across descriere, categorie_achizitii,
-        and clasa_produse for keywords from the query. Returns higher-level
-        (shorter) CPV codes first so prefix matching catches more decisions.
+        Strategy 1 (primary): Semantic vector search on nomenclator_cpv.embedding
+        using the pre-computed query_vector. Zero additional API calls.
+
+        Strategy 2 (fallback): ILIKE keyword search across descriere,
+        categorie_achizitii, clasa_produse.
 
         Args:
             query: User's search query.
             session: Database session.
+            query_vector: Pre-computed embedding vector for semantic search.
 
         Returns:
             List of matching CPV codes (may be empty).
         """
+        CPV_DISTANCE_THRESHOLD = 0.5  # cosine distance < 0.5 = similarity > 0.5
+
+        # Strategy 1: Vector search on CPV embeddings (semantic)
+        if query_vector is not None:
+            stmt = (
+                select(
+                    NomenclatorCPV.cod_cpv,
+                    NomenclatorCPV.nivel,
+                    NomenclatorCPV.embedding.cosine_distance(query_vector).label("distance"),
+                )
+                .where(NomenclatorCPV.embedding.isnot(None))
+                .order_by("distance")
+                .limit(20)
+            )
+            result = await session.execute(stmt)
+            rows = result.all()
+
+            # Filter by distance threshold
+            matching = [r for r in rows if r.distance < CPV_DISTANCE_THRESHOLD]
+
+            if matching:
+                cpv_codes = self._deduplicate_cpv_codes(
+                    [(r.cod_cpv, r.nivel) for r in matching]
+                )
+                if cpv_codes:
+                    logger.info(
+                        "cpv_vector_search",
+                        query=query[:80],
+                        cpv_count=len(cpv_codes),
+                        top_distance=round(matching[0].distance, 3),
+                    )
+                    return cpv_codes
+
+        # Strategy 2: Keyword ILIKE fallback
         keywords = self._extract_keywords(query)
         if not keywords:
             return []
 
-        # Search across all text fields in nomenclator
         conditions = []
         for keyword in keywords:
             conditions.append(or_(
@@ -794,7 +831,6 @@ class RAGService:
         if not conditions:
             return []
 
-        # Prefer higher-level codes (nivel 1-3) for broader matching
         stmt = (
             select(NomenclatorCPV.cod_cpv, NomenclatorCPV.nivel)
             .where(or_(*conditions))
@@ -804,27 +840,37 @@ class RAGService:
         result = await session.execute(stmt)
         rows = result.all()
 
-        # Deduplicate: if we have a parent code, skip its children
-        cpv_codes = []
-        seen_prefixes: set[str] = set()
-        for row in rows:
-            cod = row[0]
-            # Extract numeric prefix (before the dash)
-            prefix = cod.split("-")[0] if cod else cod
-            # Check if any already-added code is a prefix of this one
-            is_child = any(prefix.startswith(sp) for sp in seen_prefixes)
-            if not is_child:
-                cpv_codes.append(cod)
-                seen_prefixes.add(prefix.rstrip("0") if prefix else "")
+        cpv_codes = self._deduplicate_cpv_codes(rows)
 
         if cpv_codes:
             logger.info(
-                "cpv_codes_from_query",
+                "cpv_keyword_search",
                 query=query[:80],
                 keywords=keywords,
                 cpv_count=len(cpv_codes),
             )
 
+        return cpv_codes
+
+    @staticmethod
+    def _deduplicate_cpv_codes(rows: list[tuple]) -> list[str]:
+        """Deduplicate CPV codes: if we have a parent code, skip its children.
+
+        Args:
+            rows: List of (cod_cpv, nivel) tuples.
+
+        Returns:
+            Deduplicated list of CPV codes.
+        """
+        cpv_codes = []
+        seen_prefixes: set[str] = set()
+        for row in rows:
+            cod = row[0]
+            prefix = cod.split("-")[0] if cod else cod
+            is_child = any(prefix.startswith(sp) for sp in seen_prefixes)
+            if not is_child:
+                cpv_codes.append(cod)
+                seen_prefixes.add(prefix.rstrip("0") if prefix else "")
         return cpv_codes
 
     async def _search_by_cpv_domain(
@@ -1157,6 +1203,23 @@ class RAGService:
                 duration_s=round(t_load - t0, 2),
             )
             return decisions, matched_chunks
+
+        # 3b. CPV domain search — use semantic CPV matching as fallback
+        # when vector search found nothing (e.g., domain-specific queries)
+        cpv_codes = await self._find_cpv_codes_for_query(
+            query, session, query_vector=query_vector
+        )
+        if cpv_codes:
+            cpv_decisions, cpv_chunks = await self._search_by_cpv_domain(
+                cpv_codes, session, limit=limit
+            )
+            if cpv_decisions:
+                logger.info(
+                    "cpv_domain_fallback_used",
+                    cpv_codes=cpv_codes[:5],
+                    decisions=len(cpv_decisions),
+                )
+                return cpv_decisions, cpv_chunks
 
         # 4. Fallback: keyword ILIKE search
         logger.info("falling_back_to_keyword_search", query=query)

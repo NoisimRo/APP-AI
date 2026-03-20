@@ -31,7 +31,7 @@ from sqlalchemy import select, func
 from app.core.logging import get_logger
 from app.db.session import init_db
 from app.db import session as db_session
-from app.models.decision import ArgumentareCritica
+from app.models.decision import ArgumentareCritica, NomenclatorCPV
 from app.services.embedding import EmbeddingService
 from app.services.llm.base import ResourceExhaustedError
 
@@ -141,6 +141,104 @@ async def generate_embeddings_batched(
     return total_generated
 
 
+def compose_text_for_cpv(cpv: NomenclatorCPV) -> str:
+    """Compose embeddable text from CPV code entry.
+
+    Combines description with category and class for richer semantic signal.
+    """
+    parts = [cpv.descriere]
+    if cpv.categorie_achizitii:
+        parts.append(f"Categorie: {cpv.categorie_achizitii}")
+    if cpv.clasa_produse:
+        parts.append(f"Clasă: {cpv.clasa_produse}")
+    return " | ".join(parts)
+
+
+async def generate_cpv_embeddings_batched(
+    embedding_service: EmbeddingService,
+    force: bool = False,
+    limit: int | None = None,
+    api_batch_size: int = 20,
+    rate_limit: float = 1.0,
+) -> int:
+    """Generate embeddings for NomenclatorCPV entries.
+
+    Same pattern as generate_embeddings_batched() but for CPV codes.
+    """
+    async with db_session.async_session_factory() as session:
+        count_stmt = select(func.count()).select_from(NomenclatorCPV)
+        if not force:
+            count_stmt = count_stmt.where(NomenclatorCPV.embedding.is_(None))
+        total_to_process = await session.scalar(count_stmt)
+
+    if limit:
+        total_to_process = min(total_to_process, limit)
+
+    if total_to_process == 0:
+        print("  No CPV codes need embeddings.")
+        return 0
+
+    print(f"  Processing {total_to_process} CPV codes...")
+
+    total_generated = 0
+
+    while total_generated < total_to_process:
+        batch_target = min(COMMIT_BATCH_SIZE, total_to_process - total_generated)
+
+        async with db_session.async_session_factory() as session:
+            stmt = select(NomenclatorCPV)
+            if not force:
+                stmt = stmt.where(NomenclatorCPV.embedding.is_(None))
+            stmt = stmt.limit(batch_target)
+
+            result = await session.execute(stmt)
+            rows = list(result.scalars().all())
+
+            if not rows:
+                break
+
+            # Compose texts
+            valid_pairs = []
+            for row in rows:
+                text = compose_text_for_cpv(row)
+                if text.strip():
+                    valid_pairs.append((row, text))
+
+            if not valid_pairs:
+                break
+
+            valid_rows, valid_texts = zip(*valid_pairs)
+
+            try:
+                embeddings = await embedding_service.embed_batch(
+                    list(valid_texts),
+                    batch_size=api_batch_size,
+                    rate_limit_delay=rate_limit,
+                )
+            except ResourceExhaustedError as e:
+                print(f"\n  RESOURCE EXHAUSTED: {e}")
+                print(f"  Progress saved: {total_generated} CPV embeddings committed so far.")
+                return total_generated
+            except Exception as e:
+                print(f"  ERROR: {e}")
+                print(f"  Progress saved: {total_generated} CPV embeddings committed so far.")
+                break
+
+            for row, embedding in zip(valid_rows, embeddings):
+                row.embedding = embedding
+
+            await session.commit()
+            batch_count = len(embeddings)
+            total_generated += batch_count
+
+            print(
+                f"  [{total_generated}/{total_to_process}] "
+                f"Committed batch of {batch_count} CPV embeddings"
+            )
+
+    return total_generated
+
+
 async def main():
     """Main entry point."""
     parser = argparse.ArgumentParser(
@@ -186,13 +284,23 @@ async def main():
 
     print(f"\nCurrent embedding coverage:")
     print(f"  ArgumentareCritica: {stats['argumentari']['embedded']}/{stats['argumentari']['total']}")
+    print(f"  NomenclatorCPV:     {stats['cpv']['embedded']}/{stats['cpv']['total']}")
     print()
 
     start_time = time.time()
 
     # Generate embeddings
     print("=== ArgumentareCritica ===")
-    total_generated = await generate_embeddings_batched(
+    arg_generated = await generate_embeddings_batched(
+        embedding_service,
+        force=args.force,
+        limit=args.limit,
+        api_batch_size=args.batch_size,
+        rate_limit=args.rate_limit,
+    )
+
+    print("\n=== NomenclatorCPV ===")
+    cpv_generated = await generate_cpv_embeddings_batched(
         embedding_service,
         force=args.force,
         limit=args.limit,
@@ -205,12 +313,16 @@ async def main():
         stats = await embedding_service.get_embedding_stats(session)
 
     elapsed = time.time() - start_time
+    total_generated = arg_generated + cpv_generated
     print(f"\n{'=' * 60}")
     print("EMBEDDING SUMMARY")
     print(f"{'=' * 60}")
     print(f"Generated: {total_generated} embeddings in {elapsed:.1f}s ({elapsed/60:.1f}min)")
+    print(f"  ArgumentareCritica: {arg_generated}")
+    print(f"  NomenclatorCPV:     {cpv_generated}")
     print(f"\nUpdated coverage:")
     print(f"  ArgumentareCritica: {stats['argumentari']['embedded']}/{stats['argumentari']['total']}")
+    print(f"  NomenclatorCPV:     {stats['cpv']['embedded']}/{stats['cpv']['total']}")
     print(f"{'=' * 60}")
 
 

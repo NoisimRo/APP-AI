@@ -12,7 +12,7 @@ from sqlalchemy import select, func, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.logging import get_logger
-from app.models.decision import ArgumentareCritica
+from app.models.decision import ArgumentareCritica, NomenclatorCPV
 from app.services.llm.base import LLMProvider, ResourceExhaustedError
 from app.services.llm.factory import get_embedding_provider
 
@@ -273,6 +273,16 @@ class EmbeddingService:
             .where(ArgumentareCritica.embedding.isnot(None))
         )
 
+        cpv_total = await session.scalar(
+            select(func.count()).select_from(NomenclatorCPV)
+        )
+        cpv_embedded = await session.scalar(
+            select(func.count())
+            .select_from(NomenclatorCPV)
+            .where(NomenclatorCPV.embedding.isnot(None))
+        )
+
         return {
             "argumentari": {"total": arg_total, "embedded": arg_embedded},
+            "cpv": {"total": cpv_total, "embedded": cpv_embedded},
         }

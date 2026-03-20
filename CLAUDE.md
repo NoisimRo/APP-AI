@@ -82,7 +82,8 @@ DATABASE_URL="postgresql+asyncpg://..." python scripts/generate_embeddings.py
 | `backend/app/core/encryption.py` | Fernet encryption for API keys |
 | `backend/app/api/v1/settings.py` | LLM Settings API (GET/PUT/test) |
 | `backend/app/services/embedding.py` | Embedding generation service |
-| `backend/app/services/analysis.py` | LLM decision analysis (ArgumentareCritica extraction) |
+| `backend/app/services/analysis.py` | LLM decision analysis (ArgumentareCritica extraction + rezumat + CPV sugerat) |
+| `backend/app/services/parser.py` | CNSC decision parser (regex-based, 0 LLM calls) — extracts obiect_contract |
 | `backend/app/models/decision.py` | All database models |
 | `backend/app/api/v1/chat.py` | Chat API endpoint |
 | `backend/app/api/v1/decisions.py` | Decisions CRUD API |
@@ -90,6 +91,8 @@ DATABASE_URL="postgresql+asyncpg://..." python scripts/generate_embeddings.py
 | `backend/app/services/redflags_analyzer.py` | Red Flags Detector (two-pass: detect → ground) |
 | `backend/app/api/v1/redflags.py` | Red Flags API endpoint |
 | `scripts/import_decisions_from_gcs.py` | GCS → database import pipeline |
+| `scripts/generate_summaries.py` | Retroactive lightweight summary generation (2-3 sentences per decision) |
+| `scripts/deduce_cpv.py` | CPV deduction via embedding similarity with nomenclator_cpv |
 | `scripts/import_legislatie.py` | Legislation .md → DB import (alineat-level) |
 | `backend/app/services/training_generator.py` | TrainingAP: generare materiale didactice (RAG + LLM) |
 | `backend/app/services/export_service.py` | Export materiale DOCX/PDF/MD |
@@ -290,13 +293,24 @@ DATABASE_URL="..." python scripts/generate_analysis.py --limit 10  # Test with 1
 DATABASE_URL="..." python scripts/generate_analysis.py --provider gemini --model gemini-2.5-pro  # Switch model
 DATABASE_URL="..." python scripts/generate_analysis.py --provider groq --model llama-3.3-70b-versatile  # Free model
 DATABASE_URL="..." python scripts/generate_embeddings.py --force   # Regenerate all
+
+# Retroactive summaries (lightweight, ~1600 tokens/decision vs ~500K for re-analysis)
+DATABASE_URL="..." python scripts/generate_summaries.py --dry-run   # Preview
+DATABASE_URL="..." python scripts/generate_summaries.py --limit 10  # Test
+DATABASE_URL="..." python scripts/generate_summaries.py              # All without rezumat
+
+# CPV deduction via embedding similarity (for decisions without CPV)
+DATABASE_URL="..." python scripts/deduce_cpv.py --dry-run            # Preview matches
+DATABASE_URL="..." python scripts/deduce_cpv.py --limit 10 --top-k 5 # Test with top 5 candidates
+DATABASE_URL="..." python scripts/deduce_cpv.py --threshold 0.75     # Stricter matching
 ```
 
 ### What still needs to be done
 1. **Run LLM analysis** on all decisions: `python scripts/generate_analysis.py` (or `pipeline.py --step analyze`)
 2. **Generate embeddings**: `python scripts/generate_embeddings.py` (or `pipeline.py --step embed`)
-3. **CPV descriptions**: `cpv_descriere` column is currently NULL for most decisions — need to populate from `nomenclator_cpv` table or during import
-4. **Deploy**: Push to `main` to trigger Cloud Build → Cloud Run
+3. **Generate retroactive summaries**: `python scripts/generate_summaries.py` (lightweight, ~1600 tokens/decision)
+4. **Deduce CPV codes**: `python scripts/deduce_cpv.py` (for decisions without CPV, uses embedding similarity)
+5. **Deploy**: Push to `main` to trigger Cloud Build → Cloud Run
 
 ### Future: Daily Automation (Cloud Run Job + Cloud Scheduler)
 

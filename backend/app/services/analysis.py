@@ -26,11 +26,23 @@ logger = get_logger(__name__)
 
 ANALYSIS_SYSTEM_PROMPT = """Ești un analist juridic expert în achiziții publice românești, specializat în deciziile CNSC.
 
-Sarcina ta: Analizează textul integral al unei decizii CNSC și extrage argumentația structurată per critică (per motiv de contestare).
+Sarcina ta: Analizează textul integral al unei decizii CNSC și extrage:
+1. Un REZUMAT scurt al deciziei (2-3 propoziții)
+2. Codul CPV sugerat (dacă nu este deja specificat)
+3. Argumentația structurată per critică (per motiv de contestare)
 
-Returnează un JSON array cu obiectele de mai jos. Dacă decizia are o singură critică, returnează un singur obiect.
+Returnează un obiect JSON cu structura de mai jos.
 
-REGULI CRITICE:
+REZUMAT (rezumat):
+- 2-3 propoziții concise care descriu: cine a contestat, ce obiect are contractul, care este soluția CNSC
+- Exemplu: "Contestatorul SC Alfa SRL a contestat rezultatul procedurii de atribuire a contractului de furnizare echipamente medicale, susținând că oferta sa a fost respinsă nejustificat ca neconformă. CNSC a admis contestația, constatând că autoritatea contractantă nu a solicitat clarificări conform art. 209 din Legea 98/2016."
+
+CPV SUGERAT (cpv_sugerat):
+- Dacă decizia NU are cod CPV specificat, identifică obiectul contractului și sugerează codul CPV cel mai probabil (format: "XXXXXXXX-X", ex: "33100000-1")
+- Dacă decizia ARE deja cod CPV, returnează null
+- Bazează-te pe obiectul contractului menționat în text
+
+REGULI CRITICE PENTRU CRITICI:
 - cod_critica TREBUIE să fie un cod scurt de max 10 caractere (ex: "R2", "D1", "D4", "R1"). NU include descrieri sau paranteze. Dacă o critică acoperă mai multe coduri, folosește codul principal (ex: "R2" nu "R2, R3, R4 (Tardivitate)"). Dacă nu există cod explicit, folosește "C1", "C2" etc.
 - Fiecare critică separată = un obiect separat în array. NU combina criticile într-un singur obiect.
 - Extrage TOATE argumentele relevante, nu doar primele rânduri
@@ -67,21 +79,25 @@ ANALIZA CNSC:
 - jurisprudenta_cnsc: Referințe la jurisprudență invocate de CNSC în motivarea sa (decizii instanțe, CJUE, etc.)
 
 Format JSON strict (fără alte texte înainte sau după JSON):
-[
-  {
-    "cod_critica": "R2",
-    "ordine_in_decizie": 1,
-    "argumente_contestator": "Rezumat detaliat al argumentelor contestatorului...",
-    "jurisprudenta_contestator": ["cauza C-927/19 CJUE", "Decizia Curții de Apel Alba Iulia nr. 506/2023"],
-    "argumente_ac": "Rezumat detaliat al argumentelor autorității contractante...",
-    "jurisprudenta_ac": ["Decizia CNSC nr. 123/2024"],
-    "argumente_intervenienti": [{"nr": 1, "argumente": "...", "jurisprudenta": ["..."]}],
-    "elemente_retinute_cnsc": "Elementele de fapt și de drept reținute de CNSC...",
-    "argumentatie_cnsc": "Raționamentul și motivarea CNSC, cu referiri la articolele de lege...",
-    "jurisprudenta_cnsc": ["cauza C-285/18 CJUE", "Directiva 89/665/CEE"],
-    "castigator_critica": "contestator"
-  }
-]"""
+{
+  "rezumat": "Rezumat concis al deciziei în 2-3 propoziții...",
+  "cpv_sugerat": "XXXXXXXX-X sau null dacă CPV-ul este deja cunoscut",
+  "critici": [
+    {
+      "cod_critica": "R2",
+      "ordine_in_decizie": 1,
+      "argumente_contestator": "Rezumat detaliat al argumentelor contestatorului...",
+      "jurisprudenta_contestator": ["cauza C-927/19 CJUE", "Decizia Curții de Apel Alba Iulia nr. 506/2023"],
+      "argumente_ac": "Rezumat detaliat al argumentelor autorității contractante...",
+      "jurisprudenta_ac": ["Decizia CNSC nr. 123/2024"],
+      "argumente_intervenienti": [{"nr": 1, "argumente": "...", "jurisprudenta": ["..."]}],
+      "elemente_retinute_cnsc": "Elementele de fapt și de drept reținute de CNSC...",
+      "argumentatie_cnsc": "Raționamentul și motivarea CNSC, cu referiri la articolele de lege...",
+      "jurisprudenta_cnsc": ["cauza C-285/18 CJUE", "Directiva 89/665/CEE"],
+      "castigator_critica": "contestator"
+    }
+  ]
+}"""
 
 ANALYSIS_PROMPT_TEMPLATE = """Analizează următoarea decizie CNSC și extrage argumentația structurată.
 
@@ -89,11 +105,12 @@ Decizia: {external_id}
 Coduri critici din filename: {coduri_critici}
 Tip contestație: {tip_contestatie}
 Soluție: {solutie}
+Cod CPV cunoscut: {cod_cpv}
 
 TEXT INTEGRAL:
 {text_integral}
 
-Returnează DOAR JSON-ul cu argumentația per critică, fără alte explicații."""
+Returnează DOAR JSON-ul structurat (rezumat + cpv_sugerat + critici), fără alte explicații."""
 
 
 class DecisionAnalysisService:
@@ -105,14 +122,15 @@ class DecisionAnalysisService:
     async def analyze_decision(
         self,
         decision: DecizieCNSC,
-    ) -> tuple[list[dict], list[str]]:
+    ) -> tuple[list[dict], list[str], dict]:
         """Analyze a single decision and extract argumentation.
 
         Args:
             decision: The decision to analyze.
 
         Returns:
-            Tuple of (list of argumentation dicts, list of warning messages).
+            Tuple of (list of argumentation dicts, list of warnings, decision_metadata).
+            decision_metadata may contain 'rezumat' and 'cpv_sugerat'.
         """
         text_len = len(decision.text_integral) if decision.text_integral else 0
         was_truncated = text_len > 3500000
@@ -129,6 +147,7 @@ class DecisionAnalysisService:
             coduri_critici=", ".join(decision.coduri_critici) if decision.coduri_critici else "N/A",
             tip_contestatie=decision.tip_contestatie,
             solutie=decision.solutie_contestatie or "N/A",
+            cod_cpv=decision.cod_cpv or "NECUNOSCUT — te rog sugerează unul",
             text_integral=decision.text_integral[:3500000],  # Gemini 2.5 Pro: 1M tokens, 3.5M chars ≈ 875K tokens (leaves room for prompt + output)
         )
 
@@ -141,15 +160,17 @@ class DecisionAnalysisService:
             )
 
             # Parse JSON from response
-            argumentari, warnings = self._parse_response(response)
+            argumentari, warnings, decision_metadata = self._parse_response(response)
 
             logger.info(
                 "decision_analyzed",
                 external_id=decision.external_id,
                 critici_found=len(argumentari),
+                has_rezumat=bool(decision_metadata.get("rezumat")),
+                has_cpv_sugerat=bool(decision_metadata.get("cpv_sugerat")),
                 warnings=warnings if warnings else None,
             )
-            return argumentari, warnings
+            return argumentari, warnings, decision_metadata
 
         except Exception as e:
             logger.error(
@@ -159,17 +180,23 @@ class DecisionAnalysisService:
             )
             raise
 
-    def _parse_response(self, response: str) -> tuple[list[dict], list[str]]:
-        """Parse LLM response into list of argumentation dicts.
+    def _parse_response(self, response: str) -> tuple[list[dict], list[str], dict]:
+        """Parse LLM response into list of argumentation dicts + decision-level metadata.
+
+        Supports two JSON formats:
+        - New format: {"rezumat": "...", "cpv_sugerat": "...", "critici": [...]}
+        - Legacy format: [{critica1}, {critica2}] (backward-compatible)
 
         If JSON is truncated (e.g. due to max_tokens), recovers complete
         objects and returns them with warnings about what was lost.
 
         Returns:
-            Tuple of (parsed objects, warning messages).
+            Tuple of (parsed critici, warning messages, decision_metadata).
+            decision_metadata may contain 'rezumat' and 'cpv_sugerat'.
             Raises only if zero objects can be recovered.
         """
         warnings = []
+        decision_metadata = {}
 
         # Strip markdown code fences if present
         text = response.strip()
@@ -187,7 +214,6 @@ class DecisionAnalysisService:
             # JSON truncat — recuperăm obiectele complete
             recovered = self._recover_json_objects(text)
             if recovered:
-                truncated_tail = text[-300:] if len(text) > 300 else text
                 recovered_codes = [r.get("cod_critica", "?") for r in recovered]
                 warning_msg = (
                     f"JSON trunchiat la {len(text)} caractere. "
@@ -213,7 +239,15 @@ class DecisionAnalysisService:
                 )
                 raise
 
-        if isinstance(parsed, dict):
+        # Handle new format: {"rezumat": "...", "cpv_sugerat": "...", "critici": [...]}
+        if isinstance(parsed, dict) and "critici" in parsed:
+            if parsed.get("rezumat"):
+                decision_metadata["rezumat"] = str(parsed["rezumat"])
+            if parsed.get("cpv_sugerat"):
+                decision_metadata["cpv_sugerat"] = str(parsed["cpv_sugerat"])
+            parsed = parsed["critici"]
+        # Legacy format: single object without "critici" key
+        elif isinstance(parsed, dict):
             parsed = [parsed]
 
         if not isinstance(parsed, list):
@@ -234,7 +268,7 @@ class DecisionAnalysisService:
         if not valid_items:
             raise ValueError("No valid argumentation objects found in response")
 
-        return valid_items, warnings
+        return valid_items, warnings, decision_metadata
 
     @staticmethod
     def _recover_json_objects(text: str) -> list[dict]:
@@ -326,7 +360,28 @@ class DecisionAnalysisService:
             )
 
         # Analyze with LLM
-        argumentari, analysis_warnings = await self.analyze_decision(decision)
+        argumentari, analysis_warnings, decision_metadata = await self.analyze_decision(decision)
+
+        # Populate decision-level fields from LLM response
+        if decision_metadata.get("rezumat"):
+            decision.rezumat = decision_metadata["rezumat"]
+            logger.info(
+                "rezumat_saved",
+                external_id=decision.external_id,
+                rezumat_length=len(decision_metadata["rezumat"]),
+            )
+
+        if decision_metadata.get("cpv_sugerat") and not decision.cod_cpv:
+            import re
+            cpv_match = re.match(r"^\d{8}-\d$", decision_metadata["cpv_sugerat"])
+            if cpv_match:
+                decision.cod_cpv = decision_metadata["cpv_sugerat"]
+                decision.cpv_source = "dedus"
+                logger.info(
+                    "cpv_deduced_from_analysis",
+                    external_id=decision.external_id,
+                    cpv_sugerat=decision_metadata["cpv_sugerat"],
+                )
 
         # Store warnings on the decision record if any
         if analysis_warnings:
