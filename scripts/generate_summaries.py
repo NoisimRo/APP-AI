@@ -120,7 +120,7 @@ async def main():
 
     # Import LLM factory after init
     from app.services.llm.factory import get_llm_provider
-    llm = get_llm_provider(provider_name=args.provider, model_name=args.model)
+    llm = get_llm_provider(provider_type=args.provider, model=args.model)
 
     async with db_session.async_session() as session:
         # Find decisions needing summaries
