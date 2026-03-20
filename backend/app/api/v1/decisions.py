@@ -298,6 +298,7 @@ class DecisionAnalysisResponse(BaseModel):
     """Response with LLM analysis for a decision."""
     decision_id: str
     external_id: str
+    rezumat: str | None = None
     chunks: list[AnalysisChunk]
 
 
@@ -1443,5 +1444,6 @@ async def get_decision_analysis(
     return DecisionAnalysisResponse(
         decision_id=decision.id,
         external_id=f"BO{decision.an_bo}_{decision.numar_bo}",
+        rezumat=decision.rezumat,
         chunks=chunks,
     )
