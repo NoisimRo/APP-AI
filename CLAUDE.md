@@ -92,6 +92,7 @@ DATABASE_URL="postgresql+asyncpg://..." python scripts/generate_embeddings.py
 | `backend/app/api/v1/redflags.py` | Red Flags API endpoint |
 | `scripts/import_decisions_from_gcs.py` | GCS → database import pipeline |
 | `scripts/generate_summaries.py` | Retroactive lightweight summary generation (2-3 sentences per decision) |
+| `scripts/extract_obiect_contract.py` | Retroactive obiect_contract extraction (regex, no LLM) |
 | `scripts/deduce_cpv.py` | CPV deduction via embedding similarity with nomenclator_cpv |
 | `scripts/import_legislatie.py` | Legislation .md → DB import (alineat-level) |
 | `backend/app/services/training_generator.py` | TrainingAP: generare materiale didactice (RAG + LLM) |
@@ -299,6 +300,12 @@ DATABASE_URL="..." python scripts/generate_summaries.py --dry-run   # Preview
 DATABASE_URL="..." python scripts/generate_summaries.py --limit 10  # Test
 DATABASE_URL="..." python scripts/generate_summaries.py              # All without rezumat
 
+# Extract obiect_contract retroactively (regex only, no LLM, instant)
+DATABASE_URL="..." python scripts/extract_obiect_contract.py --dry-run    # Preview
+DATABASE_URL="..." python scripts/extract_obiect_contract.py --limit 10   # Test
+DATABASE_URL="..." python scripts/extract_obiect_contract.py              # All missing
+DATABASE_URL="..." python scripts/extract_obiect_contract.py --force      # Re-extract all
+
 # CPV deduction via embedding similarity (for decisions without CPV)
 DATABASE_URL="..." python scripts/deduce_cpv.py --dry-run            # Preview matches
 DATABASE_URL="..." python scripts/deduce_cpv.py --limit 10 --top-k 5 # Test with top 5 candidates
@@ -309,8 +316,9 @@ DATABASE_URL="..." python scripts/deduce_cpv.py --threshold 0.75     # Stricter 
 1. **Run LLM analysis** on all decisions: `python scripts/generate_analysis.py` (or `pipeline.py --step analyze`)
 2. **Generate embeddings**: `python scripts/generate_embeddings.py` (or `pipeline.py --step embed`)
 3. **Generate retroactive summaries**: `python scripts/generate_summaries.py` (lightweight, ~1600 tokens/decision)
-4. **Deduce CPV codes**: `python scripts/deduce_cpv.py` (for decisions without CPV, uses embedding similarity)
-5. **Deploy**: Push to `main` to trigger Cloud Build → Cloud Run
+4. **Extract obiect_contract**: `python scripts/extract_obiect_contract.py` (regex, instant, prerequisite for CPV deduction)
+5. **Deduce CPV codes**: `python scripts/deduce_cpv.py` (for decisions without CPV, uses embedding similarity)
+6. **Deploy**: Push to `main` to trigger Cloud Build → Cloud Run
 
 ### Future: Daily Automation (Cloud Run Job + Cloud Scheduler)
 
