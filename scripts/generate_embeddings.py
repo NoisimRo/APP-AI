@@ -160,14 +160,15 @@ async def generate_cpv_embeddings_batched(
     embedding_service: EmbeddingService,
     force: bool = False,
     limit: int | None = None,
-    api_batch_size: int = 100,
-    rate_limit: float = 0.5,
+    api_batch_size: int = 50,
+    rate_limit: float = 2.0,
 ) -> int:
     """Generate embeddings for NomenclatorCPV entries.
 
-    CPV texts are very short (~50 chars each), so we use larger API batch
-    sizes (100 vs 20 for ArgumentareCritica) and bigger commit batches (500)
-    to minimize API calls and DB round-trips.
+    CPV texts are very short (~50 chars each), so we use bigger commit
+    batches (500) to minimize DB round-trips. API batch size is kept at 50
+    and rate_limit at 2.0s to avoid Gemini 429 rate limiting (which causes
+    multi-minute retry delays that are slower than steady pacing).
     """
     async with db_session.async_session_factory() as session:
         count_stmt = select(func.count()).select_from(NomenclatorCPV)
@@ -304,14 +305,14 @@ async def main():
     )
 
     print("\n=== NomenclatorCPV ===")
-    # CPV texts are tiny (~50 chars), use larger API batches to reduce calls
-    cpv_batch_size = max(args.batch_size, 100)
+    # CPV texts are tiny (~50 chars); use batch=50 + 2s delay to avoid Gemini 429
+    cpv_batch_size = max(args.batch_size, 50)
     cpv_generated = await generate_cpv_embeddings_batched(
         embedding_service,
         force=args.force,
         limit=args.limit,
         api_batch_size=cpv_batch_size,
-        rate_limit=min(args.rate_limit, 0.5),
+        rate_limit=max(args.rate_limit, 2.0),
     )
 
     # Show updated stats
