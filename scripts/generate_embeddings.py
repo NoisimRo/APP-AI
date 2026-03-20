@@ -39,6 +39,8 @@ logger = get_logger(__name__)
 
 # Commit after this many rows are embedded (not API batch size)
 COMMIT_BATCH_SIZE = 100
+# CPV texts are tiny (~50 chars), so we can use much larger batches
+CPV_COMMIT_BATCH_SIZE = 500
 
 
 async def generate_embeddings_batched(
@@ -158,12 +160,14 @@ async def generate_cpv_embeddings_batched(
     embedding_service: EmbeddingService,
     force: bool = False,
     limit: int | None = None,
-    api_batch_size: int = 20,
-    rate_limit: float = 1.0,
+    api_batch_size: int = 100,
+    rate_limit: float = 0.5,
 ) -> int:
     """Generate embeddings for NomenclatorCPV entries.
 
-    Same pattern as generate_embeddings_batched() but for CPV codes.
+    CPV texts are very short (~50 chars each), so we use larger API batch
+    sizes (100 vs 20 for ArgumentareCritica) and bigger commit batches (500)
+    to minimize API calls and DB round-trips.
     """
     async with db_session.async_session_factory() as session:
         count_stmt = select(func.count()).select_from(NomenclatorCPV)
@@ -183,7 +187,7 @@ async def generate_cpv_embeddings_batched(
     total_generated = 0
 
     while total_generated < total_to_process:
-        batch_target = min(COMMIT_BATCH_SIZE, total_to_process - total_generated)
+        batch_target = min(CPV_COMMIT_BATCH_SIZE, total_to_process - total_generated)
 
         async with db_session.async_session_factory() as session:
             stmt = select(NomenclatorCPV)
@@ -300,12 +304,14 @@ async def main():
     )
 
     print("\n=== NomenclatorCPV ===")
+    # CPV texts are tiny (~50 chars), use larger API batches to reduce calls
+    cpv_batch_size = max(args.batch_size, 100)
     cpv_generated = await generate_cpv_embeddings_batched(
         embedding_service,
         force=args.force,
         limit=args.limit,
-        api_batch_size=args.batch_size,
-        rate_limit=args.rate_limit,
+        api_batch_size=cpv_batch_size,
+        rate_limit=min(args.rate_limit, 0.5),
     )
 
     # Show updated stats
