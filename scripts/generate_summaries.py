@@ -28,11 +28,11 @@ from pathlib import Path
 # Add backend to path
 sys.path.insert(0, str(Path(__file__).parent.parent / "backend"))
 
-from sqlalchemy import select, func
+from sqlalchemy import select, func, exists
 from app.core.logging import get_logger
 from app.db.session import init_db
 from app.db import session as db_session
-from app.models.decision import DecizieCNSC
+from app.models.decision import DecizieCNSC, ArgumentareCritica
 from app.services.llm.base import ResourceExhaustedError
 
 logger = get_logger(__name__)
@@ -51,20 +51,46 @@ Soluție: {solutie}
 Contestator: {contestator}
 Autoritate contractantă: {autoritate}
 
-TEXT (primele 5000 caractere):
-{text_intro}
+{argumentari_text}
 
 Răspunde DOAR cu rezumatul, fără alte explicații sau prefixuri."""
 
 
-async def generate_summary(llm, decision: DecizieCNSC) -> str | None:
-    """Generate a short summary for a single decision."""
+async def generate_summary(llm, session, decision: DecizieCNSC) -> str | None:
+    """Generate a short summary for a single decision.
+
+    Uses ArgumentareCritica fields (elemente_retinute_cnsc, argumentatie_cnsc)
+    instead of raw text_integral, as these contain the essential CNSC reasoning
+    already extracted by LLM analysis.
+    """
+    # Load argumentări for this decision
+    stmt = select(ArgumentareCritica).where(
+        ArgumentareCritica.decizie_id == decision.id
+    ).order_by(ArgumentareCritica.ordine_in_decizie)
+    result = await session.execute(stmt)
+    argumentari = result.scalars().all()
+
+    if not argumentari:
+        # Fallback: use text_integral[:5000] if no argumentări exist
+        argumentari_text = f"TEXT (primele 5000 caractere):\n{decision.text_integral[:5000] if decision.text_integral else 'N/A'}"
+    else:
+        # Build text from CNSC analysis fields only
+        parts = []
+        for arg in argumentari:
+            section = f"--- Critica {arg.cod_critica} (câștigător: {arg.castigator_critica}) ---"
+            if arg.elemente_retinute_cnsc:
+                section += f"\nElemente reținute CNSC: {arg.elemente_retinute_cnsc}"
+            if arg.argumentatie_cnsc:
+                section += f"\nArgumentație CNSC: {arg.argumentatie_cnsc}"
+            parts.append(section)
+        argumentari_text = "\n\n".join(parts)
+
     prompt = SUMMARY_PROMPT.format(
         external_id=decision.external_id,
         solutie=decision.solutie_contestatie or "N/A",
         contestator=decision.contestator or "N/A",
         autoritate=decision.autoritate_contractanta or "N/A",
-        text_intro=decision.text_integral[:5000] if decision.text_integral else "",
+        argumentari_text=argumentari_text,
     )
 
     response = await llm.complete(
@@ -85,7 +111,7 @@ async def summarize_with_retry(llm, session, decision_id: str, external_id: str)
             if not decision:
                 return (False, f"{external_id}: not found")
 
-            summary = await generate_summary(llm, decision)
+            summary = await generate_summary(llm, session, decision)
             if summary:
                 decision.rezumat = summary
                 await session.commit()
