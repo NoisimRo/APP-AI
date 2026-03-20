@@ -44,12 +44,12 @@ RATE_LIMIT_DELAY = 0.5  # Lighter than full analysis
 CIRCUIT_BREAKER_THRESHOLD = 3
 
 SUMMARY_PROMPT = """Rezumă în 2-3 propoziții concise următoarea decizie CNSC.
-Precizează: cine a contestat, obiectul contractului, și soluția CNSC.
+Precizează: obiectul contestației, motivele principale, și soluția CNSC.
 
 Decizia: {external_id}
 Soluție: {solutie}
-Contestator: {contestator}
-Autoritate contractantă: {autoritate}
+Tip contestație: {tip_contestatie}
+CPV: {cpv_info}
 
 {argumentari_text}
 
@@ -59,9 +59,9 @@ Răspunde DOAR cu rezumatul, fără alte explicații sau prefixuri."""
 async def generate_summary(llm, session, decision: DecizieCNSC) -> str | None:
     """Generate a short summary for a single decision.
 
-    Uses ArgumentareCritica fields (elemente_retinute_cnsc, argumentatie_cnsc)
-    instead of raw text_integral, as these contain the essential CNSC reasoning
-    already extracted by LLM analysis.
+    Uses ArgumentareCritica fields (argumente_contestator, elemente_retinute_cnsc,
+    argumentatie_cnsc) for factual context + CNSC reasoning.
+    Parties are anonymized so contestator/autoritate are not included.
     """
     # Load argumentări for this decision
     stmt = select(ArgumentareCritica).where(
@@ -74,10 +74,11 @@ async def generate_summary(llm, session, decision: DecizieCNSC) -> str | None:
         # Fallback: use text_integral[:5000] if no argumentări exist
         argumentari_text = f"TEXT (primele 5000 caractere):\n{decision.text_integral[:5000] if decision.text_integral else 'N/A'}"
     else:
-        # Build text from CNSC analysis fields only
         parts = []
         for arg in argumentari:
             section = f"--- Critica {arg.cod_critica} (câștigător: {arg.castigator_critica}) ---"
+            if arg.argumente_contestator:
+                section += f"\nObiectul criticii: {arg.argumente_contestator[:500]}"
             if arg.elemente_retinute_cnsc:
                 section += f"\nElemente reținute CNSC: {arg.elemente_retinute_cnsc}"
             if arg.argumentatie_cnsc:
@@ -85,11 +86,13 @@ async def generate_summary(llm, session, decision: DecizieCNSC) -> str | None:
             parts.append(section)
         argumentari_text = "\n\n".join(parts)
 
+    cpv_info = f"{decision.cod_cpv} — {decision.cpv_descriere}" if decision.cod_cpv else "N/A"
+
     prompt = SUMMARY_PROMPT.format(
         external_id=decision.external_id,
         solutie=decision.solutie_contestatie or "N/A",
-        contestator=decision.contestator or "N/A",
-        autoritate=decision.autoritate_contractanta or "N/A",
+        tip_contestatie=decision.tip_contestatie or "N/A",
+        cpv_info=cpv_info,
         argumentari_text=argumentari_text,
     )
 
