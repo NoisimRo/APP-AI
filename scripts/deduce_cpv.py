@@ -147,7 +147,7 @@ async def main():
     from app.services.embedding import EmbeddingService
     embedding_service = EmbeddingService()
 
-    async with db_session.async_session() as session:
+    async with db_session.async_session_factory() as session:
         # Load CPV nomenclator
         cpv_list = await load_cpv_nomenclator(session)
         print(f"Loaded {len(cpv_list)} CPV codes from nomenclator")
