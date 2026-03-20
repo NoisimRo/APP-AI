@@ -115,6 +115,8 @@ class EmbeddingService:
         Returns:
             List of embedding vectors in the same order as input texts.
         """
+        # Gemini BatchEmbedContentsRequest limit: max 100 texts per request
+        batch_size = min(batch_size, 100)
         all_embeddings: list[list[float]] = []
         max_retries = 3
 

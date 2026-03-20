@@ -100,7 +100,7 @@ async def generate_summary(llm, session, decision: DecizieCNSC) -> str | None:
         prompt=prompt,
         system_prompt="Ești un analist juridic expert în achiziții publice românești.",
         temperature=0.1,
-        max_tokens=500,
+        max_tokens=8192,  # Thinking models use max_tokens for thinking + output
     )
 
     return response.strip() if response else None
