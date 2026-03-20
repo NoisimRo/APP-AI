@@ -65,33 +65,47 @@ def cosine_similarity(a: list[float], b: list[float]) -> float:
 
 
 async def load_cpv_nomenclator(session) -> list[dict]:
-    """Load all CPV codes with descriptions from DB."""
+    """Load all CPV codes with descriptions and pre-computed embeddings from DB."""
     result = await session.execute(
         select(
             NomenclatorCPV.cod_cpv,
             NomenclatorCPV.descriere,
             NomenclatorCPV.categorie_achizitii,
             NomenclatorCPV.clasa_produse,
+            NomenclatorCPV.embedding,
         )
     )
     cpv_list = []
-    for cod, desc, cat, clasa in result.all():
+    for cod, desc, cat, clasa, emb in result.all():
         if desc and len(desc) > 3:
             cpv_list.append({
                 "cod_cpv": cod,
                 "descriere": desc,
                 "categorie": cat,
                 "clasa": clasa,
+                "embedding": list(emb) if emb is not None else None,
             })
     return cpv_list
 
 
 async def generate_cpv_embeddings(embedding_service, cpv_list: list[dict]) -> list[dict]:
-    """Generate embeddings for all CPV descriptions."""
-    print(f"Generating embeddings for {len(cpv_list)} CPV codes...")
-    texts = [cpv["descriere"] for cpv in cpv_list]
+    """Generate embeddings for CPV descriptions missing them.
 
-    # Process in batches
+    Uses pre-computed embeddings from DB when available (populated by
+    generate_embeddings.py). Only generates for entries without embeddings.
+    """
+    with_emb = [c for c in cpv_list if c["embedding"] is not None]
+    without_emb = [c for c in cpv_list if c["embedding"] is None]
+
+    print(f"CPV embeddings: {len(with_emb)} from DB, {len(without_emb)} need generation")
+
+    if not without_emb:
+        return cpv_list
+
+    # Generate only for missing entries
+    print(f"Generating embeddings for {len(without_emb)} CPV codes...")
+    texts = [cpv["descriere"] for cpv in without_emb]
+
     all_embeddings = []
     for i in range(0, len(texts), BATCH_SIZE):
         batch = texts[i:i + BATCH_SIZE]
@@ -100,10 +114,10 @@ async def generate_cpv_embeddings(embedding_service, cpv_list: list[dict]) -> li
         if (i + BATCH_SIZE) % 200 == 0:
             print(f"  Embedded {min(i + BATCH_SIZE, len(texts))}/{len(texts)} CPV codes")
 
-    for j, cpv in enumerate(cpv_list):
+    for j, cpv in enumerate(without_emb):
         cpv["embedding"] = all_embeddings[j]
 
-    print(f"  Done: {len(cpv_list)} CPV embeddings generated")
+    print(f"  Done: {len(without_emb)} new CPV embeddings generated")
     return cpv_list
 
 

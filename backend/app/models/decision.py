@@ -262,6 +262,9 @@ class NomenclatorCPV(Base):
     cod_parinte: Mapped[Optional[str]] = mapped_column(String(20))
     nivel: Mapped[Optional[int]] = mapped_column(Integer)  # 1-5: Diviziune, Grup, Clasă, Categorie, Subcategorie
 
+    # Vector embedding for semantic CPV matching (2000 dimensions, Gemini)
+    embedding: Mapped[Optional[list]] = mapped_column(Vector(2000))
+
     # Timestamps
     created_at: Mapped[datetime] = mapped_column(
         DateTime, server_default=func.now(), nullable=False
@@ -270,6 +273,12 @@ class NomenclatorCPV(Base):
     __table_args__ = (
         Index("ix_cpv_categorie", categorie_achizitii),
         Index("ix_cpv_clasa", clasa_produse),
+        Index(
+            "ix_cpv_embedding", "embedding",
+            postgresql_using="hnsw",
+            postgresql_with={"m": 16, "ef_construction": 64},
+            postgresql_ops={"embedding": "vector_cosine_ops"},
+        ),
     )
 
     def __repr__(self) -> str:
