@@ -264,7 +264,7 @@ async def list_decisions(
             solutie_contestatie=d.solutie_contestatie,
             contestator=d.contestator,
             autoritate_contractanta=d.autoritate_contractanta,
-            rezumat=(d.text_integral[:300] + "...") if d.text_integral and len(d.text_integral) > 300 else d.text_integral,
+            rezumat=d.rezumat if d.rezumat else ((d.text_integral[:300] + "...") if d.text_integral and len(d.text_integral) > 300 else d.text_integral),
             argumentatie_cnsc_snippet=arg_snippets.get(d.id),
             has_analysis=d.id in analyzed_ids,
             has_embeddings=d.id in embedded_ids,
