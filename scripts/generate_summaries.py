@@ -122,7 +122,7 @@ async def main():
     from app.services.llm.factory import get_llm_provider
     llm = get_llm_provider(provider_type=args.provider, model=args.model)
 
-    async with db_session.async_session() as session:
+    async with db_session.async_session_factory() as session:
         # Find decisions needing summaries
         stmt = select(DecizieCNSC.id, DecizieCNSC.an_bo, DecizieCNSC.numar_bo, DecizieCNSC.rezumat)
 
