@@ -19,6 +19,11 @@ class GeminiProvider(LLMProvider):
     For production on GCP, consider using VertexAIProvider.
     """
 
+    # Thinking models share max_output_tokens between thinking + visible output.
+    # We need a minimum floor so short requests (50-500 tokens) don't get truncated.
+    THINKING_MODEL_PREFIXES = ("gemini-2.5", "gemini-3")
+    THINKING_MIN_OUTPUT_TOKENS = 4096
+
     def __init__(
         self,
         model: str = "gemini-3.1-pro-preview",
@@ -27,6 +32,9 @@ class GeminiProvider(LLMProvider):
     ):
         self._model_name = model
         self._embedding_model = embedding_model
+        self._is_thinking_model = any(
+            model.startswith(p) for p in self.THINKING_MODEL_PREFIXES
+        )
 
         key = api_key or get_settings().gemini_api_key
         if not key:
@@ -38,6 +46,7 @@ class GeminiProvider(LLMProvider):
             "gemini_provider_initialized",
             model=model,
             embedding_model=embedding_model,
+            is_thinking_model=self._is_thinking_model,
         )
 
     @property
@@ -47,6 +56,22 @@ class GeminiProvider(LLMProvider):
     @property
     def model_name(self) -> str:
         return self._model_name
+
+    def _safe_max_tokens(self, max_tokens: int) -> int:
+        """Ensure max_tokens is high enough for thinking models.
+
+        Thinking models (gemini-2.5+, gemini-3+) use max_output_tokens for BOTH
+        internal reasoning and visible output. A request for 50-500 tokens would
+        leave almost nothing for visible text after thinking consumes most of it.
+        """
+        if self._is_thinking_model and max_tokens < self.THINKING_MIN_OUTPUT_TOKENS:
+            logger.debug(
+                "gemini_thinking_tokens_adjusted",
+                requested=max_tokens,
+                adjusted=self.THINKING_MIN_OUTPUT_TOKENS,
+            )
+            return self.THINKING_MIN_OUTPUT_TOKENS
+        return max_tokens
 
     async def complete(
         self,
@@ -58,6 +83,7 @@ class GeminiProvider(LLMProvider):
     ) -> str:
         """Generate a completion using Gemini."""
         full_prompt = self._build_prompt(prompt, context, system_prompt)
+        safe_tokens = self._safe_max_tokens(max_tokens)
 
         try:
             response = await self._client.aio.models.generate_content(
@@ -65,7 +91,7 @@ class GeminiProvider(LLMProvider):
                 contents=full_prompt,
                 config=types.GenerateContentConfig(
                     temperature=temperature,
-                    max_output_tokens=max_tokens,
+                    max_output_tokens=safe_tokens,
                 ),
             )
 
@@ -117,6 +143,7 @@ class GeminiProvider(LLMProvider):
     ) -> AsyncIterator[str]:
         """Stream a completion using Gemini."""
         full_prompt = self._build_prompt(prompt, context, system_prompt)
+        safe_tokens = self._safe_max_tokens(max_tokens)
 
         try:
             async for chunk in await self._client.aio.models.generate_content_stream(
@@ -124,7 +151,7 @@ class GeminiProvider(LLMProvider):
                 contents=full_prompt,
                 config=types.GenerateContentConfig(
                     temperature=temperature,
-                    max_output_tokens=max_tokens,
+                    max_output_tokens=safe_tokens,
                 ),
             ):
                 if chunk.text:
