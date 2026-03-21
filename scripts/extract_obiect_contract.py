@@ -75,6 +75,18 @@ _CONTRACT_OBJECT_FALLBACK = re.compile(
     re.IGNORECASE,
 )
 
+# Prefixes to strip from extracted text (markers that leak into capture groups)
+_PREFIX_RE = re.compile(
+    r"^(?:având\s+ca\s+obiect|obiectul\s+(?:contractului|achiziției))"
+    r"[:\s]*",
+    re.IGNORECASE,
+)
+
+
+def _clean_prefix(text: str) -> str:
+    """Strip leading marker phrases that sometimes leak into the capture group."""
+    return _PREFIX_RE.sub("", text).strip() or text
+
 
 def extract_obiect_contract(text: str) -> str | None:
     """Extract contract object from decision text using regex patterns.
@@ -90,14 +102,14 @@ def extract_obiect_contract(text: str) -> str | None:
     if match:
         obj = match.group(1).strip()
         if len(obj) >= 5:
-            return obj
+            return _clean_prefix(obj)
 
     # Strategy 2: Unquoted text after specific markers
     match = _CONTRACT_OBJECT_UNQUOTED.search(intro)
     if match:
         obj = match.group(1).strip()
         if len(obj) >= 10:
-            return obj
+            return _clean_prefix(obj)
 
     # Strategy 3: Broadest fallback
     match = _CONTRACT_OBJECT_FALLBACK.search(intro)
@@ -105,7 +117,7 @@ def extract_obiect_contract(text: str) -> str | None:
         obj = match.group(1).strip()
         obj = obj.lstrip('\u201e\u201c"«')
         if len(obj) >= 10:
-            return obj
+            return _clean_prefix(obj)
 
     return None
 
