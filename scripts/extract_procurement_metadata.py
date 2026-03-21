@@ -62,7 +62,7 @@ async def main():
 
     cnsc_parser = CNSCDecisionParser()
 
-    async with db_session.get_session() as session:
+    async with db_session.async_session_factory() as session:
         # Count total
         total_q = select(func.count()).select_from(DecizieCNSC)
         total = (await session.execute(total_q)).scalar()
