@@ -262,8 +262,8 @@ async def main():
     parser.add_argument(
         "--batch-size",
         type=int,
-        default=20,
-        help="Number of texts per API call (default: 20)",
+        default=100,
+        help="Number of texts per API call (default: 100, max: 100)",
     )
     parser.add_argument(
         "--rate-limit",
@@ -305,14 +305,13 @@ async def main():
     )
 
     print("\n=== NomenclatorCPV ===")
-    # Gemini embedding: max 100 texts/request (BatchEmbedContentsRequest limit)
-    cpv_batch_size = min(max(args.batch_size, 100), 100)
+    # CPV texts are tiny (~50 chars), safe to use max batch size
     cpv_generated = await generate_cpv_embeddings_batched(
         embedding_service,
         force=args.force,
         limit=args.limit,
-        api_batch_size=cpv_batch_size,
-        rate_limit=max(args.rate_limit, 1.0),
+        api_batch_size=100,
+        rate_limit=args.rate_limit,
     )
 
     # Show updated stats

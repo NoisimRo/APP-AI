@@ -100,7 +100,7 @@ class EmbeddingService:
     async def embed_batch(
         self,
         texts: list[str],
-        batch_size: int = 20,
+        batch_size: int = 100,
         task_type: str = "retrieval_document",
         rate_limit_delay: float = 1.0,
     ) -> list[list[float]]:
@@ -108,7 +108,7 @@ class EmbeddingService:
 
         Args:
             texts: List of texts to embed.
-            batch_size: Number of texts per API call (Gemini limit ~100).
+            batch_size: Number of texts per API call (Gemini limit: 100).
             task_type: Embedding task type.
             rate_limit_delay: Seconds to wait between batches.
 
