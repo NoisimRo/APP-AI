@@ -572,6 +572,25 @@ const App = () => {
   const [showCpvDropdown, setShowCpvDropdown] = useState(false);
   const [showCategorieDropdown, setShowCategorieDropdown] = useState(false);
   const [showClasaDropdown, setShowClasaDropdown] = useState(false);
+  const [filterMotivRespingere, setFilterMotivRespingere] = useState<string[]>([]);
+  const [filterComplet, setFilterComplet] = useState<string[]>([]);
+  const [filterDomeniu, setFilterDomeniu] = useState<string[]>([]);
+  const [filterTipProcedura, setFilterTipProcedura] = useState<string[]>([]);
+  const [filterCriteriuAtribuire, setFilterCriteriuAtribuire] = useState<string[]>([]);
+  const [filterDateFrom, setFilterDateFrom] = useState("");
+  const [filterDateTo, setFilterDateTo] = useState("");
+  const [filterValoareMin, setFilterValoareMin] = useState("");
+  const [filterValoareMax, setFilterValoareMax] = useState("");
+  const [motivRespingereOptions, setMotivRespingereOptions] = useState<{name: string, count: number}[]>([]);
+  const [completOptions, setCompletOptions] = useState<{name: string, count: number}[]>([]);
+  const [domeniuOptions, setDomeniuOptions] = useState<{name: string, count: number}[]>([]);
+  const [tipProceduraOptions, setTipProceduraOptions] = useState<{name: string, count: number}[]>([]);
+  const [criteriuAtribuireOptions, setCriteriuAtribuireOptions] = useState<{name: string, count: number}[]>([]);
+  const [showMotivDropdown, setShowMotivDropdown] = useState(false);
+  const [showCompletDropdown, setShowCompletDropdown] = useState(false);
+  const [showDomeniuDropdown, setShowDomeniuDropdown] = useState(false);
+  const [showTipProceduraDropdown, setShowTipProceduraDropdown] = useState(false);
+  const [showCriteriuAtribuireDropdown, setShowCriteriuAtribuireDropdown] = useState(false);
   const [decisionViewTab, setDecisionViewTab] = useState<'raw' | 'analysis'>('raw');
   const [decisionAnalysis, setDecisionAnalysis] = useState<any>(null);
   const [isLoadingAnalysis, setIsLoadingAnalysis] = useState(false);
@@ -1099,6 +1118,15 @@ const App = () => {
       if (filterCpv.length > 0) params.set('cpv_codes', filterCpv.join(','));
       if (filterCategorie) params.set('categorie', filterCategorie);
       if (filterClasa) params.set('clasa', filterClasa);
+      if (filterMotivRespingere.length > 0) params.set('motiv_respingere', filterMotivRespingere.join(','));
+      if (filterComplet.length > 0) params.set('complet', filterComplet.join(','));
+      if (filterDomeniu.length > 0) params.set('domeniu_legislativ', filterDomeniu.join(','));
+      if (filterTipProcedura.length > 0) params.set('tip_procedura', filterTipProcedura.join(','));
+      if (filterCriteriuAtribuire.length > 0) params.set('criteriu_atribuire', filterCriteriuAtribuire.join(','));
+      if (filterDateFrom) params.set('data_decizie_from', filterDateFrom);
+      if (filterDateTo) params.set('data_decizie_to', filterDateTo);
+      if (filterValoareMin) params.set('valoare_min', filterValoareMin);
+      if (filterValoareMax) params.set('valoare_max', filterValoareMax);
       const response = await fetch(`/api/v1/decisions/?${params}`);
       if (response.ok) {
         const data = await response.json();
@@ -1116,14 +1144,24 @@ const App = () => {
   // Fetch filter options (critique codes + CPV codes + categories)
   const fetchFilterOptions = async () => {
     try {
-      const [critRes, cpvRes, catRes] = await Promise.all([
+      const [critRes, cpvRes, catRes, motivRes, completRes, domeniuRes, procRes, criteriumRes] = await Promise.all([
         authFetch('/api/v1/decisions/filters/critici-codes'),
         authFetch('/api/v1/decisions/filters/cpv-codes'),
         authFetch('/api/v1/decisions/filters/categorii'),
+        authFetch('/api/v1/decisions/filters/motiv-respingere'),
+        authFetch('/api/v1/decisions/filters/complete'),
+        authFetch('/api/v1/decisions/filters/domenii'),
+        authFetch('/api/v1/decisions/filters/tipuri-procedura'),
+        authFetch('/api/v1/decisions/filters/criterii-atribuire'),
       ]);
       if (critRes.ok) setCriticiOptions(await critRes.json());
       if (cpvRes.ok) setCpvOptions(await cpvRes.json());
       if (catRes.ok) setCategoriiOptions(await catRes.json());
+      if (motivRes.ok) setMotivRespingereOptions(await motivRes.json());
+      if (completRes.ok) setCompletOptions(await completRes.json());
+      if (domeniuRes.ok) setDomeniuOptions(await domeniuRes.json());
+      if (procRes.ok) setTipProceduraOptions(await procRes.json());
+      if (criteriumRes.ok) setCriteriuAtribuireOptions(await criteriumRes.json());
     } catch (e) { console.error('Failed to fetch filter options:', e); }
   };
 
@@ -1138,7 +1176,7 @@ const App = () => {
       fetchDecisions(1, fileSearch);
     }, 300);
     return () => clearTimeout(timer);
-  }, [fileSearch, filterRuling, filterType, filterYears, filterCritici, filterCpv, filterCategorie, filterClasa]);
+  }, [fileSearch, filterRuling, filterType, filterYears, filterCritici, filterCpv, filterCategorie, filterClasa, filterMotivRespingere, filterComplet, filterDomeniu, filterTipProcedura, filterCriteriuAtribuire, filterDateFrom, filterDateTo, filterValoareMin, filterValoareMax]);
 
   // Fetch product classes when category changes
   useEffect(() => {
@@ -2370,6 +2408,28 @@ const App = () => {
     );
   };
 
+  const closeAllDropdowns = () => { setShowRulingDropdown(false); setShowYearDropdown(false); setShowCriticiDropdown(false); setShowCpvDropdown(false); setShowCategorieDropdown(false); setShowClasaDropdown(false); setShowMotivDropdown(false); setShowCompletDropdown(false); setShowDomeniuDropdown(false); setShowTipProceduraDropdown(false); setShowCriteriuAtribuireDropdown(false); };
+
+  const domeniuLabels: Record<string, string> = {
+    'achizitii_publice': 'Achiziții publice',
+    'achizitii_sectoriale': 'Achiziții sectoriale',
+    'concesiuni': 'Concesiuni',
+  };
+
+  const tipProceduraLabels: Record<string, string> = {
+    'licitatie_deschisa': 'Licitație deschisă',
+    'licitatie_restransa': 'Licitație restrânsă',
+    'negociere_competitiva': 'Negociere competitivă',
+    'negociere_fara_publicare': 'Negociere fără publicare',
+    'negociere_fara_invitatie': 'Negociere fără invitație',
+    'negociere_fara_anunt': 'Negociere fără anunț',
+    'dialog_competitiv': 'Dialog competitiv',
+    'parteneriat_inovare': 'Parteneriat pentru inovare',
+    'concurs_solutii': 'Concurs de soluții',
+    'servicii_sociale': 'Servicii sociale',
+    'procedura_simplificata': 'Procedură simplificată',
+  };
+
   const renderDataLake = () => {
     const totalDecisions = dbStats?.total_decisions || 0;
     const documentatieCount = dbStats?.by_type?.['documentatie'] || 0;
@@ -2458,12 +2518,48 @@ const App = () => {
         </div>
 
         {/* Filters Bar */}
-        <div className="px-4 md:px-6 py-2 border-b border-slate-200 bg-white shrink-0">
+        <div className="px-4 md:px-6 py-2 border-b border-slate-200 bg-white shrink-0 space-y-2">
+          {/* Row 1: Domeniu, Tip, Soluție, Motiv resp.*, Critici, Categorie CPV, Clasă, CPV */}
           <div className="flex items-center gap-2 flex-wrap">
+
+              {/* Domeniu Legislativ Multi-select */}
+              <div className="relative flex-1 min-w-[100px]">
+                <button
+                  onClick={(e) => { e.stopPropagation(); closeAllDropdowns(); setShowDomeniuDropdown(!showDomeniuDropdown); }}
+                  className={`text-xs border rounded-lg px-3 py-2 bg-white text-slate-700 focus:ring-2 focus:ring-blue-500/40 outline-none transition w-full cursor-pointer flex items-center gap-1.5 ${filterDomeniu.length > 0 ? 'border-indigo-400 bg-indigo-50 text-indigo-700' : 'border-slate-300'}`}
+                >
+                  Domeniu{filterDomeniu.length > 0 ? ` (${filterDomeniu.length})` : ''}
+                  <ChevronDown size={12} className="ml-auto" />
+                </button>
+                {showDomeniuDropdown && (
+                  <div className="absolute top-full left-0 mt-1 bg-white border border-slate-200 rounded-lg shadow-lg z-50 w-56 max-h-72 overflow-y-auto py-1" onClick={(e) => e.stopPropagation()}>
+                    {domeniuOptions.map(opt => {
+                      const isSelected = filterDomeniu.includes(opt.name);
+                      const label = opt.name === 'achizitii_publice' ? 'Achiziții publice' : opt.name === 'achizitii_sectoriale' ? 'Achiziții sectoriale' : opt.name === 'concesiuni' ? 'Concesiuni' : opt.name;
+                      return (
+                        <button key={opt.name} onClick={(e) => { e.stopPropagation(); setFilterDomeniu(prev => isSelected ? prev.filter(c => c !== opt.name) : [...prev, opt.name]); }}
+                          className="w-full text-left px-3 py-1.5 text-xs hover:bg-slate-50 flex items-center gap-2">
+                          <span className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 ${isSelected ? 'bg-indigo-600 border-indigo-600 text-white' : 'border-slate-300'}`}>
+                            {isSelected && <CheckSquare size={11} />}
+                          </span>
+                          <span className="text-slate-700">{label}</span>
+                          <span className="text-slate-300 tabular-nums ml-auto">{opt.count}</span>
+                        </button>
+                      );
+                    })}
+                    {filterDomeniu.length > 0 && (
+                      <div className="border-t border-slate-100 mt-1 pt-1 px-3 pb-1">
+                        <button onClick={() => setFilterDomeniu([])} className="text-xs text-indigo-600 hover:text-indigo-800">Șterge selecția</button>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
               {/* Soluție Multi-select Dropdown */}
               <div className="relative flex-1 min-w-[100px]">
                 <button
-                  onClick={(e) => { e.stopPropagation(); setShowRulingDropdown(!showRulingDropdown); setShowYearDropdown(false); setShowCriticiDropdown(false); setShowCpvDropdown(false); setShowCategorieDropdown(false); setShowClasaDropdown(false); }}
+                  onClick={(e) => { e.stopPropagation(); closeAllDropdowns(); setShowRulingDropdown(!showRulingDropdown); }}
                   className={`text-xs border rounded-lg px-3 py-2 bg-white text-slate-700 focus:ring-2 focus:ring-blue-500/40 outline-none transition w-full cursor-pointer flex items-center gap-1.5 ${filterRuling.length > 0 ? 'border-green-400 bg-green-50 text-green-700' : 'border-slate-300'}`}
                 >
                   Soluție{filterRuling.length > 0 ? ` (${filterRuling.length})` : ': Toate'}
@@ -2502,6 +2598,42 @@ const App = () => {
                   </div>
                 )}
               </div>
+
+              {/* Motiv Respingere — only when RESPINS is selected */}
+              {filterRuling.includes('RESPINS') && (
+              <div className="relative flex-1 min-w-[100px]">
+                <button
+                  onClick={(e) => { e.stopPropagation(); closeAllDropdowns(); setShowMotivDropdown(!showMotivDropdown); }}
+                  className={`text-xs border rounded-lg px-3 py-2 bg-white text-slate-700 focus:ring-2 focus:ring-blue-500/40 outline-none transition w-full cursor-pointer flex items-center gap-1.5 ${filterMotivRespingere.length > 0 ? 'border-red-400 bg-red-50 text-red-700' : 'border-slate-300'}`}
+                >
+                  Motiv{filterMotivRespingere.length > 0 ? ` (${filterMotivRespingere.length})` : ''}
+                  <ChevronDown size={12} className="ml-auto" />
+                </button>
+                {showMotivDropdown && (
+                  <div className="absolute top-full left-0 mt-1 bg-white border border-slate-200 rounded-lg shadow-lg z-50 w-56 max-h-72 overflow-y-auto py-1" onClick={(e) => e.stopPropagation()}>
+                    {motivRespingereOptions.map(opt => {
+                      const isSelected = filterMotivRespingere.includes(opt.name);
+                      return (
+                        <button key={opt.name} onClick={(e) => { e.stopPropagation(); setFilterMotivRespingere(prev => isSelected ? prev.filter(c => c !== opt.name) : [...prev, opt.name]); }}
+                          className="w-full text-left px-3 py-1.5 text-xs hover:bg-slate-50 flex items-center gap-2">
+                          <span className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 ${isSelected ? 'bg-red-600 border-red-600 text-white' : 'border-slate-300'}`}>
+                            {isSelected && <CheckSquare size={11} />}
+                          </span>
+                          <span className="text-slate-700 capitalize">{opt.name}</span>
+                          <span className="text-slate-300 tabular-nums ml-auto">{opt.count}</span>
+                        </button>
+                      );
+                    })}
+                    {filterMotivRespingere.length > 0 && (
+                      <div className="border-t border-slate-100 mt-1 pt-1 px-3 pb-1">
+                        <button onClick={() => setFilterMotivRespingere([])} className="text-xs text-red-600 hover:text-red-800">Șterge selecția</button>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+              )}
+
               <div className="relative flex-1 min-w-[100px]">
                 <select value={filterType} onChange={(e) => setFilterType(e.target.value)} className="appearance-none text-xs border border-slate-300 rounded-lg pl-3 pr-7 py-2 bg-white text-slate-700 focus:ring-2 focus:ring-blue-500/40 focus:border-blue-400 outline-none transition w-full cursor-pointer">
                   <option value="">Tip: Toate</option>
@@ -2513,7 +2645,7 @@ const App = () => {
               {/* Categorie Dropdown (Furnizare/Servicii/Lucrări) */}
               <div className="relative flex-1 min-w-[100px]">
                 <button
-                  onClick={(e) => { e.stopPropagation(); setShowCategorieDropdown(!showCategorieDropdown); setShowRulingDropdown(false); setShowYearDropdown(false); setShowCriticiDropdown(false); setShowCpvDropdown(false); setShowClasaDropdown(false); }}
+                  onClick={(e) => { e.stopPropagation(); closeAllDropdowns(); setShowCategorieDropdown(!showCategorieDropdown); }}
                   className={`text-xs border rounded-lg px-3 py-2 bg-white text-slate-700 focus:ring-2 focus:ring-blue-500/40 outline-none transition w-full cursor-pointer flex items-center gap-1.5 ${filterCategorie ? 'border-orange-400 bg-orange-50 text-orange-700' : 'border-slate-300'}`}
                 >
                   <Package size={12} />
@@ -2546,7 +2678,7 @@ const App = () => {
               {(filterCategorie || claseOptions.length > 0) && (
               <div className="relative flex-1 min-w-[100px]">
                 <button
-                  onClick={(e) => { e.stopPropagation(); setShowClasaDropdown(!showClasaDropdown); setShowRulingDropdown(false); setShowYearDropdown(false); setShowCriticiDropdown(false); setShowCpvDropdown(false); setShowCategorieDropdown(false); }}
+                  onClick={(e) => { e.stopPropagation(); closeAllDropdowns(); setShowClasaDropdown(!showClasaDropdown); }}
                   className={`text-xs border rounded-lg px-3 py-2 bg-white text-slate-700 focus:ring-2 focus:ring-blue-500/40 outline-none transition w-full cursor-pointer flex items-center gap-1.5 ${filterClasa ? 'border-teal-400 bg-teal-50 text-teal-700' : 'border-slate-300'}`}
                 >
                   <Layers size={12} />
@@ -2579,7 +2711,7 @@ const App = () => {
               {/* Year Multi-select Dropdown */}
               <div className="relative flex-1 min-w-[100px]">
                 <button
-                  onClick={(e) => { e.stopPropagation(); setShowYearDropdown(!showYearDropdown); setShowRulingDropdown(false); setShowCriticiDropdown(false); setShowCpvDropdown(false); setShowCategorieDropdown(false); setShowClasaDropdown(false); }}
+                  onClick={(e) => { e.stopPropagation(); closeAllDropdowns(); setShowYearDropdown(!showYearDropdown); }}
                   className={`text-xs border rounded-lg px-3 py-2 bg-white text-slate-700 focus:ring-2 focus:ring-blue-500/40 outline-none transition w-full cursor-pointer flex items-center gap-1.5 ${filterYears.length > 0 ? 'border-blue-400 bg-blue-50 text-blue-700' : 'border-slate-300'}`}
                 >
                   An{filterYears.length > 0 ? `: ${filterYears.join(', ')}` : ': Toate'}
@@ -2617,7 +2749,7 @@ const App = () => {
               {/* Critici Multi-select Dropdown */}
               <div className="relative flex-1 min-w-[100px]">
                 <button
-                  onClick={(e) => { e.stopPropagation(); setShowCriticiDropdown(!showCriticiDropdown); setShowRulingDropdown(false); setShowYearDropdown(false); setShowCpvDropdown(false); setShowCategorieDropdown(false); setShowClasaDropdown(false); }}
+                  onClick={(e) => { e.stopPropagation(); closeAllDropdowns(); setShowCriticiDropdown(!showCriticiDropdown); }}
                   className={`text-xs border rounded-lg px-3 py-2 bg-white text-slate-700 focus:ring-2 focus:ring-blue-500/40 outline-none transition w-full cursor-pointer flex items-center gap-1.5 ${filterCritici.length > 0 ? 'border-blue-400 bg-blue-50 text-blue-700' : 'border-slate-300'}`}
                 >
                   <Filter size={12} />
@@ -2659,7 +2791,7 @@ const App = () => {
               {/* CPV Multi-select Dropdown with Search */}
               <div className="relative flex-1 min-w-[100px]">
                 <button
-                  onClick={(e) => { e.stopPropagation(); setShowCpvDropdown(!showCpvDropdown); setShowRulingDropdown(false); setShowYearDropdown(false); setShowCriticiDropdown(false); setShowCategorieDropdown(false); setShowClasaDropdown(false); }}
+                  onClick={(e) => { e.stopPropagation(); closeAllDropdowns(); setShowCpvDropdown(!showCpvDropdown); }}
                   className={`text-xs border rounded-lg px-3 py-2 bg-white text-slate-700 focus:ring-2 focus:ring-blue-500/40 outline-none transition w-full cursor-pointer flex items-center gap-1.5 ${filterCpv.length > 0 ? 'border-blue-400 bg-blue-50 text-blue-700' : 'border-slate-300'}`}
                 >
                   <Filter size={12} />
@@ -2767,34 +2899,165 @@ const App = () => {
                   </div>
                 )}
               </div>
-              {(filterRuling.length > 0 || filterType || filterYears.length > 0 || fileSearch || filterCritici.length > 0 || filterCpv.length > 0 || filterCategorie || filterClasa) && (
-                <button onClick={() => { setFilterRuling([]); setFilterType(""); setFilterYears([]); setFileSearch(""); setFilterCritici([]); setFilterCpv([]); setFilterCategorie(""); setFilterClasa(""); setEditingScopeFilters(null); }}
-                  className="text-xs text-blue-600 hover:text-blue-800 font-medium whitespace-nowrap flex items-center gap-1 transition shrink-0">
-                  <X size={13} /> Resetează
-                </button>
-              )}
-              {/* Save scope button */}
-              {(filterRuling.length > 0 || filterType || filterYears.length > 0 || filterCritici.length > 0 || filterCpv.length > 0 || filterCategorie || filterClasa || fileSearch) && (
+          </div>
+
+          {/* Row 2: Tip procedură, Criteriu atribuire, Complet, VEA, Date range */}
+          <div className="flex items-center gap-2 flex-wrap">
+
+              {/* Tip Procedură Multi-select */}
+              <div className="relative flex-1 min-w-[100px]">
                 <button
-                  onClick={() => setShowScopeModal(true)}
-                  className="text-xs bg-blue-600 text-white hover:bg-blue-700 font-medium whitespace-nowrap flex items-center gap-1.5 transition px-3 py-1.5 rounded-lg shadow-sm shrink-0"
+                  onClick={(e) => { e.stopPropagation(); closeAllDropdowns(); setShowTipProceduraDropdown(!showTipProceduraDropdown); }}
+                  className={`text-xs border rounded-lg px-3 py-2 bg-white text-slate-700 focus:ring-2 focus:ring-blue-500/40 outline-none transition w-full cursor-pointer flex items-center gap-1.5 ${filterTipProcedura.length > 0 ? 'border-amber-400 bg-amber-50 text-amber-700' : 'border-slate-300'}`}
                 >
-                  <Bookmark size={13} /> Salvează
+                  Procedură{filterTipProcedura.length > 0 ? ` (${filterTipProcedura.length})` : ''}
+                  <ChevronDown size={12} className="ml-auto" />
                 </button>
-              )}
-              {/* Edit scope filters / manage scopes */}
-              {scopes.length > 0 && (
+                {showTipProceduraDropdown && (
+                  <div className="absolute top-full left-0 mt-1 bg-white border border-slate-200 rounded-lg shadow-lg z-50 w-72 max-h-72 overflow-y-auto py-1" onClick={(e) => e.stopPropagation()}>
+                    {tipProceduraOptions.map(opt => {
+                      const isSelected = filterTipProcedura.includes(opt.name);
+                      const labels: Record<string, string> = { licitatie_deschisa: 'Licitație deschisă', licitatie_restransa: 'Licitație restrânsă', negociere_competitiva: 'Negociere competitivă', negociere_fara_publicare: 'Negociere fără publicare', negociere_fara_invitatie: 'Negociere fără invitație', negociere_fara_anunt: 'Negociere fără anunț', dialog_competitiv: 'Dialog competitiv', parteneriat_inovare: 'Parteneriat pt. inovare', concurs_solutii: 'Concurs de soluții', servicii_sociale: 'Servicii sociale', procedura_simplificata: 'Procedură simplificată' };
+                      return (
+                        <button key={opt.name} onClick={(e) => { e.stopPropagation(); setFilterTipProcedura(prev => isSelected ? prev.filter(c => c !== opt.name) : [...prev, opt.name]); }}
+                          className="w-full text-left px-3 py-1.5 text-xs hover:bg-slate-50 flex items-center gap-2">
+                          <span className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 ${isSelected ? 'bg-amber-600 border-amber-600 text-white' : 'border-slate-300'}`}>
+                            {isSelected && <CheckSquare size={11} />}
+                          </span>
+                          <span className="text-slate-700">{labels[opt.name] || opt.name}</span>
+                          <span className="text-slate-300 tabular-nums ml-auto">{opt.count}</span>
+                        </button>
+                      );
+                    })}
+                    {filterTipProcedura.length > 0 && (
+                      <div className="border-t border-slate-100 mt-1 pt-1 px-3 pb-1">
+                        <button onClick={() => setFilterTipProcedura([])} className="text-xs text-amber-600 hover:text-amber-800">Șterge selecția</button>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* Criteriu Atribuire Multi-select */}
+              <div className="relative flex-1 min-w-[100px]">
                 <button
-                  onClick={() => setShowScopeManager(true)}
-                  className="text-xs border border-slate-300 text-slate-600 hover:border-blue-400 hover:text-blue-600 font-medium whitespace-nowrap flex items-center gap-1.5 transition px-3 py-1.5 rounded-lg shrink-0"
+                  onClick={(e) => { e.stopPropagation(); closeAllDropdowns(); setShowCriteriuAtribuireDropdown(!showCriteriuAtribuireDropdown); }}
+                  className={`text-xs border rounded-lg px-3 py-2 bg-white text-slate-700 focus:ring-2 focus:ring-blue-500/40 outline-none transition w-full cursor-pointer flex items-center gap-1.5 ${filterCriteriuAtribuire.length > 0 ? 'border-cyan-400 bg-cyan-50 text-cyan-700' : 'border-slate-300'}`}
                 >
-                  <Pencil size={12} /> Editează filtre
+                  Criteriu{filterCriteriuAtribuire.length > 0 ? ` (${filterCriteriuAtribuire.length})` : ''}
+                  <ChevronDown size={12} className="ml-auto" />
                 </button>
+                {showCriteriuAtribuireDropdown && (
+                  <div className="absolute top-full left-0 mt-1 bg-white border border-slate-200 rounded-lg shadow-lg z-50 w-72 max-h-72 overflow-y-auto py-1" onClick={(e) => e.stopPropagation()}>
+                    {criteriuAtribuireOptions.map(opt => {
+                      const isSelected = filterCriteriuAtribuire.includes(opt.name);
+                      return (
+                        <button key={opt.name} onClick={(e) => { e.stopPropagation(); setFilterCriteriuAtribuire(prev => isSelected ? prev.filter(c => c !== opt.name) : [...prev, opt.name]); }}
+                          className="w-full text-left px-3 py-1.5 text-xs hover:bg-slate-50 flex items-center gap-2">
+                          <span className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 ${isSelected ? 'bg-cyan-600 border-cyan-600 text-white' : 'border-slate-300'}`}>
+                            {isSelected && <CheckSquare size={11} />}
+                          </span>
+                          <span className="text-slate-700">{opt.name}</span>
+                          <span className="text-slate-300 tabular-nums ml-auto">{opt.count}</span>
+                        </button>
+                      );
+                    })}
+                    {filterCriteriuAtribuire.length > 0 && (
+                      <div className="border-t border-slate-100 mt-1 pt-1 px-3 pb-1">
+                        <button onClick={() => setFilterCriteriuAtribuire([])} className="text-xs text-cyan-600 hover:text-cyan-800">Șterge selecția</button>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* Complet Multi-select (C1-C20) */}
+              <div className="relative flex-1 min-w-[100px]">
+                <button
+                  onClick={(e) => { e.stopPropagation(); closeAllDropdowns(); setShowCompletDropdown(!showCompletDropdown); }}
+                  className={`text-xs border rounded-lg px-3 py-2 bg-white text-slate-700 focus:ring-2 focus:ring-blue-500/40 outline-none transition w-full cursor-pointer flex items-center gap-1.5 ${filterComplet.length > 0 ? 'border-slate-500 bg-slate-50 text-slate-700' : 'border-slate-300'}`}
+                >
+                  Complet{filterComplet.length > 0 ? ` (${filterComplet.length})` : ''}
+                  <ChevronDown size={12} className="ml-auto" />
+                </button>
+                {showCompletDropdown && (
+                  <div className="absolute top-full left-0 mt-1 bg-white border border-slate-200 rounded-lg shadow-lg z-50 w-48 max-h-72 overflow-y-auto py-1" onClick={(e) => e.stopPropagation()}>
+                    {completOptions.map(opt => {
+                      const isSelected = filterComplet.includes(opt.name);
+                      return (
+                        <button key={opt.name} onClick={(e) => { e.stopPropagation(); setFilterComplet(prev => isSelected ? prev.filter(c => c !== opt.name) : [...prev, opt.name]); }}
+                          className="w-full text-left px-3 py-1.5 text-xs hover:bg-slate-50 flex items-center gap-2">
+                          <span className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 ${isSelected ? 'bg-slate-600 border-slate-600 text-white' : 'border-slate-300'}`}>
+                            {isSelected && <CheckSquare size={11} />}
+                          </span>
+                          <span className="font-mono font-semibold text-slate-700">{opt.name}</span>
+                          <span className="text-slate-300 tabular-nums ml-auto">{opt.count}</span>
+                        </button>
+                      );
+                    })}
+                    {filterComplet.length > 0 && (
+                      <div className="border-t border-slate-100 mt-1 pt-1 px-3 pb-1">
+                        <button onClick={() => setFilterComplet([])} className="text-xs text-slate-600 hover:text-slate-800">Șterge selecția</button>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* VEA (Valoare Estimată) min-max */}
+              <div className="flex items-center gap-1.5 shrink-0">
+                <span className="text-[10px] text-slate-500 font-medium">VEA</span>
+                <input type="number" placeholder="min" value={filterValoareMin} onChange={(e) => setFilterValoareMin(e.target.value)}
+                  className="w-20 text-xs border border-slate-300 rounded-lg px-2 py-2 bg-white text-slate-700 focus:ring-2 focus:ring-blue-500/40 focus:border-blue-400 outline-none transition" />
+                <span className="text-slate-400 text-xs">—</span>
+                <input type="number" placeholder="max" value={filterValoareMax} onChange={(e) => setFilterValoareMax(e.target.value)}
+                  className="w-20 text-xs border border-slate-300 rounded-lg px-2 py-2 bg-white text-slate-700 focus:ring-2 focus:ring-blue-500/40 focus:border-blue-400 outline-none transition" />
+                <span className="text-[10px] text-slate-400">RON</span>
+              </div>
+
+              {/* Date Range */}
+              <div className="flex items-center gap-1.5 shrink-0">
+                <span className="text-[10px] text-slate-500 font-medium">Perioadă</span>
+                <input type="date" value={filterDateFrom} onChange={(e) => setFilterDateFrom(e.target.value)}
+                  className="text-xs border border-slate-300 rounded-lg px-2 py-2 bg-white text-slate-700 focus:ring-2 focus:ring-blue-500/40 focus:border-blue-400 outline-none transition" />
+                <span className="text-slate-400 text-xs">—</span>
+                <input type="date" value={filterDateTo} onChange={(e) => setFilterDateTo(e.target.value)}
+                  className="text-xs border border-slate-300 rounded-lg px-2 py-2 bg-white text-slate-700 focus:ring-2 focus:ring-blue-500/40 focus:border-blue-400 outline-none transition" />
+              </div>
+
+          </div>
+
+          {/* Action bar + filter pills */}
+          {(filterRuling.length > 0 || filterType || filterYears.length > 0 || fileSearch || filterCritici.length > 0 || filterCpv.length > 0 || filterCategorie || filterClasa || filterMotivRespingere.length > 0 || filterComplet.length > 0 || filterDomeniu.length > 0 || filterTipProcedura.length > 0 || filterCriteriuAtribuire.length > 0 || filterDateFrom || filterDateTo || filterValoareMin || filterValoareMax || scopes.length > 0) && (
+          <div className="flex items-center gap-1.5 flex-wrap border-t border-slate-100 pt-2">
+              {/* Filter pills */}
+              {filterDomeniu.map(d => {
+                const label = d === 'achizitii_publice' ? 'Ach. publice' : d === 'achizitii_sectoriale' ? 'Ach. sectoriale' : d === 'concesiuni' ? 'Concesiuni' : d;
+                return (
+                  <span key={d} className="text-[10px] bg-indigo-50 text-indigo-700 border border-indigo-200 rounded-full px-2 py-0.5 flex items-center gap-1 font-semibold">
+                    {label}
+                    <button onClick={() => setFilterDomeniu(prev => prev.filter(x => x !== d))} className="hover:text-red-500"><X size={10} /></button>
+                  </span>
+                );
+              })}
+              {filterRuling.map(r => (
+                <span key={r} className="text-[10px] bg-green-50 text-green-700 border border-green-200 rounded-full px-2 py-0.5 flex items-center gap-1 font-semibold">
+                  {r === '__NULL__' ? 'Fără soluție' : r}
+                  <button onClick={() => { setFilterRuling(prev => prev.filter(x => x !== r)); if (r === 'RESPINS') setFilterMotivRespingere([]); }} className="hover:text-red-500"><X size={10} /></button>
+                </span>
+              ))}
+              {filterMotivRespingere.map(m => (
+                <span key={m} className="text-[10px] bg-red-50 text-red-700 border border-red-200 rounded-full px-2 py-0.5 flex items-center gap-1 capitalize">
+                  {m}
+                  <button onClick={() => setFilterMotivRespingere(prev => prev.filter(x => x !== m))} className="hover:text-red-500"><X size={10} /></button>
+                </span>
+              ))}
+              {filterType && (
+                <span className="text-[10px] bg-purple-50 text-purple-700 border border-purple-200 rounded-full px-2 py-0.5 flex items-center gap-1">
+                  {filterType === 'documentatie' ? 'Documentație' : 'Rezultat'}
+                  <button onClick={() => setFilterType("")} className="hover:text-red-500"><X size={10} /></button>
+                </span>
               )}
-            </div>
-          {/* Active filter pills */}
-          {(filterCritici.length > 0 || filterCpv.length > 0 || filterYears.length > 0 || filterCategorie || filterClasa) && (
-            <div className="flex items-center gap-1.5 mt-2 flex-wrap">
               {filterCategorie && (
                 <span className="text-[10px] bg-orange-50 text-orange-700 border border-orange-200 rounded-full px-2 py-0.5 flex items-center gap-1 font-semibold">
                   {filterCategorie}
@@ -2825,11 +3088,62 @@ const App = () => {
                   <button onClick={() => setFilterCpv(prev => prev.filter(x => x !== c))} className="hover:text-red-500"><X size={10} /></button>
                 </span>
               ))}
-            </div>
+              {filterTipProcedura.map(p => {
+                const labels: Record<string, string> = { licitatie_deschisa: 'Licit. deschisă', licitatie_restransa: 'Licit. restrânsă', negociere_competitiva: 'Neg. competitivă', negociere_fara_publicare: 'Neg. fără pub.', negociere_fara_invitatie: 'Neg. fără inv.', negociere_fara_anunt: 'Neg. fără anunț', dialog_competitiv: 'Dialog comp.', parteneriat_inovare: 'Part. inovare', concurs_solutii: 'Concurs sol.', servicii_sociale: 'Serv. sociale', procedura_simplificata: 'Proc. simplificată' };
+                return (
+                  <span key={p} className="text-[10px] bg-amber-50 text-amber-700 border border-amber-200 rounded-full px-2 py-0.5 flex items-center gap-1">
+                    {labels[p] || p}
+                    <button onClick={() => setFilterTipProcedura(prev => prev.filter(x => x !== p))} className="hover:text-red-500"><X size={10} /></button>
+                  </span>
+                );
+              })}
+              {filterCriteriuAtribuire.map(c => (
+                <span key={c} className="text-[10px] bg-cyan-50 text-cyan-700 border border-cyan-200 rounded-full px-2 py-0.5 flex items-center gap-1">
+                  {c}
+                  <button onClick={() => setFilterCriteriuAtribuire(prev => prev.filter(x => x !== c))} className="hover:text-red-500"><X size={10} /></button>
+                </span>
+              ))}
+              {filterComplet.map(c => (
+                <span key={c} className="text-[10px] bg-slate-100 text-slate-700 border border-slate-300 rounded-full px-2 py-0.5 flex items-center gap-1 font-mono">
+                  {c}
+                  <button onClick={() => setFilterComplet(prev => prev.filter(x => x !== c))} className="hover:text-red-500"><X size={10} /></button>
+                </span>
+              ))}
+              {(filterDateFrom || filterDateTo) && (
+                <span className="text-[10px] bg-slate-50 text-slate-600 border border-slate-200 rounded-full px-2 py-0.5 flex items-center gap-1">
+                  {filterDateFrom || '...'} — {filterDateTo || '...'}
+                  <button onClick={() => { setFilterDateFrom(""); setFilterDateTo(""); }} className="hover:text-red-500"><X size={10} /></button>
+                </span>
+              )}
+              {(filterValoareMin || filterValoareMax) && (
+                <span className="text-[10px] bg-slate-50 text-slate-600 border border-slate-200 rounded-full px-2 py-0.5 flex items-center gap-1">
+                  VEA: {filterValoareMin || '0'} — {filterValoareMax || '∞'} RON
+                  <button onClick={() => { setFilterValoareMin(""); setFilterValoareMax(""); }} className="hover:text-red-500"><X size={10} /></button>
+                </span>
+              )}
+
+              {/* Action buttons — right-aligned */}
+              <div className="ml-auto flex items-center gap-2 shrink-0">
+                <button onClick={() => { setFilterRuling([]); setFilterType(""); setFilterYears([]); setFileSearch(""); setFilterCritici([]); setFilterCpv([]); setFilterCategorie(""); setFilterClasa(""); setFilterMotivRespingere([]); setFilterComplet([]); setFilterDomeniu([]); setFilterTipProcedura([]); setFilterCriteriuAtribuire([]); setFilterDateFrom(""); setFilterDateTo(""); setFilterValoareMin(""); setFilterValoareMax(""); setEditingScopeFilters(null); }}
+                  className="text-xs text-red-500 hover:text-red-700 font-medium whitespace-nowrap flex items-center gap-1 transition">
+                  <X size={13} /> Resetează
+                </button>
+                <button onClick={() => setShowScopeModal(true)}
+                  className="text-xs bg-blue-600 text-white hover:bg-blue-700 font-medium whitespace-nowrap flex items-center gap-1.5 transition px-3 py-1.5 rounded-lg shadow-sm">
+                  <Bookmark size={13} /> Salvează
+                </button>
+                {scopes.length > 0 && (
+                  <button onClick={() => setShowScopeManager(true)}
+                    className="text-xs border border-slate-300 text-slate-600 hover:border-blue-400 hover:text-blue-600 font-medium whitespace-nowrap flex items-center gap-1.5 transition px-3 py-1.5 rounded-lg">
+                    <Pencil size={12} /> Editează filtre
+                  </button>
+                )}
+              </div>
+          </div>
           )}
         </div>
 
-        {/* Scope filter editing banner */}
+        {/* Scope filter editing banner — UPDATE filter save to include new filters */}
         {editingScopeFilters && (
           <div className="mx-4 md:mx-6 mt-3 flex items-center gap-2 bg-amber-50 border border-amber-200 rounded-lg px-4 py-2.5 text-xs text-amber-800">
             <Pencil size={13} className="shrink-0" />
@@ -2846,6 +3160,15 @@ const App = () => {
                   if (filterCategorie) filters.categorie = filterCategorie;
                   if (filterClasa) filters.clasa = filterClasa;
                   if (fileSearch.trim()) filters.search = fileSearch.trim();
+                  if (filterMotivRespingere.length > 0) filters.motiv_respingere = filterMotivRespingere;
+                  if (filterComplet.length > 0) filters.complet = filterComplet;
+                  if (filterDomeniu.length > 0) filters.domeniu_legislativ = filterDomeniu;
+                  if (filterTipProcedura.length > 0) filters.tip_procedura = filterTipProcedura;
+                  if (filterCriteriuAtribuire.length > 0) filters.criteriu_atribuire = filterCriteriuAtribuire;
+                  if (filterDateFrom) filters.data_decizie_from = filterDateFrom;
+                  if (filterDateTo) filters.data_decizie_to = filterDateTo;
+                  if (filterValoareMin) filters.valoare_min = filterValoareMin;
+                  if (filterValoareMax) filters.valoare_max = filterValoareMax;
                   const scope = scopes.find(s => s.id === editingScopeFilters);
                   if (scope) {
                     await updateScope(scope.id, scope.name, scope.description, filters);
@@ -2856,10 +3179,7 @@ const App = () => {
               >
                 <Save size={12} /> Salvează filtrele
               </button>
-              <button
-                onClick={() => setEditingScopeFilters(null)}
-                className="text-amber-500 hover:text-amber-700"
-              >
+              <button onClick={() => setEditingScopeFilters(null)} className="text-amber-500 hover:text-amber-700">
                 <X size={14} />
               </button>
             </div>
@@ -5406,6 +5726,15 @@ const App = () => {
                               setFilterCategorie(s.filters.categorie || '');
                               setFilterClasa(s.filters.clasa || '');
                               setFileSearch(s.filters.search || '');
+                              setFilterMotivRespingere(s.filters.motiv_respingere || []);
+                              setFilterComplet(s.filters.complet || []);
+                              setFilterDomeniu(s.filters.domeniu_legislativ || []);
+                              setFilterTipProcedura(s.filters.tip_procedura || []);
+                              setFilterCriteriuAtribuire(s.filters.criteriu_atribuire || []);
+                              setFilterDateFrom(s.filters.data_decizie_from || '');
+                              setFilterDateTo(s.filters.data_decizie_to || '');
+                              setFilterValoareMin(s.filters.valoare_min || '');
+                              setFilterValoareMax(s.filters.valoare_max || '');
                               setShowScopeManager(false);
                               setMode('datalake');
                             }}
@@ -5433,6 +5762,15 @@ const App = () => {
                               setFilterCategorie(s.filters.categorie || '');
                               setFilterClasa(s.filters.clasa || '');
                               setFileSearch(s.filters.search || '');
+                              setFilterMotivRespingere(s.filters.motiv_respingere || []);
+                              setFilterComplet(s.filters.complet || []);
+                              setFilterDomeniu(s.filters.domeniu_legislativ || []);
+                              setFilterTipProcedura(s.filters.tip_procedura || []);
+                              setFilterCriteriuAtribuire(s.filters.criteriu_atribuire || []);
+                              setFilterDateFrom(s.filters.data_decizie_from || '');
+                              setFilterDateTo(s.filters.data_decizie_to || '');
+                              setFilterValoareMin(s.filters.valoare_min || '');
+                              setFilterValoareMax(s.filters.valoare_max || '');
                               setEditingScopeFilters(s.id);
                               setShowScopeManager(false);
                               setMode('datalake');
@@ -5750,6 +6088,15 @@ const App = () => {
                     if (filterCategorie) filters.categorie = filterCategorie;
                     if (filterClasa) filters.clasa = filterClasa;
                     if (fileSearch.trim()) filters.search = fileSearch.trim();
+                    if (filterMotivRespingere.length > 0) filters.motiv_respingere = filterMotivRespingere;
+                    if (filterComplet.length > 0) filters.complet = filterComplet;
+                    if (filterDomeniu.length > 0) filters.domeniu_legislativ = filterDomeniu;
+                    if (filterTipProcedura.length > 0) filters.tip_procedura = filterTipProcedura;
+                    if (filterCriteriuAtribuire.length > 0) filters.criteriu_atribuire = filterCriteriuAtribuire;
+                    if (filterDateFrom) filters.data_decizie_from = filterDateFrom;
+                    if (filterDateTo) filters.data_decizie_to = filterDateTo;
+                    if (filterValoareMin) filters.valoare_min = filterValoareMin;
+                    if (filterValoareMax) filters.valoare_max = filterValoareMax;
 
                     const res = await authFetch('/api/v1/scopes/', {
                       method: 'POST',

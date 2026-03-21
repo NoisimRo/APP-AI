@@ -135,9 +135,57 @@ def _apply_scope_filters(query, filters: dict):
                 DecizieCNSC.cpv_descriere.ilike(search_term),
                 DecizieCNSC.cpv_categorie.ilike(search_term),
                 DecizieCNSC.cpv_clasa.ilike(search_term),
+                DecizieCNSC.obiect_contract.ilike(search_term),
                 DecizieCNSC.filename.ilike(search_term),
             )
         )
+
+    # New filters
+    if filters.get("motiv_respingere"):
+        reasons = filters["motiv_respingere"] if isinstance(filters["motiv_respingere"], list) else [r.strip() for r in filters["motiv_respingere"].split(",")]
+        query = query.where(DecizieCNSC.motiv_respingere.in_(reasons))
+
+    if filters.get("complet"):
+        panels = filters["complet"] if isinstance(filters["complet"], list) else [p.strip() for p in filters["complet"].split(",")]
+        query = query.where(DecizieCNSC.complet.in_(panels))
+
+    if filters.get("domeniu_legislativ"):
+        domains = filters["domeniu_legislativ"] if isinstance(filters["domeniu_legislativ"], list) else [d.strip() for d in filters["domeniu_legislativ"].split(",")]
+        query = query.where(DecizieCNSC.domeniu_legislativ.in_(domains))
+
+    if filters.get("tip_procedura"):
+        procs = filters["tip_procedura"] if isinstance(filters["tip_procedura"], list) else [p.strip() for p in filters["tip_procedura"].split(",")]
+        query = query.where(DecizieCNSC.tip_procedura.in_(procs))
+
+    if filters.get("criteriu_atribuire"):
+        criteria = filters["criteriu_atribuire"] if isinstance(filters["criteriu_atribuire"], list) else [c.strip() for c in filters["criteriu_atribuire"].split(",")]
+        query = query.where(DecizieCNSC.criteriu_atribuire.in_(criteria))
+
+    if filters.get("data_decizie_from"):
+        try:
+            from datetime import datetime
+            query = query.where(DecizieCNSC.data_decizie >= datetime.fromisoformat(filters["data_decizie_from"]))
+        except (ValueError, TypeError):
+            pass
+
+    if filters.get("data_decizie_to"):
+        try:
+            from datetime import datetime
+            query = query.where(DecizieCNSC.data_decizie <= datetime.fromisoformat(filters["data_decizie_to"]))
+        except (ValueError, TypeError):
+            pass
+
+    if filters.get("valoare_min") is not None:
+        try:
+            query = query.where(DecizieCNSC.valoare_estimata >= float(filters["valoare_min"]))
+        except (ValueError, TypeError):
+            pass
+
+    if filters.get("valoare_max") is not None:
+        try:
+            query = query.where(DecizieCNSC.valoare_estimata <= float(filters["valoare_max"]))
+        except (ValueError, TypeError):
+            pass
 
     return query
 
