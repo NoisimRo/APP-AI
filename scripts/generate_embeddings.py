@@ -38,10 +38,9 @@ from app.services.llm.base import ResourceExhaustedError
 logger = get_logger(__name__)
 
 # Commit after this many rows are embedded (not API batch size)
-# With batch_size=100, each commit covers 5 API calls worth of work
-COMMIT_BATCH_SIZE = 500
+COMMIT_BATCH_SIZE = 100
 # CPV texts are tiny (~50 chars), so we can use much larger batches
-CPV_COMMIT_BATCH_SIZE = 1000
+CPV_COMMIT_BATCH_SIZE = 500
 
 
 async def generate_embeddings_batched(
@@ -269,8 +268,8 @@ async def main():
     parser.add_argument(
         "--rate-limit",
         type=float,
-        default=0.2,
-        help="Seconds to wait between API batches (default: 0.2)",
+        default=1.0,
+        help="Seconds to wait between API batches (default: 1.0)",
     )
 
     args = parser.parse_args()

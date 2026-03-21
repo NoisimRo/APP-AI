@@ -102,7 +102,7 @@ class EmbeddingService:
         texts: list[str],
         batch_size: int = 100,
         task_type: str = "retrieval_document",
-        rate_limit_delay: float = 0.2,
+        rate_limit_delay: float = 1.0,
     ) -> list[list[float]]:
         """Generate embeddings in batches with rate limiting and retry.
 
@@ -111,7 +111,6 @@ class EmbeddingService:
             batch_size: Number of texts per API call (Gemini limit: 100).
             task_type: Embedding task type.
             rate_limit_delay: Seconds to wait between batches.
-                Gemini Paid tier 1: 3K RPM, 1M TPM, unlimited RPD.
 
         Returns:
             List of embedding vectors in the same order as input texts.
