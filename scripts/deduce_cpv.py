@@ -8,32 +8,24 @@ IMPORTANT: Only processes decisions that have obiect_contract filled in.
 Decisions without obiect_contract are skipped entirely — no fallback to
 text_integral or rezumat (those produce unreliable CPV matches).
 
-Approach:
-1. Load all CPV codes with descriptions from nomenclator_cpv
-2. Generate embeddings for CPV descriptions (cached in memory)
-3. For each decision with cod_cpv IS NULL AND obiect_contract IS NOT NULL:
-   - Generate embedding for obiect_contract
-   - Cosine similarity with all CPV embeddings
-   - If top match > threshold → assign CPV code
-4. Enrich with cpv_descriere, cpv_categorie, cpv_clasa from nomenclator
-
-Features:
-- Only uses obiect_contract (no text_integral fallback)
-- Skips decisions that already have CPV (idempotent)
-- Per-decision commit (crash-safe)
-- Dry-run mode for review before applying
-- Threshold-based assignment (default 0.70)
+Quality filters (to avoid assigning wrong CPV codes):
+- Text validation: min 3 real words, min 10 alphanumeric chars, max 70% junk
+- Procedural text truncation: cuts "s-a solicitat", "s-au solicitat" etc.
+- Similarity threshold: default 0.80 (raised from 0.70)
+- Confidence gap: top1 - top2 must be >= 0.03, otherwise ambiguous
 
 Usage:
     python scripts/deduce_cpv.py                    # Deduce for all without CPV
     python scripts/deduce_cpv.py --limit 10         # Test with 10 decisions
     python scripts/deduce_cpv.py --dry-run           # Show matches without applying
-    python scripts/deduce_cpv.py --threshold 0.75    # Stricter matching
+    python scripts/deduce_cpv.py --threshold 0.75    # Custom threshold
+    python scripts/deduce_cpv.py --min-gap 0.05      # Stricter confidence gap
     python scripts/deduce_cpv.py --top-k 5           # Show top 5 candidates per decision
 """
 
 import asyncio
 import argparse
+import re
 import sys
 import time
 from pathlib import Path
@@ -51,8 +43,62 @@ from app.models.decision import DecizieCNSC, NomenclatorCPV
 
 logger = get_logger(__name__)
 
-DEFAULT_THRESHOLD = 0.70
+DEFAULT_THRESHOLD = 0.80
+DEFAULT_MIN_GAP = 0.03
+MIN_ALNUM_CHARS = 10
+MIN_WORD_COUNT = 3
+MAX_JUNK_RATIO = 0.70
 BATCH_SIZE = 20  # Embedding API batch size
+
+# ---------------------------------------------------------------------------
+# Text quality validation & cleanup
+# ---------------------------------------------------------------------------
+
+# Procedural markers — everything after these is not part of the contract object
+_PROCEDURAL_CUT_RE = re.compile(
+    r",?\s*s-a(?:u)?\s+solicitat"
+    r"|,?\s*următoarele\s*:"
+    r"|,?\s*contestat(?:oarea|orul)?\s+a\s+solicitat"
+    r"|,?\s*prin\s+care\s+se\s+solicit[ăa]"
+    r"|,?\s*s-a\s+formulat",
+    re.IGNORECASE,
+)
+
+
+def _clean_for_embedding(text: str) -> str | None:
+    """Clean and validate obiect_contract text for CPV embedding.
+
+    Returns cleaned text or None if text is too noisy to produce a reliable match.
+    """
+    if not text:
+        return None
+
+    # Truncate at procedural markers
+    m = _PROCEDURAL_CUT_RE.search(text)
+    if m:
+        text = text[:m.start()].strip()
+
+    # Strip trailing punctuation/whitespace
+    text = text.strip().rstrip(".,;:-–—")
+
+    # Count alphanumeric characters
+    alnum_chars = sum(1 for c in text if c.isalnum())
+    total_chars = len(text)
+
+    # Filter 1: minimum alphanumeric characters
+    if alnum_chars < MIN_ALNUM_CHARS:
+        return None
+
+    # Filter 2: junk ratio (dots, quotes, symbols vs real text)
+    if total_chars > 0 and (total_chars - alnum_chars) / total_chars > MAX_JUNK_RATIO:
+        return None
+
+    # Filter 3: minimum word count (real words, not dots/symbols)
+    words = [w for w in re.split(r'\s+', text) if len(w) >= 2 and any(c.isalpha() for c in w)]
+    if len(words) < MIN_WORD_COUNT:
+        return None
+
+    return text
 
 
 def cosine_similarity(a: list[float], b: list[float]) -> float:
@@ -141,6 +187,7 @@ async def main():
     parser.add_argument("--limit", type=int, help="Max decisions to process")
     parser.add_argument("--dry-run", action="store_true", help="Show matches without applying")
     parser.add_argument("--threshold", type=float, default=DEFAULT_THRESHOLD, help=f"Similarity threshold (default {DEFAULT_THRESHOLD})")
+    parser.add_argument("--min-gap", type=float, default=DEFAULT_MIN_GAP, help=f"Min gap between top1 and top2 (default {DEFAULT_MIN_GAP})")
     parser.add_argument("--top-k", type=int, default=3, help="Show top K candidates per decision")
     parser.add_argument("--rate-limit", type=float, default=0.2, help="Delay between decisions")
     args = parser.parse_args()
@@ -178,20 +225,32 @@ async def main():
         result = await session.execute(stmt)
         decisions = list(result.scalars().all())
 
-        print(f"\n{'='*60}")
+        print(f"\n{'='*70}")
         print(f"Decisions without CPV: {len(decisions)}")
         print(f"Mode: {'DRY RUN' if args.dry_run else 'LIVE'}")
-        print(f"Threshold: {args.threshold}")
-        print(f"{'='*60}\n")
+        print(f"Threshold: {args.threshold}  |  Min gap: {args.min_gap}")
+        print(f"Text filters: min {MIN_ALNUM_CHARS} alnum chars, min {MIN_WORD_COUNT} words, max {MAX_JUNK_RATIO:.0%} junk")
+        print(f"{'='*70}\n")
 
-        stats = {"total": len(decisions), "assigned": 0, "ambiguous": 0, "no_text": 0}
+        stats = {
+            "total": len(decisions),
+            "assigned": 0,
+            "below_threshold": 0,
+            "no_gap": 0,
+            "bad_text": 0,
+        }
         start_time = time.time()
 
         for i, decision in enumerate(decisions):
-            query_text = decision.obiect_contract
+            raw_text = decision.obiect_contract
 
-            if not query_text or len(query_text) < 5:
-                stats["no_text"] += 1
+            # Validate and clean text
+            query_text = _clean_for_embedding(raw_text)
+            if not query_text:
+                stats["bad_text"] += 1
+                if args.dry_run:
+                    preview = (raw_text or "")[:80]
+                    print(f"  [{i+1}] {decision.external_id}: SKIP (bad text) — {preview}")
                 continue
 
             try:
@@ -199,34 +258,53 @@ async def main():
                 query_embeddings = await embedding_service.embed_batch([query_text])
                 query_embedding = query_embeddings[0]
 
-                # Find best matches
-                matches = find_best_cpv(query_embedding, cpv_list, args.top_k)
+                # Find best matches (always need at least 2 for gap check)
+                k = max(args.top_k, 2)
+                matches = find_best_cpv(query_embedding, cpv_list, k)
                 best = matches[0]
+                second = matches[1] if len(matches) > 1 else None
 
-                if best["similarity"] >= args.threshold:
-                    print(f"  [{i+1}] {decision.external_id}: {best['cod_cpv']} "
-                          f"({best['descriere'][:60]}) — sim={best['similarity']:.3f}")
+                # Check threshold
+                if best["similarity"] < args.threshold:
+                    stats["below_threshold"] += 1
+                    print(f"  [{i+1}] {decision.external_id}: LOW SIM — "
+                          f"{best['cod_cpv']} ({best['descriere'][:40]}) sim={best['similarity']:.3f}")
                     if args.dry_run:
                         print(f"         obiect: {query_text[:120]}")
+                        if args.top_k > 1:
+                            for m in matches[1:args.top_k]:
+                                print(f"         alt: {m['cod_cpv']} ({m['descriere'][:40]}) sim={m['similarity']:.3f}")
+                    continue
 
-                    if not args.dry_run:
-                        decision.cod_cpv = best["cod_cpv"]
-                        decision.cpv_descriere = best["descriere"]
-                        decision.cpv_categorie = best["categorie"]
-                        decision.cpv_clasa = best["clasa"]
-                        decision.cpv_source = "dedus"
-                        await session.commit()
-
-                    stats["assigned"] += 1
-                else:
-                    print(f"  [{i+1}] {decision.external_id}: AMBIGUOUS — "
-                          f"best={best['cod_cpv']} ({best['descriere'][:40]}) sim={best['similarity']:.3f}")
+                # Check confidence gap
+                gap = best["similarity"] - second["similarity"] if second else 1.0
+                if gap < args.min_gap:
+                    stats["no_gap"] += 1
+                    print(f"  [{i+1}] {decision.external_id}: NO GAP — "
+                          f"{best['cod_cpv']} sim={best['similarity']:.3f} vs "
+                          f"{second['cod_cpv']} sim={second['similarity']:.3f} "
+                          f"(gap={gap:.3f} < {args.min_gap})")
                     if args.dry_run:
                         print(f"         obiect: {query_text[:120]}")
-                    if args.top_k > 1:
-                        for m in matches[1:]:
+                        for m in matches[1:args.top_k]:
                             print(f"         alt: {m['cod_cpv']} ({m['descriere'][:40]}) sim={m['similarity']:.3f}")
-                    stats["ambiguous"] += 1
+                    continue
+
+                # Match is good — assign
+                print(f"  [{i+1}] {decision.external_id}: {best['cod_cpv']} "
+                      f"({best['descriere'][:60]}) — sim={best['similarity']:.3f} gap={gap:.3f}")
+                if args.dry_run:
+                    print(f"         obiect: {query_text[:120]}")
+
+                if not args.dry_run:
+                    decision.cod_cpv = best["cod_cpv"]
+                    decision.cpv_descriere = best["descriere"]
+                    decision.cpv_categorie = best["categorie"]
+                    decision.cpv_clasa = best["clasa"]
+                    decision.cpv_source = "dedus"
+                    await session.commit()
+
+                stats["assigned"] += 1
 
             except Exception as e:
                 logger.error("cpv_deduction_failed", external_id=decision.external_id, error=str(e))
@@ -236,13 +314,14 @@ async def main():
 
         elapsed = time.time() - start_time
 
-        print(f"\n{'='*60}")
+        print(f"\n{'='*70}")
         print(f"CPV DEDUCTION COMPLETE")
-        print(f"  Assigned:  {stats['assigned']}/{stats['total']}")
-        print(f"  Ambiguous: {stats['ambiguous']}")
-        print(f"  No text:   {stats['no_text']}")
-        print(f"  Time:      {elapsed:.1f}s")
-        print(f"{'='*60}\n")
+        print(f"  Assigned:        {stats['assigned']}/{stats['total']}")
+        print(f"  Below threshold: {stats['below_threshold']} (sim < {args.threshold})")
+        print(f"  No gap:          {stats['no_gap']} (top1-top2 < {args.min_gap})")
+        print(f"  Bad text:        {stats['bad_text']} (junk/too short/no words)")
+        print(f"  Time:            {elapsed:.1f}s")
+        print(f"{'='*70}\n")
 
 
 if __name__ == "__main__":
