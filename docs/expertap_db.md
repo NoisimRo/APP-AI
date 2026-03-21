@@ -47,6 +47,8 @@
  moneda                  | character varying(3)        |           | not null |
  criteriu_atribuire      | character varying(100)      |           |          |
  numar_oferte            | integer                     |           |          |
+ domeniu_legislativ      | character varying(30)       |           |          |
+ tip_procedura           | character varying(80)       |           |          |
  contestator             | character varying(500)      |           |          |
  autoritate_contractanta | character varying(500)      |           |          |
  intervenienti           | json                        |           |          |
@@ -67,6 +69,8 @@ Indexes:
     "ix_decizii_fulltext" gin (text_integral gin_trgm_ops)
     "ix_decizii_solutie" btree (solutie_contestatie)
     "ix_decizii_tip" btree (tip_contestatie)
+    "ix_decizii_domeniu" btree (domeniu_legislativ)
+    "ix_decizii_procedura" btree (tip_procedura)
 Referenced by:
     TABLE "argumentare_critica" CONSTRAINT "argumentare_critica_decizie_id_fkey" FOREIGN KEY (decizie_id) REFERENCES decizii_cnsc(id) ON DELETE CASCADE
 
@@ -366,7 +370,7 @@ Foreign-key constraints:
 
 ---
 
-# Ultima sincronizare cu producția: 2026-03-20
+# Ultima sincronizare cu producția: 2026-03-21
 
 # Changelog Schema Producție
 
@@ -401,3 +405,9 @@ Foreign-key constraints:
 | 2026-03-20 | `ALTER TABLE decizii_cnsc ADD COLUMN rezumat TEXT;` | Utilizator | DA |
 | 2026-03-20 | `ALTER TABLE nomenclator_cpv ADD COLUMN embedding vector(2000);` | Utilizator | DA |
 | 2026-03-20 | `CREATE INDEX ix_cpv_embedding ON nomenclator_cpv USING hnsw (embedding vector_cosine_ops);` | Utilizator | DA |
+| 2026-03-21 | `ALTER TABLE decizii_cnsc ADD COLUMN domeniu_legislativ VARCHAR(30);` | Utilizator | DA |
+| 2026-03-21 | `ALTER TABLE decizii_cnsc ADD COLUMN tip_procedura VARCHAR(80);` | Utilizator | DA |
+| 2026-03-21 | `COMMENT ON COLUMN decizii_cnsc.domeniu_legislativ IS 'achizitii_publice (L98/2016), achizitii_sectoriale (L99/2016), concesiuni (L100/2016)';` | Utilizator | DA |
+| 2026-03-21 | `COMMENT ON COLUMN decizii_cnsc.tip_procedura IS 'licitatie_deschisa, licitatie_restransa, negociere_competitiva, dialog_competitiv, parteneriat_inovare, negociere_fara_publicare, concurs_solutii, servicii_sociale, procedura_simplificata';` | Utilizator | DA |
+| 2026-03-21 | `CREATE INDEX ix_decizii_domeniu ON decizii_cnsc (domeniu_legislativ);` | Utilizator | DA |
+| 2026-03-21 | `CREATE INDEX ix_decizii_procedura ON decizii_cnsc (tip_procedura);` | Utilizator | DA |
