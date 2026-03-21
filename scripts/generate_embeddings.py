@@ -38,9 +38,10 @@ from app.services.llm.base import ResourceExhaustedError
 logger = get_logger(__name__)
 
 # Commit after this many rows are embedded (not API batch size)
-COMMIT_BATCH_SIZE = 100
+# With batch_size=100, each commit covers 5 API calls worth of work
+COMMIT_BATCH_SIZE = 500
 # CPV texts are tiny (~50 chars), so we can use much larger batches
-CPV_COMMIT_BATCH_SIZE = 500
+CPV_COMMIT_BATCH_SIZE = 1000
 
 
 async def generate_embeddings_batched(
@@ -262,14 +263,14 @@ async def main():
     parser.add_argument(
         "--batch-size",
         type=int,
-        default=20,
-        help="Number of texts per API call (default: 20)",
+        default=100,
+        help="Number of texts per API call (default: 100, max: 100)",
     )
     parser.add_argument(
         "--rate-limit",
         type=float,
-        default=1.0,
-        help="Seconds to wait between API batches (default: 1.0)",
+        default=0.2,
+        help="Seconds to wait between API batches (default: 0.2)",
     )
 
     args = parser.parse_args()
@@ -305,14 +306,13 @@ async def main():
     )
 
     print("\n=== NomenclatorCPV ===")
-    # Gemini embedding: max 100 texts/request (BatchEmbedContentsRequest limit)
-    cpv_batch_size = min(max(args.batch_size, 100), 100)
+    # CPV texts are tiny (~50 chars), safe to use max batch size
     cpv_generated = await generate_cpv_embeddings_batched(
         embedding_service,
         force=args.force,
         limit=args.limit,
-        api_batch_size=cpv_batch_size,
-        rate_limit=max(args.rate_limit, 1.0),
+        api_batch_size=100,
+        rate_limit=args.rate_limit,
     )
 
     # Show updated stats
