@@ -5,15 +5,18 @@ Orchestrates the full data pipeline:
   1. IMPORT  — Download new decisions from GCS → database
   2. ANALYZE — Extract ArgumentareCritica via LLM (Gemini)
   3. EMBED   — Generate vector embeddings for RAG search
+  4. EXTRACT — Extract obiect_contract from text (regex, instant)
+  5. CPV     — Deduce CPV codes via embedding similarity
 
 Each step is idempotent: it skips already-processed records.
 Safe to run repeatedly (daily cron, Cloud Scheduler, manual).
 
 Usage:
-    python scripts/pipeline.py                    # Full pipeline (import → analyze → embed)
+    python scripts/pipeline.py                    # Full pipeline (all 5 steps)
     python scripts/pipeline.py --step analyze     # Only analysis
     python scripts/pipeline.py --step embed       # Only embeddings
-    python scripts/pipeline.py --step import      # Only import
+    python scripts/pipeline.py --step extract     # Only obiect_contract extraction
+    python scripts/pipeline.py --step cpv         # Only CPV deduction
     python scripts/pipeline.py --daily            # Alias for full pipeline (for cron)
     python scripts/pipeline.py --limit 10         # Limit each step to 10 records (testing)
 
@@ -85,11 +88,11 @@ def parse_imported_count(output: str) -> int | None:
 
 def main():
     parser = argparse.ArgumentParser(
-        description="ExpertAP unified data pipeline: import → analyze → embed"
+        description="ExpertAP unified data pipeline: import → analyze → embed → extract → cpv"
     )
     parser.add_argument(
         "--step",
-        choices=["import", "analyze", "embed"],
+        choices=["import", "analyze", "embed", "extract", "cpv"],
         help="Run only a specific step (default: all steps)",
     )
     parser.add_argument(
@@ -122,7 +125,7 @@ def main():
         # Full pipeline
         if not args.skip_import:
             steps_to_run.append("import")
-        steps_to_run.extend(["analyze", "embed"])
+        steps_to_run.extend(["analyze", "embed", "extract", "cpv"])
 
     pipeline_start = time.time()
     results = {}
@@ -177,14 +180,32 @@ def main():
             embed_args.extend(["--limit", str(args.limit)])
         if args.force:
             embed_args.append("--force")
-        if new_imported == 0 and not args.force:
-            print("\n>>> No new decisions — skipping embeddings")
-            results["embed"] = True
-        else:
-            success, _ = run_step(
-                "generate_embeddings.py", embed_args, "Generate Embeddings"
-            )
-            results["embed"] = success
+        success, _ = run_step(
+            "generate_embeddings.py", embed_args, "Generate Embeddings"
+        )
+        results["embed"] = success
+
+    # Step 4: Extract obiect_contract (regex, instant, no LLM)
+    if "extract" in steps_to_run:
+        extract_args = []
+        if args.limit:
+            extract_args.extend(["--limit", str(args.limit)])
+        if args.force:
+            extract_args.append("--force")
+        success, _ = run_step(
+            "extract_obiect_contract.py", extract_args, "Extract obiect_contract (regex)"
+        )
+        results["extract"] = success
+
+    # Step 5: Deduce CPV codes via embedding similarity
+    if "cpv" in steps_to_run:
+        cpv_args = []
+        if args.limit:
+            cpv_args.extend(["--limit", str(args.limit)])
+        success, _ = run_step(
+            "deduce_cpv.py", cpv_args, "Deduce CPV codes (embedding similarity)"
+        )
+        results["cpv"] = success
 
     # Pipeline summary
     total_elapsed = time.time() - pipeline_start
