@@ -270,16 +270,19 @@ class CNSCDecisionParser:
             re.IGNORECASE
         ),
 
-        # Date patterns
+        # Date patterns — used only on header area (first ~500 chars)
+        # "Data:" is the most reliable marker (unique to the header)
+        # "Ședința publică din" is also reliable
+        # Plain "din" is too generic (matches references to other dates)
         "date_text": re.compile(
-            r"(?:Data|din)\s*[:\s]*(\d{1,2})\s+"
+            r"(?:Data|Ședința\s+publică\s+din)\s*[:\s]*(\d{1,2})\s+"
             r"(ianuarie|februarie|martie|aprilie|mai|iunie|"
             r"iulie|august|septembrie|octombrie|noiembrie|decembrie)\s+"
             r"(\d{4})",
             re.IGNORECASE
         ),
         "date_numeric": re.compile(
-            r"(?:Data|din)\s*[:\s]*(\d{1,2})[.\-/](\d{1,2})[.\-/](\d{4})"
+            r"(?:Data|Ședința\s+publică\s+din)\s*[:\s]*(\d{1,2})[.\-/](\d{1,2})[.\-/](\d{4})"
         ),
 
         # CPV codes: "45233140-2"
@@ -594,8 +597,9 @@ class CNSCDecisionParser:
             decision.complet = match.group(2).upper()
             decision.numar_decizie = int(match.group(3))
 
-        # Extract date
-        decision.data_decizie = self._extract_date(text)
+        # Extract date — search only in header area (first 500 chars)
+        # to avoid matching dates from referenced laws/documents in the body
+        decision.data_decizie = self._extract_date(text[:500])
 
         # Extract CPV if not from filename
         if not decision.cod_cpv:
@@ -651,31 +655,38 @@ class CNSCDecisionParser:
 
     @staticmethod
     def _is_anonymized(text: str) -> bool:
-        """Check if text is anonymized (dots/ellipsis replacing real content).
+        """Check if text is anonymized (dots/ellipsis/placeholders replacing real content).
 
         CNSC decisions are frequently anonymized with patterns like:
         - "......... SRL", "... SRL", "..... S.A."
+        - "SC (...) S.R.L.", "(...) SRL", "SC (…) S.A."
         - ".........", "...", "……"
-        - "XXXXXXX"
+        - "XXXXXXX", "_____"
         """
         if not text:
             return True
         cleaned = text.strip().rstrip(".,;:-–—")
-        # Remove common suffixes to check what's left
+        # Remove common prefixes/suffixes (SC, SRL, SA, etc.) to check core
+        cleaned_core = re.sub(
+            r"^\s*S\.?C\.?\s*", "", cleaned, flags=re.IGNORECASE,
+        )
         cleaned_core = re.sub(
             r"\s*(?:S\.?R\.?L\.?|S\.?A\.?|S\.?C\.?|S\.?N\.?C\.?|R\.?A\.?)\s*$",
-            "", cleaned, flags=re.IGNORECASE,
+            "", cleaned_core, flags=re.IGNORECASE,
         ).strip()
         if not cleaned_core:
             return True
-        # Count dots vs alphanumeric
-        dots = sum(1 for c in cleaned_core if c in ".…·•")
-        alnum = sum(1 for c in cleaned_core if c.isalnum())
-        # If more dots than alphanumeric chars, it's anonymized
-        if dots > alnum:
+        # Detect parenthesized placeholders: (...), (…), (xxx), (___)
+        if re.fullmatch(r"[(\[{][\s.…·•_x*]+[)\]}]", cleaned_core, re.IGNORECASE):
             return True
-        # Pure dots/ellipsis/x-es
-        if re.fullmatch(r"[.\s…·•x]+", cleaned_core, re.IGNORECASE):
+        # Count anonymization chars vs alphanumeric
+        anon_chars = sum(1 for c in cleaned_core if c in ".…·•_()[]{}*")
+        alnum = sum(1 for c in cleaned_core if c.isalnum())
+        # If more anonymization chars than alphanumeric, it's anonymized
+        if anon_chars > alnum:
+            return True
+        # Pure dots/ellipsis/x-es/underscores
+        if re.fullmatch(r"[.\s…·•x_*()]+", cleaned_core, re.IGNORECASE):
             return True
         return False
 
