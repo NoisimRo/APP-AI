@@ -1009,9 +1009,9 @@ class CNSCDecisionParser:
         if self.PATTERNS["hg_394"].search(text):
             return "achizitii_sectoriale"
 
-        # Check for "entitate contractantă" (strong indicator of sectorial)
-        if self.PATTERNS["entitate_contractanta"].search(text):
-            return "achizitii_sectoriale"
+        # Note: "entitate contractantă" removed as indicator — gives too many
+        # false positives (term used in various legal contexts, not just L99).
+        # Only explicit Legea 99/2016 or HG 394/2016 references are reliable.
 
         # Default: achiziții publice (Legea 98/2016)
         # Reinforced by HG 395/2016 presence (norme aplicare Legea 98)
