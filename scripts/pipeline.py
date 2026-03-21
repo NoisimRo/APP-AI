@@ -3,20 +3,24 @@
 
 Orchestrates the full data pipeline:
   1. IMPORT  — Download new decisions from GCS → database
-  2. ANALYZE — Extract ArgumentareCritica via LLM (Gemini)
+  2. ANALYZE — Extract ArgumentareCritica + obiect_contract via LLM
   3. EMBED   — Generate vector embeddings for RAG search
-  4. EXTRACT — Extract obiect_contract from text (regex, instant)
-  5. CPV     — Deduce CPV codes via embedding similarity
+  4. CPV     — Deduce CPV codes via embedding similarity
 
 Each step is idempotent: it skips already-processed records.
 Safe to run repeatedly (daily cron, Cloud Scheduler, manual).
 
+Note: obiect_contract is now extracted by the LLM during analysis (step 2).
+The regex-based extract_obiect_contract.py script remains available as
+a standalone fallback for decisions not yet analyzed by LLM:
+    python scripts/extract_obiect_contract.py
+
 Usage:
-    python scripts/pipeline.py                    # Full pipeline (all 5 steps)
+    python scripts/pipeline.py                    # Full pipeline (all 4 steps)
     python scripts/pipeline.py --step analyze     # Only analysis
     python scripts/pipeline.py --step embed       # Only embeddings
-    python scripts/pipeline.py --step extract     # Only obiect_contract extraction
     python scripts/pipeline.py --step cpv         # Only CPV deduction
+    python scripts/pipeline.py --step extract     # Retroactive regex extraction (standalone)
     python scripts/pipeline.py --daily            # Alias for full pipeline (for cron)
     python scripts/pipeline.py --limit 10         # Limit each step to 10 records (testing)
 
@@ -88,11 +92,11 @@ def parse_imported_count(output: str) -> int | None:
 
 def main():
     parser = argparse.ArgumentParser(
-        description="ExpertAP unified data pipeline: import → analyze → embed → extract → cpv"
+        description="ExpertAP unified data pipeline: import → analyze → embed → cpv"
     )
     parser.add_argument(
         "--step",
-        choices=["import", "analyze", "embed", "extract", "cpv"],
+        choices=["import", "analyze", "embed", "cpv", "extract"],
         help="Run only a specific step (default: all steps)",
     )
     parser.add_argument(
@@ -122,10 +126,10 @@ def main():
     if args.step:
         steps_to_run = [args.step]
     else:
-        # Full pipeline
+        # Full pipeline: import → analyze → embed → cpv
         if not args.skip_import:
             steps_to_run.append("import")
-        steps_to_run.extend(["analyze", "embed", "extract", "cpv"])
+        steps_to_run.extend(["analyze", "embed", "cpv"])
 
     pipeline_start = time.time()
     results = {}
@@ -153,7 +157,7 @@ def main():
         if new_imported is not None:
             print(f"\n>>> New decisions imported: {new_imported}")
 
-    # Step 2: LLM Analysis
+    # Step 2: LLM Analysis (ArgumentareCritica + obiect_contract + rezumat)
     if "analyze" in steps_to_run:
         analyze_args = []
         if args.limit:
@@ -169,11 +173,12 @@ def main():
             if args.force:
                 analyze_args.append("--force")
             success, _ = run_step(
-                "generate_analysis.py", analyze_args, "LLM Analysis (ArgumentareCritica)"
+                "generate_analysis.py", analyze_args,
+                "LLM Analysis (ArgumentareCritica + obiect_contract)"
             )
             results["analyze"] = success
 
-    # Step 3: Embeddings
+    # Step 3: Embeddings (ArgumentareCritica vectors for RAG)
     if "embed" in steps_to_run:
         embed_args = []
         if args.limit:
@@ -185,19 +190,7 @@ def main():
         )
         results["embed"] = success
 
-    # Step 4: Extract obiect_contract (regex, instant, no LLM)
-    if "extract" in steps_to_run:
-        extract_args = []
-        if args.limit:
-            extract_args.extend(["--limit", str(args.limit)])
-        if args.force:
-            extract_args.append("--force")
-        success, _ = run_step(
-            "extract_obiect_contract.py", extract_args, "Extract obiect_contract (regex)"
-        )
-        results["extract"] = success
-
-    # Step 5: Deduce CPV codes via embedding similarity
+    # Step 4: Deduce CPV codes via embedding similarity
     if "cpv" in steps_to_run:
         cpv_args = []
         if args.limit:
@@ -206,6 +199,19 @@ def main():
             "deduce_cpv.py", cpv_args, "Deduce CPV codes (embedding similarity)"
         )
         results["cpv"] = success
+
+    # Standalone: Extract obiect_contract via regex (retroactive fallback)
+    if "extract" in steps_to_run:
+        extract_args = []
+        if args.limit:
+            extract_args.extend(["--limit", str(args.limit)])
+        if args.force:
+            extract_args.append("--force")
+        success, _ = run_step(
+            "extract_obiect_contract.py", extract_args,
+            "Extract obiect_contract (regex fallback)"
+        )
+        results["extract"] = success
 
     # Pipeline summary
     total_elapsed = time.time() - pipeline_start
