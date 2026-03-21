@@ -12,8 +12,8 @@ Quality filters (to avoid assigning wrong CPV codes):
 - Text validation: min 3 real words, min 10 alphanumeric chars, max 70% junk
 - Procedural text truncation: cuts "s-a solicitat", "s-au solicitat" etc.
 - Boilerplate detection: rejects generic procurement phrasing without specifics
-- Similarity threshold: default 0.804
-- Confidence gap: top1 - top2 must be >= 0.01 (CPV codes have natural overlap)
+- Similarity threshold: default 0.75 (an approximate CPV is better than none)
+- Confidence gap: disabled by default (CPV nomenclator has too much semantic overlap)
 
 Usage:
     python scripts/deduce_cpv.py                    # Deduce for all without CPV
@@ -44,8 +44,8 @@ from app.models.decision import DecizieCNSC, NomenclatorCPV
 
 logger = get_logger(__name__)
 
-DEFAULT_THRESHOLD = 0.804
-DEFAULT_MIN_GAP = 0.01
+DEFAULT_THRESHOLD = 0.75
+DEFAULT_MIN_GAP = 0.0  # Disabled — CPV nomenclator has too much semantic overlap
 MIN_ALNUM_CHARS = 10
 MIN_WORD_COUNT = 3
 MAX_JUNK_RATIO = 0.70
