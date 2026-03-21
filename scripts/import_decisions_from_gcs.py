@@ -213,6 +213,8 @@ class DecisionImporter:
                 intervenienti=parsed.intervenienti,
                 text_integral=parsed.text_integral,
                 obiect_contract=parsed.obiect_contract,
+                criteriu_atribuire=parsed.criteriu_atribuire,
+                numar_oferte=parsed.numar_oferte,
                 parse_warnings=parsed.parse_warnings,
             )
 
