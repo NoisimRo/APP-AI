@@ -8,7 +8,7 @@ from uuid import uuid4
 
 from fastapi import APIRouter, HTTPException, UploadFile, File, Query, Depends
 from pydantic import BaseModel, Field
-from sqlalchemy import select, func, or_, cast, String
+from sqlalchemy import select, func, or_, and_, cast, case, String
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.logging import get_logger
@@ -90,6 +90,15 @@ async def list_decisions(
     cpv_codes: str | None = Query(None, description="Comma-separated CPV codes to filter by (e.g. 45000000-7,71000000-8)"),
     categorie: str | None = Query(None, description="Filter by CPV category: Furnizare, Servicii, Lucrări"),
     clasa: str | None = Query(None, description="Filter by CPV product class"),
+    motiv_respingere: str | None = Query(None, description="Comma-separated rejection reasons"),
+    complet: str | None = Query(None, description="Comma-separated panel codes (C1-C20)"),
+    domeniu_legislativ: str | None = Query(None, description="Comma-separated legislative domains"),
+    tip_procedura: str | None = Query(None, description="Comma-separated procedure types"),
+    criteriu_atribuire: str | None = Query(None, description="Comma-separated award criteria"),
+    data_decizie_from: str | None = Query(None, description="Date range start (ISO format)"),
+    data_decizie_to: str | None = Query(None, description="Date range end (ISO format)"),
+    valoare_min: float | None = Query(None, description="Minimum estimated value"),
+    valoare_max: float | None = Query(None, description="Maximum estimated value"),
     session: AsyncSession = Depends(get_session),
 ) -> DecisionListResponse:
     """
@@ -162,8 +171,60 @@ async def list_decisions(
     if clasa:
         query = query.where(DecizieCNSC.cpv_clasa == clasa)
 
+    # Filter by rejection reason
+    if motiv_respingere:
+        reasons = [r.strip() for r in motiv_respingere.split(",") if r.strip()]
+        if reasons:
+            query = query.where(DecizieCNSC.motiv_respingere.in_(reasons))
+
+    # Filter by CNSC panel
+    if complet:
+        panels = [p.strip() for p in complet.split(",") if p.strip()]
+        if panels:
+            query = query.where(DecizieCNSC.complet.in_(panels))
+
+    # Filter by legislative domain
+    if domeniu_legislativ:
+        domains = [d.strip() for d in domeniu_legislativ.split(",") if d.strip()]
+        if domains:
+            query = query.where(DecizieCNSC.domeniu_legislativ.in_(domains))
+
+    # Filter by procedure type
+    if tip_procedura:
+        procs = [p.strip() for p in tip_procedura.split(",") if p.strip()]
+        if procs:
+            query = query.where(DecizieCNSC.tip_procedura.in_(procs))
+
+    # Filter by award criterion
+    if criteriu_atribuire:
+        criteria = [c.strip() for c in criteriu_atribuire.split(",") if c.strip()]
+        if criteria:
+            query = query.where(DecizieCNSC.criteriu_atribuire.in_(criteria))
+
+    # Filter by decision date range
+    if data_decizie_from:
+        try:
+            dt_from = datetime.fromisoformat(data_decizie_from)
+            query = query.where(DecizieCNSC.data_decizie >= dt_from)
+        except ValueError:
+            pass
+
+    if data_decizie_to:
+        try:
+            dt_to = datetime.fromisoformat(data_decizie_to)
+            query = query.where(DecizieCNSC.data_decizie <= dt_to)
+        except ValueError:
+            pass
+
+    # Filter by estimated value range
+    if valoare_min is not None:
+        query = query.where(DecizieCNSC.valoare_estimata >= valoare_min)
+    if valoare_max is not None:
+        query = query.where(DecizieCNSC.valoare_estimata <= valoare_max)
+
     if search:
-        search_term = f"%{search.strip()}%"
+        search_clean = search.strip()
+        search_term = f"%{search_clean}%"
 
         # Search CPV nomenclator for matching descriptions → get CPV codes
         cpv_subquery = (
@@ -180,6 +241,7 @@ async def list_decisions(
                 DecizieCNSC.cpv_descriere.ilike(search_term),
                 DecizieCNSC.cpv_categorie.ilike(search_term),
                 DecizieCNSC.cpv_clasa.ilike(search_term),
+                DecizieCNSC.obiect_contract.ilike(search_term),
                 DecizieCNSC.filename.ilike(search_term),
                 # Match decisions whose CPV code appears in nomenclator
                 # entries matching the search term
@@ -187,8 +249,27 @@ async def list_decisions(
             )
         )
 
-    # Order by date descending
-    query = query.order_by(DecizieCNSC.data_decizie.desc().nullslast())
+        # Search relevance scoring: exact BO match first
+        bo_match = re.match(r'^BO(\d{4})[_\s](\d+)$', search_clean, re.IGNORECASE)
+        if bo_match:
+            year_val, bo_val = int(bo_match.group(1)), int(bo_match.group(2))
+            relevance = case(
+                (and_(DecizieCNSC.an_bo == year_val, DecizieCNSC.numar_bo == bo_val), 0),
+                (DecizieCNSC.numar_bo == bo_val, 1),
+                else_=2,
+            )
+        else:
+            # For non-BO searches, boost exact matches
+            relevance = case(
+                (DecizieCNSC.cod_cpv == search_clean, 0),
+                (DecizieCNSC.contestator.ilike(search_clean), 0),
+                (DecizieCNSC.autoritate_contractanta.ilike(search_clean), 0),
+                else_=1,
+            )
+        query = query.order_by(relevance, DecizieCNSC.data_decizie.desc().nullslast())
+    else:
+        # Default: order by date descending
+        query = query.order_by(DecizieCNSC.data_decizie.desc().nullslast())
 
     # Get total count
     count_query = select(func.count()).select_from(query.subquery())
@@ -570,6 +651,96 @@ async def get_critici_filter_options(
         {"code": row.cod, "count": row.count}
         for row in result
     ]
+
+
+@router.get("/filters/motiv-respingere")
+async def get_motiv_respingere_options(
+    session: AsyncSession = Depends(get_session),
+):
+    """Get distinct rejection reasons with counts."""
+    if not is_db_available():
+        return []
+
+    query = (
+        select(DecizieCNSC.motiv_respingere, func.count().label("count"))
+        .where(DecizieCNSC.motiv_respingere.isnot(None))
+        .group_by(DecizieCNSC.motiv_respingere)
+        .order_by(func.count().desc())
+    )
+    result = await session.execute(query)
+    return [{"name": row.motiv_respingere, "count": row.count} for row in result]
+
+
+@router.get("/filters/complete")
+async def get_complet_options(
+    session: AsyncSession = Depends(get_session),
+):
+    """Get distinct CNSC panel codes (C1-C20) with counts."""
+    if not is_db_available():
+        return []
+
+    query = (
+        select(DecizieCNSC.complet, func.count().label("count"))
+        .where(DecizieCNSC.complet.isnot(None))
+        .group_by(DecizieCNSC.complet)
+        .order_by(DecizieCNSC.complet)
+    )
+    result = await session.execute(query)
+    return [{"name": row.complet, "count": row.count} for row in result]
+
+
+@router.get("/filters/domenii")
+async def get_domeniu_options(
+    session: AsyncSession = Depends(get_session),
+):
+    """Get distinct legislative domains with counts."""
+    if not is_db_available():
+        return []
+
+    query = (
+        select(DecizieCNSC.domeniu_legislativ, func.count().label("count"))
+        .where(DecizieCNSC.domeniu_legislativ.isnot(None))
+        .group_by(DecizieCNSC.domeniu_legislativ)
+        .order_by(func.count().desc())
+    )
+    result = await session.execute(query)
+    return [{"name": row.domeniu_legislativ, "count": row.count} for row in result]
+
+
+@router.get("/filters/tipuri-procedura")
+async def get_tip_procedura_options(
+    session: AsyncSession = Depends(get_session),
+):
+    """Get distinct procedure types with counts."""
+    if not is_db_available():
+        return []
+
+    query = (
+        select(DecizieCNSC.tip_procedura, func.count().label("count"))
+        .where(DecizieCNSC.tip_procedura.isnot(None))
+        .group_by(DecizieCNSC.tip_procedura)
+        .order_by(func.count().desc())
+    )
+    result = await session.execute(query)
+    return [{"name": row.tip_procedura, "count": row.count} for row in result]
+
+
+@router.get("/filters/criterii-atribuire")
+async def get_criteriu_atribuire_options(
+    session: AsyncSession = Depends(get_session),
+):
+    """Get distinct award criteria with counts."""
+    if not is_db_available():
+        return []
+
+    query = (
+        select(DecizieCNSC.criteriu_atribuire, func.count().label("count"))
+        .where(DecizieCNSC.criteriu_atribuire.isnot(None))
+        .group_by(DecizieCNSC.criteriu_atribuire)
+        .order_by(func.count().desc())
+    )
+    result = await session.execute(query)
+    return [{"name": row.criteriu_atribuire, "count": row.count} for row in result]
 
 
 @router.get("/stats/overview")
