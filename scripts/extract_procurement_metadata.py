@@ -41,6 +41,7 @@ logger = get_logger(__name__)
 
 # All extractable fields
 FIELDS = [
+    "data_decizie",
     "criteriu_atribuire",
     "numar_oferte",
     "valoare_estimata",
@@ -105,6 +106,19 @@ async def main():
 
             changes = []
             any_change = False
+
+            # data_decizie — always re-extract (many existing values are wrong)
+            data_decizie = cnsc_parser._extract_date(text[:1000])
+            if data_decizie:
+                old_date = decision.data_decizie
+                if old_date != data_decizie:
+                    old_str = old_date.strftime('%d.%m.%Y') if old_date else 'None'
+                    new_str = data_decizie.strftime('%d.%m.%Y')
+                    changes.append(f"data_decizie={old_str}->{new_str}")
+                    if not args.dry_run:
+                        decision.data_decizie = data_decizie
+                    counters["data_decizie"] += 1
+                    any_change = True
 
             # criteriu_atribuire
             criteriu = cnsc_parser._extract_criteriu_atribuire(text)

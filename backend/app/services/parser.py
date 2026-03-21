@@ -412,6 +412,11 @@ class CNSCDecisionParser:
         ),
 
         # Legislative domain detection
+        # Legea 98/2016 = achiziții publice
+        "legea_98": re.compile(
+            r"Leg(?:ea|ii)\s+(?:nr\.?\s*)?98/2016",
+            re.IGNORECASE
+        ),
         # Legea 99/2016 = achiziții sectoriale
         "legea_99": re.compile(
             r"Leg(?:ea|ii)\s+(?:nr\.?\s*)?99/2016",
@@ -770,9 +775,10 @@ class CNSCDecisionParser:
             decision.complet = match.group(2).upper()
             decision.numar_decizie = int(match.group(3))
 
-        # Extract date — search only in header area (first 500 chars)
-        # to avoid matching dates from referenced laws/documents in the body
-        decision.data_decizie = self._extract_date(text[:500])
+        # Extract date — search only in header area (first 1000 chars)
+        # to avoid matching dates from referenced laws/documents in the body.
+        # Note: "Data: DD.MM.YYYY" is typically at char 490-600 (after Legea 101 preamble)
+        decision.data_decizie = self._extract_date(text[:1000])
 
         # Extract CPV if not from filename
         if not decision.cod_cpv:
@@ -989,32 +995,29 @@ class CNSCDecisionParser:
             flags=re.IGNORECASE
         )
 
-        # Check for Legea 100/2016 (concesiuni)
-        if self.PATTERNS["legea_100"].search(search_text):
-            return "concesiuni"
+        # If Legea 98/2016 or HG 395/2016 is explicitly invoked, it's achiziții publice
+        # — cannot be concesiuni or sectoriale
+        has_legea_98 = self.PATTERNS["legea_98"].search(search_text)
+        has_hg_395 = self.PATTERNS["hg_395"].search(text)
 
-        # Check for Legea 99/2016 (sectoriale)
-        if self.PATTERNS["legea_99"].search(search_text):
-            return "achizitii_sectoriale"
+        if not has_legea_98 and not has_hg_395:
+            # Only check for L99/L100 if L98 is NOT present
+            if self.PATTERNS["legea_100"].search(search_text):
+                return "concesiuni"
 
-        # Check for "concesiune de lucrări/servicii" (excluding Legea 101 preamble)
-        if self.PATTERNS["concesiune"].search(search_text):
-            return "concesiuni"
+            if self.PATTERNS["legea_99"].search(search_text):
+                return "achizitii_sectoriale"
 
-        # Check for "achiziții/contracte sectoriale"
-        if self.PATTERNS["sectoriale"].search(search_text):
-            return "achizitii_sectoriale"
+            if self.PATTERNS["concesiune"].search(search_text):
+                return "concesiuni"
 
-        # Check for HG 394/2016 (norme aplicare Legea 99 = sectoriale)
-        if self.PATTERNS["hg_394"].search(text):
-            return "achizitii_sectoriale"
+            if self.PATTERNS["sectoriale"].search(search_text):
+                return "achizitii_sectoriale"
 
-        # Note: "entitate contractantă" removed as indicator — gives too many
-        # false positives (term used in various legal contexts, not just L99).
-        # Only explicit Legea 99/2016 or HG 394/2016 references are reliable.
+            if self.PATTERNS["hg_394"].search(text):
+                return "achizitii_sectoriale"
 
         # Default: achiziții publice (Legea 98/2016)
-        # Reinforced by HG 395/2016 presence (norme aplicare Legea 98)
         return "achizitii_publice"
 
     def _extract_tip_procedura(self, text: str) -> Optional[str]:
