@@ -203,6 +203,10 @@ class ParsedDecision:
     # Contract object (extracted from introductory text)
     obiect_contract: Optional[str] = None
 
+    # Procurement metadata (extracted from text)
+    criteriu_atribuire: Optional[str] = None
+    numar_oferte: Optional[int] = None
+
     # Sections (populated by section parser)
     sectiuni: list[DecisionSection] = field(default_factory=list)
 
@@ -235,6 +239,21 @@ class ParsedDecision:
 # =============================================================================
 # PARSER IMPLEMENTATION
 # =============================================================================
+
+WORD_TO_NUMBER = {
+    "o": 1, "un": 1, "una": 1, "două": 2, "trei": 3, "patru": 4,
+    "cinci": 5, "șase": 6, "șapte": 7, "opt": 8, "nouă": 9, "zece": 10,
+    "unsprezece": 11, "doisprezece": 12,
+}
+
+# Canonical forms for award criteria
+CRITERIU_CANONICAL = {
+    "calitate-preț": "cel mai bun raport calitate-preț",
+    "calitate-cost": "cel mai bun raport calitate-cost",
+    "costul": "costul cel mai scăzut",
+    "prețul": "prețul cel mai scăzut",
+}
+
 
 class CNSCDecisionParser:
     """Parser for CNSC decision text files.
@@ -318,6 +337,35 @@ class CNSCDecisionParser:
         # Legal articles
         "article": re.compile(
             r"art(?:icol)?\.?\s*(\d+)(?:\s*alin(?:eat)?\.?\s*\(?\d+\)?)?",
+            re.IGNORECASE
+        ),
+
+        # Award criteria — matches patterns like:
+        #   "criteriul de atribuire al contractului este „prețul cel mai scăzut""
+        #   "criteriul de atribuire „cel mai bun raport calitate-preț""
+        #   "criteriul de atribuire fiind „prețul cel mai scăzut""
+        # Captures the quoted or unquoted criterion name
+        "criteriu_atribuire": re.compile(
+            r"criteriu(?:l)?\s+de\s+atribuire\s+(?:[\w\s,]+?\s+)?(?:(?:este|fiind)\s+)?"
+            r"[\u201e\"\u00ab]?\s*((?:cel\s+mai\s+bun\s+raport\s+calitate\s*[-\u2013\u2014\s]\s*(?:pre[tț]|cost))"
+            r"|(?:costul\s+cel\s+mai\s+sc[aă]zut)"
+            r"|(?:pre[tț]ul\s+cel\s+mai\s+sc[aă]zut))\s*[\u201d\"\u00bb]?",
+            re.IGNORECASE
+        ),
+
+        # Number of offers — multiple patterns
+        # "au fost depuse trei oferte", "au depus ofertă 5 operatori"
+        # "3 din cele 4 oferte depuse", "cele 4 oferte depuse"
+        "numar_oferte_text": re.compile(
+            r"au\s+fost\s+depuse\s+(o|două|trei|patru|cinci|șase|șapte|opt|nouă|zece)\s+oferte?",
+            re.IGNORECASE
+        ),
+        "numar_oferte_cifra": re.compile(
+            r"au\s+depus\s+ofertă\s+(\d+)\s+operatori",
+            re.IGNORECASE
+        ),
+        "numar_oferte_din_cele": re.compile(
+            r"(?:din\s+)?cele\s+(\d+)\s+oferte\s+depuse",
             re.IGNORECASE
         ),
     }
@@ -615,6 +663,10 @@ class CNSCDecisionParser:
             if decision.coduri_critici:
                 decision.tip_contestatie = self._determine_contest_type(decision.coduri_critici)
 
+        # Extract award criterion and number of offers
+        decision.criteriu_atribuire = self._extract_criteriu_atribuire(text)
+        decision.numar_oferte = self._extract_numar_oferte(text)
+
     def _extract_date(self, text: str) -> Optional[datetime]:
         """Extract date from text."""
         # Try text format first (e.g., "10 decembrie 2025")
@@ -638,6 +690,57 @@ class CNSCDecisionParser:
                 return datetime(year, month, day)
             except ValueError:
                 pass
+
+        return None
+
+    def _extract_criteriu_atribuire(self, text: str) -> Optional[str]:
+        """Extract award criterion from decision text.
+
+        Returns one of 4 canonical forms:
+        - "cel mai bun raport calitate-preț"
+        - "cel mai bun raport calitate-cost"
+        - "costul cel mai scăzut"
+        - "prețul cel mai scăzut"
+        """
+        match = self.PATTERNS["criteriu_atribuire"].search(text)
+        if match:
+            raw = match.group(1).strip().lower()
+            # Normalize to canonical form
+            raw_normalized = re.sub(r"\s+", " ", raw)
+            raw_normalized = re.sub(r"[–—]", "-", raw_normalized)
+            if "calitate" in raw_normalized and "cost" in raw_normalized:
+                return "cel mai bun raport calitate-cost"
+            elif "calitate" in raw_normalized and "preț" in raw_normalized:
+                return "cel mai bun raport calitate-preț"
+            elif "costul" in raw_normalized:
+                return "costul cel mai scăzut"
+            elif "prețul" in raw_normalized:
+                return "prețul cel mai scăzut"
+        return None
+
+    def _extract_numar_oferte(self, text: str) -> Optional[int]:
+        """Extract number of offers submitted from decision text.
+
+        Looks for patterns like:
+        - "au fost depuse trei oferte"
+        - "au depus ofertă 5 operatori economici"
+        - "cele 4 oferte depuse"
+        """
+        # Pattern 1: "au fost depuse trei/patru/... oferte"
+        match = self.PATTERNS["numar_oferte_text"].search(text)
+        if match:
+            word = match.group(1).lower()
+            return WORD_TO_NUMBER.get(word)
+
+        # Pattern 2: "au depus ofertă 5 operatori"
+        match = self.PATTERNS["numar_oferte_cifra"].search(text)
+        if match:
+            return int(match.group(1))
+
+        # Pattern 3: "cele 4 oferte depuse" / "3 din cele 4 oferte depuse"
+        match = self.PATTERNS["numar_oferte_din_cele"].search(text)
+        if match:
+            return int(match.group(1))
 
         return None
 
