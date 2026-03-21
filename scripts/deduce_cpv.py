@@ -31,6 +31,7 @@ Usage:
 
 import asyncio
 import argparse
+import re
 import sys
 import time
 from pathlib import Path
@@ -50,6 +51,45 @@ logger = get_logger(__name__)
 
 DEFAULT_THRESHOLD = 0.70
 BATCH_SIZE = 20  # Embedding API batch size
+
+# ---------------------------------------------------------------------------
+# Smart text extraction for CPV matching
+# ---------------------------------------------------------------------------
+
+# Patterns that indicate where the contract object description starts
+_OBIECT_PATTERNS = [
+    re.compile(
+        r"(?:având\s+ca\s+obiect|obiectul\s+(?:contractului|achiziției|acordului[\s-]+cadru)"
+        r"|obiect\s+(?:al\s+)?(?:contractului|achiziției)"
+        r"|privind\s+(?:achiziția|furnizarea|prestarea|execuția)"
+        r"|în\s+vederea\s+(?:încheierii|atribuirii))",
+        re.IGNORECASE,
+    ),
+]
+
+
+def extract_relevant_text(text: str, max_len: int = 1500) -> str | None:
+    """Extract the most relevant fragment from text_integral for CPV matching.
+
+    Instead of blindly taking the first 3000 chars (which contain boilerplate),
+    find the zone around 'obiectul contractului' / 'având ca obiect' and extract
+    a window around it.  Falls back to a shorter prefix if no pattern matches.
+    """
+    if not text:
+        return None
+
+    for pat in _OBIECT_PATTERNS:
+        m = pat.search(text[:8000])  # search in first 8000 chars
+        if m:
+            start = max(0, m.start() - 100)
+            end = min(len(text), m.start() + max_len)
+            return text[start:end].strip()
+
+    # Fallback: skip first 500 chars (header/boilerplate) and take next chunk
+    if len(text) > 600:
+        return text[500:500 + max_len].strip()
+
+    return text[:max_len].strip() if len(text) > 20 else None
 
 
 def cosine_similarity(a: list[float], b: list[float]) -> float:
@@ -181,10 +221,22 @@ async def main():
         start_time = time.time()
 
         for i, decision in enumerate(decisions):
-            # Get text for embedding: prefer obiect_contract, fallback to intro text
-            query_text = decision.obiect_contract
-            if not query_text or len(query_text) < 10:
-                query_text = decision.text_integral[:3000] if decision.text_integral else None
+            # Get text for embedding — priority order:
+            # 1. obiect_contract (most specific, regex-extracted)
+            # 2. rezumat (LLM-generated summary)
+            # 3. Smart extraction from text_integral (zone around "obiectul contractului")
+            query_text = None
+            text_source = None
+
+            if decision.obiect_contract and len(decision.obiect_contract) >= 10:
+                query_text = decision.obiect_contract
+                text_source = "obiect_contract"
+            elif decision.rezumat and len(decision.rezumat) >= 20:
+                query_text = decision.rezumat
+                text_source = "rezumat"
+            elif decision.text_integral:
+                query_text = extract_relevant_text(decision.text_integral)
+                text_source = "text_integral (smart)"
 
             if not query_text or len(query_text) < 10:
                 stats["no_text"] += 1
@@ -201,7 +253,10 @@ async def main():
 
                 if best["similarity"] >= args.threshold:
                     print(f"  [{i+1}] {decision.external_id}: {best['cod_cpv']} "
-                          f"({best['descriere'][:60]}) — sim={best['similarity']:.3f}")
+                          f"({best['descriere'][:60]}) — sim={best['similarity']:.3f} "
+                          f"[src: {text_source}]")
+                    if args.dry_run:
+                        print(f"         query: {query_text[:120]}...")
 
                     if not args.dry_run:
                         decision.cod_cpv = best["cod_cpv"]
@@ -214,7 +269,10 @@ async def main():
                     stats["assigned"] += 1
                 else:
                     print(f"  [{i+1}] {decision.external_id}: AMBIGUOUS — "
-                          f"best={best['cod_cpv']} ({best['descriere'][:40]}) sim={best['similarity']:.3f}")
+                          f"best={best['cod_cpv']} ({best['descriere'][:40]}) sim={best['similarity']:.3f} "
+                          f"[src: {text_source}]")
+                    if args.dry_run:
+                        print(f"         query: {query_text[:120]}...")
                     if args.top_k > 1:
                         for m in matches[1:]:
                             print(f"         alt: {m['cod_cpv']} ({m['descriere'][:40]}) sim={m['similarity']:.3f}")
