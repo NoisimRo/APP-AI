@@ -206,6 +206,10 @@ class ParsedDecision:
     # Procurement metadata (extracted from text)
     criteriu_atribuire: Optional[str] = None
     numar_oferte: Optional[int] = None
+    valoare_estimata: Optional[float] = None
+    moneda: str = "RON"
+    numar_anunt_participare: Optional[str] = None
+    data_raport_procedura: Optional[datetime] = None
 
     # Sections (populated by section parser)
     sectiuni: list[DecisionSection] = field(default_factory=list)
@@ -361,11 +365,45 @@ class CNSCDecisionParser:
             re.IGNORECASE
         ),
         "numar_oferte_cifra": re.compile(
-            r"au\s+depus\s+ofertă\s+(\d+)\s+operatori",
+            r"au\s+depus\s+ofert[eă]\s+(\d+)\s+operatori",
             re.IGNORECASE
         ),
         "numar_oferte_din_cele": re.compile(
             r"(?:din\s+)?cele\s+(\d+)\s+oferte\s+depuse",
+            re.IGNORECASE
+        ),
+        # "au depus oferte 4 operatori" (inverted order)
+        "numar_oferte_inv": re.compile(
+            r"au\s+depus\s+oferte\s+(\d+)\s+(?:operatori|participanți)",
+            re.IGNORECASE
+        ),
+        # "cei 3 ofertanți", "2 din cei 3 ofertanți"
+        "numar_ofertanti": re.compile(
+            r"(?:din\s+)?ce(?:i|lor)\s+(\d+)\s+ofertanți",
+            re.IGNORECASE
+        ),
+
+        # Valoare estimata — "valoarea estimată a ... este (de) 4.674.769,11 lei"
+        # Decimals are optional: "8.403.350 lei" or "928.836,70 lei"
+        "valoare_estimata": re.compile(
+            r"valoare[a]?\s+(?:total[aă]\s+)?estimat[aă]\s+a\s+"
+            r"(?:contractului|procedurii|acordului[\s\-]+cadru"
+            r"|achiziției)(?:\s+de\s+\w+)?\s+(?:este\s+(?:de\s+)?)?"
+            r"([\d.]+(?:,\d{1,2})?)\s*(lei|RON)",
+            re.IGNORECASE
+        ),
+
+        # Numar anunt participare — "anunțul de participare (simplificat) nr. CN1082102/10.06.2025"
+        "numar_anunt": re.compile(
+            r"anunț(?:ul)?\s+de\s+participare\s+(?:simplificat\s+)?nr\.?\s*"
+            r"((?:SCN|CN|ADV)\d+(?:/[\d.]+)?)",
+            re.IGNORECASE
+        ),
+
+        # Raportul procedurii — "raportul procedurii nr. 42145/26.08.2025"
+        # Date format: nr/DD.MM.YYYY or nr.../DD.MM.YYYY or complex nr like 2/2135/29.04.2025
+        "raport_procedura": re.compile(
+            r"raportul\s+procedurii\s+nr\.?\s*(?:[\d/]+/)?(\d{1,2})[./](\d{1,2})[./](\d{4})",
             re.IGNORECASE
         ),
     }
@@ -667,6 +705,14 @@ class CNSCDecisionParser:
         decision.criteriu_atribuire = self._extract_criteriu_atribuire(text)
         decision.numar_oferte = self._extract_numar_oferte(text)
 
+        # Extract procurement metadata
+        val, mon = self._extract_valoare_estimata(text)
+        decision.valoare_estimata = val
+        if mon:
+            decision.moneda = mon
+        decision.numar_anunt_participare = self._extract_numar_anunt(text)
+        decision.data_raport_procedura = self._extract_data_raport(text)
+
     def _extract_date(self, text: str) -> Optional[datetime]:
         """Extract date from text."""
         # Try text format first (e.g., "10 decembrie 2025")
@@ -742,6 +788,73 @@ class CNSCDecisionParser:
         if match:
             return int(match.group(1))
 
+        # Pattern 4: "au depus oferte 4 operatori" (inverted)
+        match = self.PATTERNS["numar_oferte_inv"].search(text)
+        if match:
+            return int(match.group(1))
+
+        # Pattern 5: "cei 3 ofertanți" / "2 din cei 3 ofertanți"
+        match = self.PATTERNS["numar_ofertanti"].search(text)
+        if match:
+            return int(match.group(1))
+
+        return None
+
+    def _extract_valoare_estimata(self, text: str) -> tuple[Optional[float], Optional[str]]:
+        """Extract estimated value and currency from decision text.
+
+        Returns (value, currency) tuple. Value is float, currency is "RON" or "lei".
+        Skips anonymized values (dots replacing digits).
+        """
+        match = self.PATTERNS["valoare_estimata"].search(text)
+        if match:
+            raw_value = match.group(1)  # e.g., "4.674.769,11"
+            currency = match.group(2).upper()  # "lei" or "RON"
+            # Normalize: "4.674.769,11" -> 4674769.11
+            try:
+                normalized = raw_value.replace(".", "").replace(",", ".")
+                value = float(normalized)
+                # Normalize currency
+                if currency == "LEI":
+                    currency = "RON"
+                return value, currency
+            except ValueError:
+                pass
+        return None, None
+
+    def _extract_numar_anunt(self, text: str) -> Optional[str]:
+        """Extract SEAP participation notice number.
+
+        Patterns:
+        - "anunțul de participare nr. CN1082102/10.06.2025"
+        - "anunțul de participare simplificat nr. SCN1156905/09.12.2025"
+        """
+        match = self.PATTERNS["numar_anunt"].search(text)
+        if match:
+            anunt = match.group(1).strip()
+            # Skip anonymized: "nr. ...." or "nr......"
+            if "." not in anunt.split("/")[0]:  # dots in the SCN part means anonymized
+                return anunt
+            # Check the SCN number part (before /) is actually a number
+            prefix = anunt.split("/")[0] if "/" in anunt else anunt
+            if any(c.isdigit() for c in prefix):
+                return anunt
+        return None
+
+    def _extract_data_raport(self, text: str) -> Optional[datetime]:
+        """Extract procedure report date from decision text.
+
+        Looks for "raportul procedurii nr. XXXXX/DD.MM.YYYY"
+        """
+        match = self.PATTERNS["raport_procedura"].search(text)
+        if match:
+            day = int(match.group(1))
+            month = int(match.group(2))
+            year = int(match.group(3))
+            try:
+                return datetime(year, month, day)
+            except ValueError:
+                pass
         return None
 
     def _extract_parties(self, decision: ParsedDecision, text: str) -> None:

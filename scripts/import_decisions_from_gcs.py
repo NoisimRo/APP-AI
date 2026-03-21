@@ -215,6 +215,10 @@ class DecisionImporter:
                 obiect_contract=parsed.obiect_contract,
                 criteriu_atribuire=parsed.criteriu_atribuire,
                 numar_oferte=parsed.numar_oferte,
+                valoare_estimata=parsed.valoare_estimata,
+                moneda=parsed.moneda,
+                numar_anunt_participare=parsed.numar_anunt_participare,
+                data_raport_procedura=parsed.data_raport_procedura,
                 parse_warnings=parsed.parse_warnings,
             )
 
