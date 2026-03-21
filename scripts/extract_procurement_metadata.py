@@ -1,12 +1,15 @@
 #!/usr/bin/env python3
-"""Retroactive extraction of criteriu_atribuire and numar_oferte for existing decisions.
+"""Retroactive extraction of procurement metadata for existing decisions.
 
 Uses regex patterns (zero LLM calls) to extract:
 - criteriu_atribuire: one of 4 canonical award criteria
 - numar_oferte: number of offers submitted
+- valoare_estimata + moneda: estimated contract value
+- numar_anunt_participare: SEAP participation notice number
+- data_raport_procedura: procedure report date
 
 Features:
-- Skips decisions that already have both fields (idempotent)
+- Skips decisions that already have all fields (idempotent)
 - Per-decision commit (crash-safe)
 - Dry-run mode for review before applying
 - Force mode to re-extract all
@@ -36,6 +39,15 @@ from app.services.parser import CNSCDecisionParser
 
 logger = get_logger(__name__)
 
+# All extractable fields
+FIELDS = [
+    "criteriu_atribuire",
+    "numar_oferte",
+    "valoare_estimata",
+    "numar_anunt_participare",
+    "data_raport_procedura",
+]
+
 
 async def main():
     parser = argparse.ArgumentParser(description="Extract procurement metadata retroactively")
@@ -62,6 +74,9 @@ async def main():
                 or_(
                     DecizieCNSC.criteriu_atribuire.is_(None),
                     DecizieCNSC.numar_oferte.is_(None),
+                    DecizieCNSC.valoare_estimata.is_(None),
+                    DecizieCNSC.numar_anunt_participare.is_(None),
+                    DecizieCNSC.data_raport_procedura.is_(None),
                 )
             )
 
@@ -76,8 +91,7 @@ async def main():
             logger.info("Nothing to process.")
             return
 
-        extracted_criteriu = 0
-        extracted_oferte = 0
+        counters = {f: 0 for f in FIELDS}
         start = time.time()
 
         for i, decision in enumerate(decisions, 1):
@@ -85,30 +99,61 @@ async def main():
             if not text:
                 continue
 
-            # Extract award criterion
-            criteriu = cnsc_parser._extract_criteriu_atribuire(text)
-            numar = cnsc_parser._extract_numar_oferte(text)
-
             changes = []
-            if criteriu and (args.force or not decision.criteriu_atribuire):
-                if args.dry_run:
-                    changes.append(f"criteriu={criteriu}")
-                else:
-                    decision.criteriu_atribuire = criteriu
-                extracted_criteriu += 1
+            any_change = False
 
+            # criteriu_atribuire
+            criteriu = cnsc_parser._extract_criteriu_atribuire(text)
+            if criteriu and (args.force or not decision.criteriu_atribuire):
+                changes.append(f"criteriu={criteriu}")
+                if not args.dry_run:
+                    decision.criteriu_atribuire = criteriu
+                counters["criteriu_atribuire"] += 1
+                any_change = True
+
+            # numar_oferte
+            numar = cnsc_parser._extract_numar_oferte(text)
             if numar and (args.force or not decision.numar_oferte):
-                if args.dry_run:
-                    changes.append(f"numar_oferte={numar}")
-                else:
+                changes.append(f"oferte={numar}")
+                if not args.dry_run:
                     decision.numar_oferte = numar
-                extracted_oferte += 1
+                counters["numar_oferte"] += 1
+                any_change = True
+
+            # valoare_estimata
+            val, mon = cnsc_parser._extract_valoare_estimata(text)
+            if val and (args.force or not decision.valoare_estimata):
+                changes.append(f"valoare={val:,.2f} {mon}")
+                if not args.dry_run:
+                    decision.valoare_estimata = val
+                    if mon:
+                        decision.moneda = mon
+                counters["valoare_estimata"] += 1
+                any_change = True
+
+            # numar_anunt_participare
+            anunt = cnsc_parser._extract_numar_anunt(text)
+            if anunt and (args.force or not decision.numar_anunt_participare):
+                changes.append(f"anunt={anunt}")
+                if not args.dry_run:
+                    decision.numar_anunt_participare = anunt
+                counters["numar_anunt_participare"] += 1
+                any_change = True
+
+            # data_raport_procedura
+            data_rap = cnsc_parser._extract_data_raport(text)
+            if data_rap and (args.force or not decision.data_raport_procedura):
+                changes.append(f"raport={data_rap.strftime('%d.%m.%Y')}")
+                if not args.dry_run:
+                    decision.data_raport_procedura = data_rap
+                counters["data_raport_procedura"] += 1
+                any_change = True
 
             if changes:
                 bo_ref = f"BO{decision.an_bo}_{decision.numar_bo}"
                 logger.info(f"  [{i}/{len(decisions)}] {bo_ref}: {', '.join(changes)}")
 
-            if not args.dry_run and (criteriu or numar):
+            if not args.dry_run and any_change:
                 await session.commit()
 
             if i % 100 == 0:
@@ -116,11 +161,9 @@ async def main():
                 logger.info(f"  Progress: {i}/{len(decisions)} ({elapsed:.1f}s)")
 
         elapsed = time.time() - start
-        logger.info(
-            f"Done in {elapsed:.1f}s. "
-            f"Extracted criteriu_atribuire: {extracted_criteriu}, "
-            f"numar_oferte: {extracted_oferte}"
-        )
+        logger.info(f"Done in {elapsed:.1f}s. Extracted:")
+        for field, count in counters.items():
+            logger.info(f"  {field}: {count}")
         if args.dry_run:
             logger.info("DRY RUN — no changes applied.")
 
