@@ -1,15 +1,16 @@
 #!/usr/bin/env python3
 """Retroactive extraction of obiect_contract for existing decisions.
 
-Uses the same regex patterns from parser.py (zero LLM calls) to extract
-the contract object description from text_integral for decisions that
-were imported before this field existed.
+Uses regex patterns (zero LLM calls) to extract the contract object
+description from text_integral for decisions that were imported before
+this field existed.
 
 Features:
 - Skips decisions that already have obiect_contract (idempotent)
 - Per-decision commit (crash-safe)
 - Dry-run mode for review before applying
 - Force mode to re-extract all
+- Appends CPV code when found near the contract object
 
 Usage:
     python scripts/extract_obiect_contract.py                  # Extract for all missing
@@ -37,43 +38,98 @@ from app.models.decision import DecizieCNSC
 logger = get_logger(__name__)
 
 # ---------------------------------------------------------------------------
-# Regex patterns (mirrored from backend/app/services/parser.py)
+# Regex patterns for contract object extraction
 # ---------------------------------------------------------------------------
 
-# Pattern 1: Quoted contract object near standard markers
-_CONTRACT_OBJECT_QUOTED = re.compile(
+# Marker phrases that precede the contract object
+_MARKER = (
     r"(?:având\s+ca\s+obiect|obiectul\s+(?:contractului|achiziției|acordului[\s-]+cadru)"
     r"|obiect\s+(?:al\s+)?(?:contractului|achiziției))"
-    r"[:\s]*"
-    "[\u201e\"«]"  # opening quote: „ " «
-    r"(.{5,500}?)"
-    "[\u201d\u201c\"»]",  # closing quote: " " " »
+)
+
+# Action words (nominative + genitive-dative forms)
+_ACTION_WORDS = (
+    r"(?:furnizare[ai]?|furnizării"
+    r"|prestare[ai]?|prestării"
+    r"|execuți[ae]|execuției"
+    r"|achiziți[ae]i?|achiziției)"
+)
+
+# CPV suffix: "cod CPV 31681500-8 Aparate de reîncărcare (Rev. 2)"
+# Description between CPV number and (Rev. N) is optional
+_CPV_SUFFIX_RE = re.compile(
+    r'(cod\s+CPV\s+\d{8}-\d'
+    r'(?:[\s\-]+[^(,]{2,80}?)?'
+    r'\s*\(Rev\.\s*\d+\))',
     re.IGNORECASE,
 )
 
-# Pattern 2: Unquoted text after specific markers
-_CONTRACT_OBJECT_UNQUOTED = re.compile(
+# --- Strategy 1: Quoted text near markers ---
+# Separate patterns per quote type to handle nested quotes correctly.
+# „..." can contain «...» inside without breaking.
+
+# 1a: „..." Romanian quotes (U+201E ... U+201D)
+_QUOTED_RO = re.compile(
+    _MARKER + r'[:\s]*\u201e([^\u201d]{5,800}?)\u201d',
+    re.IGNORECASE,
+)
+# 1b: "..." standard ASCII quotes
+_QUOTED_STD = re.compile(
+    _MARKER + r'[:\s]*"([^"]{5,800}?)"',
+    re.IGNORECASE,
+)
+# 1c: «...» guillemets (rare as outer quotes)
+_QUOTED_GUIL = re.compile(
+    _MARKER + r'[:\s]*\u00ab([^\u00bb]{5,800}?)\u00bb',
+    re.IGNORECASE,
+)
+
+_QUOTED_PATTERNS = [_QUOTED_RO, _QUOTED_STD, _QUOTED_GUIL]
+
+# --- Strategy 2: Unquoted text after structural markers ---
+# Terminators use lookahead so CPV appending works from match.end(1)
+_UNQUOTED = re.compile(
     r"(?:"
     r"obiectul\s+(?:contractului|achiziției|acordului[\s-]+cadru)"
     r"|obiect\s+(?:al\s+)?(?:contractului|achiziției)"
-    r"|privind\s+(?:achiziția\s+de|furnizarea\s+de|prestarea\s+de|execuția)"
+    r"|privind\s+" + _ACTION_WORDS + r"(?:\s+(?:de|a))?"
     r"|în\s+vederea\s+(?:încheierii|atribuirii)\s+(?:(?:unui\s+)?(?:acord|acordului)[\s-]+"
     r"cadru|contractului)(?:\s+(?:de|pentru)\s+)?"
     r"(?:furnizare|servicii|lucrări|prestare|execuția)?"
     r")"
     r"[:\s]+(.{10,300}?)"
-    r"(?:,\s*(?:cod|CPV|finanțat|în\s+valoare|estimat|organizată|publicat|înregistrat|lotul|lot\s|loturile)"
+    r"(?=,?\s*cod\s+CPV"
+    r"|,\s*(?:finanțat|în\s+valoare|estimat|organizată|publicat|înregistrat|lotul|lot\s|loturile)"
     r"|\.\s|,\s+s-a\s+solicitat)",
     re.IGNORECASE,
 )
 
-# Pattern 3: Broadest fallback
-_CONTRACT_OBJECT_FALLBACK = re.compile(
-    r"având\s+ca\s+obiect[:\s]+"
-    r"(.{10,200}?)"
-    r"(?:,\s*(?:cod|CPV|s-a\s+solicitat|anunț|publicat)|[.]\s)",
+# --- Strategy 3: Action keyword after simple markers ---
+# Captures: "având ca obiect furnizarea de servere..."
+#           "privind prestării de servicii de pază..."
+#           "pentru execuția de lucrări..."
+_KEYWORD = re.compile(
+    r"(?:având\s+ca\s+obiect|obiectul\s+contractului|privind|pentru)"
+    r"[:\s]+"
+    r"(" + _ACTION_WORDS + r"(?:\s+(?:de|a)\s+)?"
+    r".{5,250}?)"
+    r"(?=,?\s*cod\s+CPV"
+    r"|,\s*(?:finanțat|în\s+valoare|estimat|organizată|publicat|înregistrat)"
+    r"|\.\s|,\s+s-a\s+solicitat)",
     re.IGNORECASE,
 )
+
+# --- Strategy 4: Broadest fallback ---
+_FALLBACK = re.compile(
+    r"având\s+ca\s+obiect[:\s]+"
+    r"(.{10,300}?)"
+    r"(?=,?\s*cod\s+CPV|,\s*(?:s-a\s+solicitat|anunț|publicat)|[.]\s)",
+    re.IGNORECASE,
+)
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
 
 # Prefixes to strip from extracted text (markers that leak into capture groups)
 _PREFIX_RE = re.compile(
@@ -88,35 +144,61 @@ def _clean_prefix(text: str) -> str:
     return _PREFIX_RE.sub("", text).strip() or text
 
 
+def _try_append_cpv(intro: str, after_obj_pos: int, obj: str) -> str:
+    """If a CPV code appears within 300 chars after the extracted text, append it."""
+    remainder = intro[after_obj_pos:after_obj_pos + 300]
+    m = _CPV_SUFFIX_RE.search(remainder)
+    if m:
+        return f"{obj}, {m.group(1)}"
+    return obj
+
+
+# ---------------------------------------------------------------------------
+# Main extraction function
+# ---------------------------------------------------------------------------
+
 def extract_obiect_contract(text: str) -> str | None:
     """Extract contract object from decision text using regex patterns.
 
     Searches the first 5000 characters for common patterns.
-    Returns the extracted text or None if no pattern matched.
+    Returns the extracted text (with CPV if found nearby) or None.
     """
     # Normalize whitespace for better regex matching
     intro = re.sub(r"\s+", " ", text[:5000])
 
     # Strategy 1: Quoted text near markers (most reliable)
-    match = _CONTRACT_OBJECT_QUOTED.search(intro)
-    if match:
-        obj = match.group(1).strip()
-        if len(obj) >= 5:
-            return _clean_prefix(obj)
+    # Each quote type handled separately to avoid nested-quote truncation
+    for pat in _QUOTED_PATTERNS:
+        match = pat.search(intro)
+        if match:
+            obj = match.group(1).strip()
+            if len(obj) >= 5:
+                obj = _try_append_cpv(intro, match.end(1), obj)
+                return _clean_prefix(obj)
 
-    # Strategy 2: Unquoted text after specific markers
-    match = _CONTRACT_OBJECT_UNQUOTED.search(intro)
+    # Strategy 2: Unquoted text after structural markers
+    match = _UNQUOTED.search(intro)
     if match:
         obj = match.group(1).strip()
         if len(obj) >= 10:
+            obj = _try_append_cpv(intro, match.end(1), obj)
             return _clean_prefix(obj)
 
-    # Strategy 3: Broadest fallback
-    match = _CONTRACT_OBJECT_FALLBACK.search(intro)
+    # Strategy 3: Action keyword after simple markers
+    match = _KEYWORD.search(intro)
+    if match:
+        obj = match.group(1).strip()
+        if len(obj) >= 10:
+            obj = _try_append_cpv(intro, match.end(1), obj)
+            return _clean_prefix(obj)
+
+    # Strategy 4: Broadest fallback
+    match = _FALLBACK.search(intro)
     if match:
         obj = match.group(1).strip()
         obj = obj.lstrip('\u201e\u201c"«')
         if len(obj) >= 10:
+            obj = _try_append_cpv(intro, match.end(1), obj)
             return _clean_prefix(obj)
 
     return None
@@ -182,9 +264,9 @@ async def main():
             if obj:
                 old = decision.obiect_contract
                 prefix = "OVERWRITE" if old else "NEW"
-                print(f"  [{i+1:4d}] {decision.external_id}: [{prefix}] {obj[:80]}")
+                print(f"  [{i+1:4d}] {decision.external_id}: [{prefix}] {obj[:120]}")
                 if old and args.force:
-                    print(f"         was: {old[:80]}")
+                    print(f"         was: {old[:120]}")
 
                 if not args.dry_run:
                     decision.obiect_contract = obj
