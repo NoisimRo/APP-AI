@@ -385,12 +385,15 @@ class DecisionAnalysisService:
                 rezumat_length=len(decision_metadata["rezumat"]),
             )
 
-        if decision_metadata.get("obiect_contract") and not decision.obiect_contract:
+        if decision_metadata.get("obiect_contract"):
+            # LLM extraction is more reliable than regex parser — always overwrite
+            old_val = decision.obiect_contract
             decision.obiect_contract = decision_metadata["obiect_contract"]
             logger.info(
                 "obiect_contract_saved",
                 external_id=decision.external_id,
                 obiect_contract=decision_metadata["obiect_contract"][:80],
+                overwritten=bool(old_val),
             )
 
         if decision_metadata.get("cpv_sugerat") and not decision.cod_cpv:

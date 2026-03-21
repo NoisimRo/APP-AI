@@ -649,11 +649,44 @@ class CNSCDecisionParser:
         if match:
             decision.autoritate_contractanta = self._clean_party_name(match.group(1))
 
-    def _clean_party_name(self, name: str) -> str:
-        """Clean up party name."""
+    @staticmethod
+    def _is_anonymized(text: str) -> bool:
+        """Check if text is anonymized (dots/ellipsis replacing real content).
+
+        CNSC decisions are frequently anonymized with patterns like:
+        - "......... SRL", "... SRL", "..... S.A."
+        - ".........", "...", "……"
+        - "XXXXXXX"
+        """
+        if not text:
+            return True
+        cleaned = text.strip().rstrip(".,;:-–—")
+        # Remove common suffixes to check what's left
+        cleaned_core = re.sub(
+            r"\s*(?:S\.?R\.?L\.?|S\.?A\.?|S\.?C\.?|S\.?N\.?C\.?|R\.?A\.?)\s*$",
+            "", cleaned, flags=re.IGNORECASE,
+        ).strip()
+        if not cleaned_core:
+            return True
+        # Count dots vs alphanumeric
+        dots = sum(1 for c in cleaned_core if c in ".…·•")
+        alnum = sum(1 for c in cleaned_core if c.isalnum())
+        # If more dots than alphanumeric chars, it's anonymized
+        if dots > alnum:
+            return True
+        # Pure dots/ellipsis/x-es
+        if re.fullmatch(r"[.\s…·•x]+", cleaned_core, re.IGNORECASE):
+            return True
+        return False
+
+    def _clean_party_name(self, name: str) -> str | None:
+        """Clean up party name. Returns None if anonymized."""
         name = name.strip()
         name = re.sub(r"\s+", " ", name)
-        return name[:500]  # Limit length
+        name = name[:500]  # Limit length
+        if self._is_anonymized(name):
+            return None
+        return name
 
     # Pattern 1: Quoted contract object near "având ca obiect" or similar markers
     # Matches: având ca obiect: „Servicii de pază..." or având ca obiect „Echipamente..."
@@ -709,7 +742,7 @@ class CNSCDecisionParser:
         match = self._CONTRACT_OBJECT_QUOTED.search(intro)
         if match:
             obj = match.group(1).strip()
-            if len(obj) >= 5:
+            if len(obj) >= 5 and not self._is_anonymized(obj):
                 decision.obiect_contract = obj
                 return
 
@@ -717,7 +750,7 @@ class CNSCDecisionParser:
         match = self._CONTRACT_OBJECT_UNQUOTED.search(intro)
         if match:
             obj = match.group(1).strip()
-            if len(obj) >= 10:
+            if len(obj) >= 10 and not self._is_anonymized(obj):
                 decision.obiect_contract = obj
                 return
 
@@ -727,7 +760,7 @@ class CNSCDecisionParser:
             obj = match.group(1).strip()
             # Clean: remove leading quotes if partial
             obj = obj.lstrip('\u201e\u201c"«')
-            if len(obj) >= 10:
+            if len(obj) >= 10 and not self._is_anonymized(obj):
                 decision.obiect_contract = obj
 
     def _extract_solution(self, decision: ParsedDecision, text: str) -> None:
