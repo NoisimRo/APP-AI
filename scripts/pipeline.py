@@ -119,6 +119,19 @@ def main():
         action="store_true",
         help="Force re-processing (re-analyze, re-embed)",
     )
+    parser.add_argument(
+        "--provider",
+        help="LLM provider for analysis step (e.g. gemini, anthropic, groq, openrouter)",
+    )
+    parser.add_argument(
+        "--model",
+        help="LLM model for analysis step (e.g. gemini-2.5-flash, gemini-2.5-pro)",
+    )
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Preview what would be processed without making changes",
+    )
 
     args = parser.parse_args()
 
@@ -142,6 +155,12 @@ def main():
         print(f"Limit: {args.limit} records per step")
     if args.force:
         print(f"Mode: FORCE (re-process existing)")
+    if args.provider:
+        print(f"LLM Provider: {args.provider}")
+    if args.model:
+        print(f"LLM Model: {args.model}")
+    if args.dry_run:
+        print(f"Mode: DRY RUN (preview only)")
     print("=" * 60)
 
     # Step 1: Import from GCS
@@ -172,6 +191,12 @@ def main():
         if "analyze" not in results:
             if args.force:
                 analyze_args.append("--force")
+            if args.provider:
+                analyze_args.extend(["--provider", args.provider])
+            if args.model:
+                analyze_args.extend(["--model", args.model])
+            if args.dry_run:
+                analyze_args.append("--dry-run")
             success, _ = run_step(
                 "generate_analysis.py", analyze_args,
                 "LLM Analysis (ArgumentareCritica + obiect_contract)"
