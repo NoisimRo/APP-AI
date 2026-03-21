@@ -212,10 +212,12 @@ def main():
             results["analyze"] = success
 
     # Step 3: Embeddings (ArgumentareCritica vectors for RAG)
+    # Note: --limit is NOT passed to embeddings because it means different things:
+    # pipeline --limit = N decisions, but embeddings --limit = N rows of ArgumentareCritica.
+    # Each decision has ~5 argumentari, so --limit 5 would only embed 5 rows (1 decision).
+    # Embeddings are fast and cheap, so we always process all missing ones.
     if "embed" in steps_to_run:
         embed_args = []
-        if args.limit:
-            embed_args.extend(["--limit", str(args.limit)])
         if args.force:
             embed_args.append("--force")
         success, _ = run_step(
