@@ -211,7 +211,28 @@ async def main():
     embedding_service = EmbeddingService()
 
     async with db_session.async_session_factory() as session:
-        # Load CPV nomenclator
+        # Quick check: are there any decisions without CPV that have obiect_contract?
+        from sqlalchemy import func as sqlfunc
+        count_stmt = (
+            select(sqlfunc.count())
+            .select_from(DecizieCNSC)
+            .where(
+                DecizieCNSC.cod_cpv.is_(None),
+                DecizieCNSC.obiect_contract.isnot(None),
+                DecizieCNSC.obiect_contract != "",
+            )
+        )
+        if args.limit:
+            count_stmt = count_stmt.limit(args.limit)
+        candidates_count = await session.scalar(count_stmt)
+
+        if candidates_count == 0:
+            print("No decisions need CPV deduction (all have CPV or no obiect_contract).")
+            return
+
+        print(f"Found {candidates_count} decisions without CPV to process.")
+
+        # Load CPV nomenclator (heavy — only after confirming work exists)
         cpv_list = await load_cpv_nomenclator(session)
         print(f"Loaded {len(cpv_list)} CPV codes from nomenclator")
 

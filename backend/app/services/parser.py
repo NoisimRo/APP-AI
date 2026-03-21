@@ -203,6 +203,18 @@ class ParsedDecision:
     # Contract object (extracted from introductory text)
     obiect_contract: Optional[str] = None
 
+    # Procurement metadata (extracted from text)
+    criteriu_atribuire: Optional[str] = None
+    numar_oferte: Optional[int] = None
+    valoare_estimata: Optional[float] = None
+    moneda: str = "RON"
+    numar_anunt_participare: Optional[str] = None
+    data_raport_procedura: Optional[datetime] = None
+
+    # Legislative domain and procedure type
+    domeniu_legislativ: Optional[str] = None
+    tip_procedura: Optional[str] = None
+
     # Sections (populated by section parser)
     sectiuni: list[DecisionSection] = field(default_factory=list)
 
@@ -235,6 +247,21 @@ class ParsedDecision:
 # =============================================================================
 # PARSER IMPLEMENTATION
 # =============================================================================
+
+WORD_TO_NUMBER = {
+    "o": 1, "un": 1, "una": 1, "două": 2, "trei": 3, "patru": 4,
+    "cinci": 5, "șase": 6, "șapte": 7, "opt": 8, "nouă": 9, "zece": 10,
+    "unsprezece": 11, "doisprezece": 12,
+}
+
+# Canonical forms for award criteria
+CRITERIU_CANONICAL = {
+    "calitate-preț": "cel mai bun raport calitate-preț",
+    "calitate-cost": "cel mai bun raport calitate-cost",
+    "costul": "costul cel mai scăzut",
+    "prețul": "prețul cel mai scăzut",
+}
+
 
 class CNSCDecisionParser:
     """Parser for CNSC decision text files.
@@ -270,16 +297,19 @@ class CNSCDecisionParser:
             re.IGNORECASE
         ),
 
-        # Date patterns
+        # Date patterns — used only on header area (first ~500 chars)
+        # "Data:" is the most reliable marker (unique to the header)
+        # "Ședința publică din" is also reliable
+        # Plain "din" is too generic (matches references to other dates)
         "date_text": re.compile(
-            r"(?:Data|din)\s*[:\s]*(\d{1,2})\s+"
+            r"(?:Data|Ședința\s+publică\s+din)\s*[:\s]*(\d{1,2})\s+"
             r"(ianuarie|februarie|martie|aprilie|mai|iunie|"
             r"iulie|august|septembrie|octombrie|noiembrie|decembrie)\s+"
             r"(\d{4})",
             re.IGNORECASE
         ),
         "date_numeric": re.compile(
-            r"(?:Data|din)\s*[:\s]*(\d{1,2})[.\-/](\d{1,2})[.\-/](\d{4})"
+            r"(?:Data|Ședința\s+publică\s+din)\s*[:\s]*(\d{1,2})[.\-/](\d{1,2})[.\-/](\d{4})"
         ),
 
         # CPV codes: "45233140-2"
@@ -315,6 +345,157 @@ class CNSCDecisionParser:
         # Legal articles
         "article": re.compile(
             r"art(?:icol)?\.?\s*(\d+)(?:\s*alin(?:eat)?\.?\s*\(?\d+\)?)?",
+            re.IGNORECASE
+        ),
+
+        # Award criteria — matches patterns like:
+        #   "criteriul de atribuire al contractului este „prețul cel mai scăzut""
+        #   "criteriul de atribuire „cel mai bun raport calitate-preț""
+        #   "criteriul de atribuire fiind „prețul cel mai scăzut""
+        # Captures the quoted or unquoted criterion name
+        "criteriu_atribuire": re.compile(
+            r"criteriu(?:l)?\s+de\s+atribuire\s+(?:[\w\s,]+?\s+)?(?:(?:este|fiind)\s+)?"
+            r"[\u201e\"\u00ab]?\s*((?:cel\s+mai\s+bun\s+raport\s+calitate\s*[-\u2013\u2014\s]\s*(?:pre[tț]|cost))"
+            r"|(?:costul\s+cel\s+mai\s+sc[aă]zut)"
+            r"|(?:pre[tț]ul\s+cel\s+mai\s+sc[aă]zut))\s*[\u201d\"\u00bb]?",
+            re.IGNORECASE
+        ),
+
+        # Number of offers — multiple patterns
+        # "au fost depuse trei oferte", "au depus ofertă 5 operatori"
+        # "3 din cele 4 oferte depuse", "cele 4 oferte depuse"
+        "numar_oferte_text": re.compile(
+            r"au\s+fost\s+depuse\s+(o|două|trei|patru|cinci|șase|șapte|opt|nouă|zece)\s+oferte?",
+            re.IGNORECASE
+        ),
+        "numar_oferte_cifra": re.compile(
+            r"au\s+depus\s+ofert[eă]\s+(\d+)\s+operatori",
+            re.IGNORECASE
+        ),
+        "numar_oferte_din_cele": re.compile(
+            r"(?:din\s+)?cele\s+(\d+)\s+oferte\s+depuse",
+            re.IGNORECASE
+        ),
+        # "au depus oferte 4 operatori" (inverted order)
+        "numar_oferte_inv": re.compile(
+            r"au\s+depus\s+oferte\s+(\d+)\s+(?:operatori|participanți)",
+            re.IGNORECASE
+        ),
+        # "cei 3 ofertanți", "2 din cei 3 ofertanți"
+        "numar_ofertanti": re.compile(
+            r"(?:din\s+)?ce(?:i|lor)\s+(\d+)\s+ofertanți",
+            re.IGNORECASE
+        ),
+
+        # Valoare estimata — "valoarea estimată a ... este (de) 4.674.769,11 lei"
+        # Decimals are optional: "8.403.350 lei" or "928.836,70 lei"
+        "valoare_estimata": re.compile(
+            r"valoare[a]?\s+(?:total[aă]\s+)?estimat[aă]\s+a\s+"
+            r"(?:contractului|procedurii|acordului[\s\-]+cadru"
+            r"|achiziției)(?:\s+de\s+\w+)?\s+(?:este\s+(?:de\s+)?)?"
+            r"([\d.]+(?:,\d{1,2})?)\s*(lei|RON)",
+            re.IGNORECASE
+        ),
+
+        # Numar anunt participare — "anunțul de participare (simplificat) nr. CN1082102/10.06.2025"
+        "numar_anunt": re.compile(
+            r"anunț(?:ul)?\s+de\s+participare\s+(?:simplificat\s+)?nr\.?\s*"
+            r"((?:SCN|CN|ADV)\d+(?:/[\d.]+)?)",
+            re.IGNORECASE
+        ),
+
+        # Raportul procedurii — "raportul procedurii nr. 42145/26.08.2025"
+        # Date format: nr/DD.MM.YYYY or nr.../DD.MM.YYYY or complex nr like 2/2135/29.04.2025
+        "raport_procedura": re.compile(
+            r"raportul\s+procedurii\s+nr\.?\s*(?:[\d/]+/)?(\d{1,2})[./](\d{1,2})[./](\d{4})",
+            re.IGNORECASE
+        ),
+
+        # Legislative domain detection
+        # Legea 98/2016 = achiziții publice
+        "legea_98": re.compile(
+            r"Leg(?:ea|ii)\s+(?:nr\.?\s*)?98/2016",
+            re.IGNORECASE
+        ),
+        # Legea 99/2016 = achiziții sectoriale
+        "legea_99": re.compile(
+            r"Leg(?:ea|ii)\s+(?:nr\.?\s*)?99/2016",
+            re.IGNORECASE
+        ),
+        # Legea 100/2016 = concesiuni
+        "legea_100": re.compile(
+            r"Leg(?:ea|ii)\s+(?:nr\.?\s*)?100/2016",
+            re.IGNORECASE
+        ),
+        # "entitate contractantă" (indicator sectorial)
+        "entitate_contractanta": re.compile(
+            r"entitate\s+contractant[aă]",
+            re.IGNORECASE
+        ),
+        # "achiziții sectoriale" / "contracte sectoriale"
+        "sectoriale": re.compile(
+            r"(?:achiziți(?:i|ilor|ilor)|contract(?:e|elor))\s+sectoriale",
+            re.IGNORECASE
+        ),
+        # HG 395/2016 = norme aplicare Legea 98 (achiziții publice)
+        "hg_395": re.compile(
+            r"(?:H\.?G\.?|Hot[aă]r[âa]rea\s+Guvernului)\s*(?:nr\.?\s*)?395/2016",
+            re.IGNORECASE
+        ),
+        # HG 394/2016 = norme aplicare Legea 99 (achiziții sectoriale)
+        "hg_394": re.compile(
+            r"(?:H\.?G\.?|Hot[aă]r[âa]rea\s+Guvernului)\s*(?:nr\.?\s*)?394/2016",
+            re.IGNORECASE
+        ),
+        # "concesiune de lucrări" / "concesiune de servicii" / "contract de concesiune"
+        "concesiune": re.compile(
+            r"concesiun(?:e|i|ea|ii)\s+de\s+(?:lucrări|servicii)|contract\s+de\s+concesiune",
+            re.IGNORECASE
+        ),
+
+        # Procedure type detection
+        "proc_licitatie_deschisa": re.compile(
+            r"licitați[ea]\s+deschis[aă]",
+            re.IGNORECASE
+        ),
+        "proc_licitatie_restransa": re.compile(
+            r"licitați[ea]\s+restrâns[aă]",
+            re.IGNORECASE
+        ),
+        "proc_negociere_competitiva": re.compile(
+            r"negociere(?:a)?\s+competitiv[aă]",
+            re.IGNORECASE
+        ),
+        "proc_dialog_competitiv": re.compile(
+            r"dialog(?:ul)?\s+competitiv",
+            re.IGNORECASE
+        ),
+        "proc_parteneriat_inovare": re.compile(
+            r"parteneriat(?:ul)?\s+pentru\s+inovare",
+            re.IGNORECASE
+        ),
+        "proc_negociere_fara_publicare": re.compile(
+            r"negociere(?:a)?\s+fără\s+publicare\s+prealabil[aă]",
+            re.IGNORECASE
+        ),
+        "proc_negociere_fara_invitatie": re.compile(
+            r"negociere(?:a)?\s+fără\s+invitați[ea]\s+prealabil[aă]",
+            re.IGNORECASE
+        ),
+        "proc_negociere_fara_anunt": re.compile(
+            r"negociere(?:a)?\s+fără\s+publicare(?:a)?\s+(?:unui\s+)?anunț\s+de\s+concesionare",
+            re.IGNORECASE
+        ),
+        "proc_concurs_solutii": re.compile(
+            r"concurs(?:ul)?\s+de\s+soluții",
+            re.IGNORECASE
+        ),
+        "proc_servicii_sociale": re.compile(
+            r"procedur[aă]\s+(?:de\s+)?atribuire\s+aplicabil[aă]\s+(?:în\s+cazul\s+)?servicii(?:lor)?\s+sociale",
+            re.IGNORECASE
+        ),
+        "proc_simplificata": re.compile(
+            r"procedur[aă]\s+simplificat[aă]",
             re.IGNORECASE
         ),
     }
@@ -594,8 +775,10 @@ class CNSCDecisionParser:
             decision.complet = match.group(2).upper()
             decision.numar_decizie = int(match.group(3))
 
-        # Extract date
-        decision.data_decizie = self._extract_date(text)
+        # Extract date — search only in header area (first 1000 chars)
+        # to avoid matching dates from referenced laws/documents in the body.
+        # Note: "Data: DD.MM.YYYY" is typically at char 490-600 (after Legea 101 preamble)
+        decision.data_decizie = self._extract_date(text[:1000])
 
         # Extract CPV if not from filename
         if not decision.cod_cpv:
@@ -610,6 +793,22 @@ class CNSCDecisionParser:
             decision.coduri_critici = list(dict.fromkeys([c.upper() for c in text_codes]))
             if decision.coduri_critici:
                 decision.tip_contestatie = self._determine_contest_type(decision.coduri_critici)
+
+        # Extract award criterion and number of offers
+        decision.criteriu_atribuire = self._extract_criteriu_atribuire(text)
+        decision.numar_oferte = self._extract_numar_oferte(text)
+
+        # Extract procurement metadata
+        val, mon = self._extract_valoare_estimata(text)
+        decision.valoare_estimata = val
+        if mon:
+            decision.moneda = mon
+        decision.numar_anunt_participare = self._extract_numar_anunt(text)
+        decision.data_raport_procedura = self._extract_data_raport(text)
+
+        # Extract legislative domain and procedure type
+        decision.domeniu_legislativ = self._extract_domeniu_legislativ(text)
+        decision.tip_procedura = self._extract_tip_procedura(text)
 
     def _extract_date(self, text: str) -> Optional[datetime]:
         """Extract date from text."""
@@ -637,6 +836,214 @@ class CNSCDecisionParser:
 
         return None
 
+    def _extract_criteriu_atribuire(self, text: str) -> Optional[str]:
+        """Extract award criterion from decision text.
+
+        Returns one of 4 canonical forms:
+        - "cel mai bun raport calitate-preț"
+        - "cel mai bun raport calitate-cost"
+        - "costul cel mai scăzut"
+        - "prețul cel mai scăzut"
+        """
+        match = self.PATTERNS["criteriu_atribuire"].search(text)
+        if match:
+            raw = match.group(1).strip().lower()
+            # Normalize to canonical form
+            raw_normalized = re.sub(r"\s+", " ", raw)
+            raw_normalized = re.sub(r"[–—]", "-", raw_normalized)
+            if "calitate" in raw_normalized and "cost" in raw_normalized:
+                return "cel mai bun raport calitate-cost"
+            elif "calitate" in raw_normalized and "preț" in raw_normalized:
+                return "cel mai bun raport calitate-preț"
+            elif "costul" in raw_normalized:
+                return "costul cel mai scăzut"
+            elif "prețul" in raw_normalized:
+                return "prețul cel mai scăzut"
+        return None
+
+    def _extract_numar_oferte(self, text: str) -> Optional[int]:
+        """Extract number of offers submitted from decision text.
+
+        Looks for patterns like:
+        - "au fost depuse trei oferte"
+        - "au depus ofertă 5 operatori economici"
+        - "cele 4 oferte depuse"
+        """
+        # Pattern 1: "au fost depuse trei/patru/... oferte"
+        match = self.PATTERNS["numar_oferte_text"].search(text)
+        if match:
+            word = match.group(1).lower()
+            return WORD_TO_NUMBER.get(word)
+
+        # Pattern 2: "au depus ofertă 5 operatori"
+        match = self.PATTERNS["numar_oferte_cifra"].search(text)
+        if match:
+            return int(match.group(1))
+
+        # Pattern 3: "cele 4 oferte depuse" / "3 din cele 4 oferte depuse"
+        match = self.PATTERNS["numar_oferte_din_cele"].search(text)
+        if match:
+            return int(match.group(1))
+
+        # Pattern 4: "au depus oferte 4 operatori" (inverted)
+        match = self.PATTERNS["numar_oferte_inv"].search(text)
+        if match:
+            return int(match.group(1))
+
+        # Pattern 5: "cei 3 ofertanți" / "2 din cei 3 ofertanți"
+        match = self.PATTERNS["numar_ofertanti"].search(text)
+        if match:
+            return int(match.group(1))
+
+        return None
+
+    def _extract_valoare_estimata(self, text: str) -> tuple[Optional[float], Optional[str]]:
+        """Extract estimated value and currency from decision text.
+
+        Returns (value, currency) tuple. Value is float, currency is "RON" or "lei".
+        Skips anonymized values (dots replacing digits).
+        """
+        match = self.PATTERNS["valoare_estimata"].search(text)
+        if match:
+            raw_value = match.group(1)  # e.g., "4.674.769,11"
+            currency = match.group(2).upper()  # "lei" or "RON"
+            # Normalize: "4.674.769,11" -> 4674769.11
+            try:
+                normalized = raw_value.replace(".", "").replace(",", ".")
+                value = float(normalized)
+                # Normalize currency
+                if currency == "LEI":
+                    currency = "RON"
+                return value, currency
+            except ValueError:
+                pass
+        return None, None
+
+    def _extract_numar_anunt(self, text: str) -> Optional[str]:
+        """Extract SEAP participation notice number.
+
+        Patterns:
+        - "anunțul de participare nr. CN1082102/10.06.2025"
+        - "anunțul de participare simplificat nr. SCN1156905/09.12.2025"
+        """
+        match = self.PATTERNS["numar_anunt"].search(text)
+        if match:
+            anunt = match.group(1).strip().rstrip(".,;:")
+            # Skip anonymized: "nr. ...." or "nr......"
+            if "." not in anunt.split("/")[0]:  # dots in the SCN part means anonymized
+                return anunt
+            # Check the SCN number part (before /) is actually a number
+            prefix = anunt.split("/")[0] if "/" in anunt else anunt
+            if any(c.isdigit() for c in prefix):
+                return anunt
+        return None
+
+    def _extract_data_raport(self, text: str) -> Optional[datetime]:
+        """Extract procedure report date from decision text.
+
+        Looks for "raportul procedurii nr. XXXXX/DD.MM.YYYY"
+        """
+        match = self.PATTERNS["raport_procedura"].search(text)
+        if match:
+            day = int(match.group(1))
+            month = int(match.group(2))
+            year = int(match.group(3))
+            try:
+                return datetime(year, month, day)
+            except ValueError:
+                pass
+        return None
+
+    def _extract_domeniu_legislativ(self, text: str) -> str:
+        """Detect legislative domain from decision text.
+
+        Priority:
+        1. Explicit reference to Legea 100/2016 → concesiuni
+        2. Explicit reference to Legea 99/2016 → achizitii_sectoriale
+        3. "concesiune de lucrări/servicii" → concesiuni
+        4. "achiziții/contracte sectoriale" or "entitate contractantă" → achizitii_sectoriale
+        5. Default → achizitii_publice (Legea 98/2016)
+
+        Note: Legea 101/2016 (remedii) mentions all three domains in its title,
+        so we exclude occurrences within the standard Legea 101 preamble.
+        """
+        # Remove ALL references to Legea 101/2016 full title which mentions
+        # "contracte sectoriale" and "concesiune de lucrări/servicii" — false positives.
+        cleaned = re.sub(
+            r"Leg(?:ea|ii)\s+(?:nr\.?\s*)?101/2016\s+privind\s+remediile.*?"
+            r"Contestați(?:i|ilor)",
+            "",
+            text,
+            flags=re.IGNORECASE | re.DOTALL
+        )
+        # Remove the standard legal enumeration "concesiune de lucrări și concesiune
+        # de servicii" which appears in Legea 101 citations, ANAP references, etc.
+        # Note: both ș (U+0219) and ş (U+015F, cedilla) variants exist in texts.
+        search_text = re.sub(
+            r"(?:contracte(?:lor)?(?:/acorduri(?:lor)?[\s\-]*cadru)?\s+)?sectoriale\s+"
+            r"[sșş]i\s+a\s+(?:contractelor\s+)?(?:de\s+)?concesiun[eă]\s+"
+            r"de\s+lucrări\s+[sșş]i\s+(?:de\s+)?concesiun[eă]\s+de\s+servicii",
+            "",
+            cleaned,
+            flags=re.IGNORECASE
+        )
+        # Also catch standalone "concesiune de lucrări și concesiune de servicii"
+        search_text = re.sub(
+            r"concesiun[eă]\s+de\s+lucrări\s+[sșş]i\s+(?:de\s+)?concesiun[eă]\s+de\s+servicii",
+            "",
+            search_text,
+            flags=re.IGNORECASE
+        )
+
+        # If Legea 98/2016 or HG 395/2016 is explicitly invoked, it's achiziții publice
+        # — cannot be concesiuni or sectoriale
+        has_legea_98 = self.PATTERNS["legea_98"].search(search_text)
+        has_hg_395 = self.PATTERNS["hg_395"].search(text)
+
+        if not has_legea_98 and not has_hg_395:
+            # Only check for L99/L100 if L98 is NOT present.
+            # Use only explicit law/HG references — keyword-based detection
+            # ("concesiune de lucrări", "contracte sectoriale") gives too many
+            # false positives from legal enumerations and citations.
+            if self.PATTERNS["legea_100"].search(search_text):
+                return "concesiuni"
+
+            if self.PATTERNS["legea_99"].search(search_text):
+                return "achizitii_sectoriale"
+
+            if self.PATTERNS["hg_394"].search(text):
+                return "achizitii_sectoriale"
+
+        # Default: achiziții publice (Legea 98/2016)
+        return "achizitii_publice"
+
+    def _extract_tip_procedura(self, text: str) -> Optional[str]:
+        """Extract procedure type from decision text.
+
+        Searches for procedure type mentions like "procedura simplificată",
+        "licitație deschisă", etc. Returns canonical code.
+        """
+        # Map pattern keys to canonical procedure codes
+        procedure_patterns = [
+            ("proc_licitatie_deschisa", "licitatie_deschisa"),
+            ("proc_licitatie_restransa", "licitatie_restransa"),
+            ("proc_negociere_competitiva", "negociere_competitiva"),
+            ("proc_dialog_competitiv", "dialog_competitiv"),
+            ("proc_parteneriat_inovare", "parteneriat_inovare"),
+            ("proc_negociere_fara_publicare", "negociere_fara_publicare"),
+            ("proc_negociere_fara_invitatie", "negociere_fara_invitatie"),
+            ("proc_negociere_fara_anunt", "negociere_fara_anunt"),
+            ("proc_concurs_solutii", "concurs_solutii"),
+            ("proc_servicii_sociale", "servicii_sociale"),
+            ("proc_simplificata", "procedura_simplificata"),
+        ]
+
+        for pattern_key, code in procedure_patterns:
+            if self.PATTERNS[pattern_key].search(text):
+                return code
+
+        return None
+
     def _extract_parties(self, decision: ParsedDecision, text: str) -> None:
         """Extract parties from text."""
         # Contestator
@@ -649,11 +1056,51 @@ class CNSCDecisionParser:
         if match:
             decision.autoritate_contractanta = self._clean_party_name(match.group(1))
 
-    def _clean_party_name(self, name: str) -> str:
-        """Clean up party name."""
+    @staticmethod
+    def _is_anonymized(text: str) -> bool:
+        """Check if text is anonymized (dots/ellipsis/placeholders replacing real content).
+
+        CNSC decisions are frequently anonymized with patterns like:
+        - "......... SRL", "... SRL", "..... S.A."
+        - "SC (...) S.R.L.", "(...) SRL", "SC (…) S.A."
+        - ".........", "...", "……"
+        - "XXXXXXX", "_____"
+        """
+        if not text:
+            return True
+        cleaned = text.strip().rstrip(".,;:-–—")
+        # Remove common prefixes/suffixes (SC, SRL, SA, etc.) to check core
+        cleaned_core = re.sub(
+            r"^\s*S\.?C\.?\s*", "", cleaned, flags=re.IGNORECASE,
+        )
+        cleaned_core = re.sub(
+            r"\s*(?:S\.?R\.?L\.?|S\.?A\.?|S\.?C\.?|S\.?N\.?C\.?|R\.?A\.?)\s*$",
+            "", cleaned_core, flags=re.IGNORECASE,
+        ).strip()
+        if not cleaned_core:
+            return True
+        # Detect parenthesized placeholders: (...), (…), (xxx), (___)
+        if re.fullmatch(r"[(\[{][\s.…·•_x*]+[)\]}]", cleaned_core, re.IGNORECASE):
+            return True
+        # Count anonymization chars vs alphanumeric
+        anon_chars = sum(1 for c in cleaned_core if c in ".…·•_()[]{}*")
+        alnum = sum(1 for c in cleaned_core if c.isalnum())
+        # If more anonymization chars than alphanumeric, it's anonymized
+        if anon_chars > alnum:
+            return True
+        # Pure dots/ellipsis/x-es/underscores
+        if re.fullmatch(r"[.\s…·•x_*()]+", cleaned_core, re.IGNORECASE):
+            return True
+        return False
+
+    def _clean_party_name(self, name: str) -> str | None:
+        """Clean up party name. Returns None if anonymized."""
         name = name.strip()
         name = re.sub(r"\s+", " ", name)
-        return name[:500]  # Limit length
+        name = name[:500]  # Limit length
+        if self._is_anonymized(name):
+            return None
+        return name
 
     # Pattern 1: Quoted contract object near "având ca obiect" or similar markers
     # Matches: având ca obiect: „Servicii de pază..." or având ca obiect „Echipamente..."
@@ -709,7 +1156,7 @@ class CNSCDecisionParser:
         match = self._CONTRACT_OBJECT_QUOTED.search(intro)
         if match:
             obj = match.group(1).strip()
-            if len(obj) >= 5:
+            if len(obj) >= 5 and not self._is_anonymized(obj):
                 decision.obiect_contract = obj
                 return
 
@@ -717,7 +1164,7 @@ class CNSCDecisionParser:
         match = self._CONTRACT_OBJECT_UNQUOTED.search(intro)
         if match:
             obj = match.group(1).strip()
-            if len(obj) >= 10:
+            if len(obj) >= 10 and not self._is_anonymized(obj):
                 decision.obiect_contract = obj
                 return
 
@@ -727,7 +1174,7 @@ class CNSCDecisionParser:
             obj = match.group(1).strip()
             # Clean: remove leading quotes if partial
             obj = obj.lstrip('\u201e\u201c"«')
-            if len(obj) >= 10:
+            if len(obj) >= 10 and not self._is_anonymized(obj):
                 decision.obiect_contract = obj
 
     def _extract_solution(self, decision: ParsedDecision, text: str) -> None:
