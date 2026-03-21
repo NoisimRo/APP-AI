@@ -202,7 +202,7 @@ async def main():
     parser.add_argument("--threshold", type=float, default=DEFAULT_THRESHOLD, help=f"Similarity threshold (default {DEFAULT_THRESHOLD})")
     parser.add_argument("--min-gap", type=float, default=DEFAULT_MIN_GAP, help=f"Min gap between top1 and top2 (default {DEFAULT_MIN_GAP})")
     parser.add_argument("--top-k", type=int, default=3, help="Show top K candidates per decision")
-    parser.add_argument("--commit-batch", type=int, default=50, help="Commit every N assignments (default 50)")
+    parser.add_argument("--chunk-size", type=int, default=100, help="Process N texts per chunk (embed→match→commit) (default 100)")
     args = parser.parse_args()
 
     await init_db()
@@ -270,84 +270,89 @@ async def main():
         if not embeddable:
             print("No valid texts to embed.")
         else:
-            # Phase 2: Batch embed all valid texts at once
-            texts_to_embed = [item[2] for item in embeddable]
-            print(f"Embedding {len(texts_to_embed)} texts in batches of {BATCH_SIZE}...")
-            all_embeddings: list[list[float]] = []
-            for batch_start in range(0, len(texts_to_embed), BATCH_SIZE):
-                batch = texts_to_embed[batch_start:batch_start + BATCH_SIZE]
-                batch_embeddings = await embedding_service.embed_batch(batch)
-                all_embeddings.extend(batch_embeddings)
-                if len(texts_to_embed) > BATCH_SIZE:
-                    done = min(batch_start + BATCH_SIZE, len(texts_to_embed))
-                    print(f"  Embedded {done}/{len(texts_to_embed)}")
-
-            # Phase 3: Match against CPV nomenclator + apply
+            # Process in chunks: embed → match → commit per chunk
+            # So progress is saved even if the script crashes mid-way
+            CHUNK_SIZE = args.chunk_size
             k = max(args.top_k, 2)
-            pending_commit = 0
-            COMMIT_BATCH = args.commit_batch
+            total_embeddable = len(embeddable)
+            print(f"Processing {total_embeddable} texts in chunks of {CHUNK_SIZE} (embed → match → commit)...")
 
-            for j, (i, decision, query_text) in enumerate(embeddable):
-                query_embedding = all_embeddings[j]
+            for chunk_start in range(0, total_embeddable, CHUNK_SIZE):
+                chunk = embeddable[chunk_start:chunk_start + CHUNK_SIZE]
+                chunk_num = chunk_start // CHUNK_SIZE + 1
+                total_chunks = (total_embeddable + CHUNK_SIZE - 1) // CHUNK_SIZE
+                print(f"\n--- Chunk {chunk_num}/{total_chunks} ({len(chunk)} texts) ---")
 
-                try:
-                    matches = find_best_cpv(query_embedding, cpv_list, k)
-                    best = matches[0]
-                    second = matches[1] if len(matches) > 1 else None
+                # Embed this chunk
+                texts_to_embed = [item[2] for item in chunk]
+                all_embeddings: list[list[float]] = []
+                for batch_start in range(0, len(texts_to_embed), BATCH_SIZE):
+                    batch = texts_to_embed[batch_start:batch_start + BATCH_SIZE]
+                    batch_embeddings = await embedding_service.embed_batch(batch)
+                    all_embeddings.extend(batch_embeddings)
+                    done = min(batch_start + BATCH_SIZE, len(texts_to_embed))
+                    global_done = chunk_start + done
+                    print(f"  Embedded {global_done}/{total_embeddable}")
 
-                    # Check threshold
-                    if best["similarity"] < args.threshold:
-                        stats["below_threshold"] += 1
-                        print(f"  [{i+1}] {decision.external_id}: LOW SIM — "
-                              f"{best['cod_cpv']} ({best['descriere'][:40]}) sim={best['similarity']:.3f}")
-                        if args.dry_run:
-                            print(f"         obiect: {query_text[:120]}")
-                            if args.top_k > 1:
+                # Match + assign this chunk
+                chunk_assigned = 0
+                for j, (i, decision, query_text) in enumerate(chunk):
+                    query_embedding = all_embeddings[j]
+
+                    try:
+                        matches = find_best_cpv(query_embedding, cpv_list, k)
+                        best = matches[0]
+                        second = matches[1] if len(matches) > 1 else None
+
+                        # Check threshold
+                        if best["similarity"] < args.threshold:
+                            stats["below_threshold"] += 1
+                            print(f"  [{i+1}] {decision.external_id}: LOW SIM — "
+                                  f"{best['cod_cpv']} ({best['descriere'][:40]}) sim={best['similarity']:.3f}")
+                            if args.dry_run:
+                                print(f"         obiect: {query_text[:120]}")
+                                if args.top_k > 1:
+                                    for m in matches[1:args.top_k]:
+                                        print(f"         alt: {m['cod_cpv']} ({m['descriere'][:40]}) sim={m['similarity']:.3f}")
+                            continue
+
+                        # Check confidence gap
+                        gap = best["similarity"] - second["similarity"] if second else 1.0
+                        if gap < args.min_gap:
+                            stats["no_gap"] += 1
+                            print(f"  [{i+1}] {decision.external_id}: NO GAP — "
+                                  f"{best['cod_cpv']} sim={best['similarity']:.3f} vs "
+                                  f"{second['cod_cpv']} sim={second['similarity']:.3f} "
+                                  f"(gap={gap:.3f} < {args.min_gap})")
+                            if args.dry_run:
+                                print(f"         obiect: {query_text[:120]}")
                                 for m in matches[1:args.top_k]:
                                     print(f"         alt: {m['cod_cpv']} ({m['descriere'][:40]}) sim={m['similarity']:.3f}")
-                        continue
+                            continue
 
-                    # Check confidence gap
-                    gap = best["similarity"] - second["similarity"] if second else 1.0
-                    if gap < args.min_gap:
-                        stats["no_gap"] += 1
-                        print(f"  [{i+1}] {decision.external_id}: NO GAP — "
-                              f"{best['cod_cpv']} sim={best['similarity']:.3f} vs "
-                              f"{second['cod_cpv']} sim={second['similarity']:.3f} "
-                              f"(gap={gap:.3f} < {args.min_gap})")
+                        # Match is good — assign
+                        print(f"  [{i+1}] {decision.external_id}: {best['cod_cpv']} "
+                              f"({best['descriere'][:60]}) — sim={best['similarity']:.3f} gap={gap:.3f}")
                         if args.dry_run:
                             print(f"         obiect: {query_text[:120]}")
-                            for m in matches[1:args.top_k]:
-                                print(f"         alt: {m['cod_cpv']} ({m['descriere'][:40]}) sim={m['similarity']:.3f}")
-                        continue
 
-                    # Match is good — assign
-                    print(f"  [{i+1}] {decision.external_id}: {best['cod_cpv']} "
-                          f"({best['descriere'][:60]}) — sim={best['similarity']:.3f} gap={gap:.3f}")
-                    if args.dry_run:
-                        print(f"         obiect: {query_text[:120]}")
+                        if not args.dry_run:
+                            decision.cod_cpv = best["cod_cpv"]
+                            decision.cpv_descriere = best["descriere"]
+                            decision.cpv_categorie = best["categorie"]
+                            decision.cpv_clasa = best["clasa"]
+                            decision.cpv_source = "dedus"
 
-                    if not args.dry_run:
-                        decision.cod_cpv = best["cod_cpv"]
-                        decision.cpv_descriere = best["descriere"]
-                        decision.cpv_categorie = best["categorie"]
-                        decision.cpv_clasa = best["clasa"]
-                        decision.cpv_source = "dedus"
-                        pending_commit += 1
-                        if pending_commit >= COMMIT_BATCH:
-                            await session.commit()
-                            print(f"  [commit] {pending_commit} assignments saved")
-                            pending_commit = 0
+                        stats["assigned"] += 1
+                        chunk_assigned += 1
 
-                    stats["assigned"] += 1
+                    except Exception as e:
+                        logger.error("cpv_deduction_failed", external_id=decision.external_id, error=str(e))
 
-                except Exception as e:
-                    logger.error("cpv_deduction_failed", external_id=decision.external_id, error=str(e))
-
-            # Final commit for remaining assignments
-            if pending_commit > 0 and not args.dry_run:
-                await session.commit()
-                print(f"  [commit] {pending_commit} assignments saved (final)")
+                # Commit entire chunk at once
+                if chunk_assigned > 0 and not args.dry_run:
+                    await session.commit()
+                    print(f"  [commit] chunk {chunk_num}: {chunk_assigned} assignments saved to DB")
 
         elapsed = time.time() - start_time
 
