@@ -132,6 +132,10 @@ def main():
         action="store_true",
         help="Preview what would be processed without making changes",
     )
+    parser.add_argument(
+        "--since",
+        help="Only scan GCS files with this prefix (e.g. 'BO2026_'). Speeds up import.",
+    )
 
     args = parser.parse_args()
 
@@ -161,6 +165,8 @@ def main():
         print(f"LLM Model: {args.model}")
     if args.dry_run:
         print(f"Mode: DRY RUN (preview only)")
+    if args.since:
+        print(f"GCS filter: {args.since}*")
     print("=" * 60)
 
     # Step 1: Import from GCS
@@ -168,6 +174,8 @@ def main():
         import_args = ["--skip-embeddings"]
         if args.limit:
             import_args.extend(["--limit", str(args.limit)])
+        if args.since:
+            import_args.extend(["--since", args.since])
         success, output = run_step(
             "import_decisions_from_gcs.py", import_args, "Import decisions from GCS"
         )
