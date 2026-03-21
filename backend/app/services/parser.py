@@ -928,7 +928,7 @@ class CNSCDecisionParser:
         """
         match = self.PATTERNS["numar_anunt"].search(text)
         if match:
-            anunt = match.group(1).strip()
+            anunt = match.group(1).strip().rstrip(".,;:")
             # Skip anonymized: "nr. ...." or "nr......"
             if "." not in anunt.split("/")[0]:  # dots in the SCN part means anonymized
                 return anunt
@@ -1001,17 +1001,14 @@ class CNSCDecisionParser:
         has_hg_395 = self.PATTERNS["hg_395"].search(text)
 
         if not has_legea_98 and not has_hg_395:
-            # Only check for L99/L100 if L98 is NOT present
+            # Only check for L99/L100 if L98 is NOT present.
+            # Use only explicit law/HG references — keyword-based detection
+            # ("concesiune de lucrări", "contracte sectoriale") gives too many
+            # false positives from legal enumerations and citations.
             if self.PATTERNS["legea_100"].search(search_text):
                 return "concesiuni"
 
             if self.PATTERNS["legea_99"].search(search_text):
-                return "achizitii_sectoriale"
-
-            if self.PATTERNS["concesiune"].search(search_text):
-                return "concesiuni"
-
-            if self.PATTERNS["sectoriale"].search(search_text):
                 return "achizitii_sectoriale"
 
             if self.PATTERNS["hg_394"].search(text):
