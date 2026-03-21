@@ -11,15 +11,16 @@ text_integral or rezumat (those produce unreliable CPV matches).
 Quality filters (to avoid assigning wrong CPV codes):
 - Text validation: min 3 real words, min 10 alphanumeric chars, max 70% junk
 - Procedural text truncation: cuts "s-a solicitat", "s-au solicitat" etc.
-- Similarity threshold: default 0.80 (raised from 0.70)
-- Confidence gap: top1 - top2 must be >= 0.03, otherwise ambiguous
+- Boilerplate detection: rejects generic procurement phrasing without specifics
+- Similarity threshold: default 0.804
+- Confidence gap: top1 - top2 must be >= 0.01 (CPV codes have natural overlap)
 
 Usage:
     python scripts/deduce_cpv.py                    # Deduce for all without CPV
     python scripts/deduce_cpv.py --limit 10         # Test with 10 decisions
     python scripts/deduce_cpv.py --dry-run           # Show matches without applying
     python scripts/deduce_cpv.py --threshold 0.75    # Custom threshold
-    python scripts/deduce_cpv.py --min-gap 0.05      # Stricter confidence gap
+    python scripts/deduce_cpv.py --min-gap 0.03      # Stricter confidence gap
     python scripts/deduce_cpv.py --top-k 5           # Show top 5 candidates per decision
 """
 
@@ -43,8 +44,8 @@ from app.models.decision import DecizieCNSC, NomenclatorCPV
 
 logger = get_logger(__name__)
 
-DEFAULT_THRESHOLD = 0.80
-DEFAULT_MIN_GAP = 0.03
+DEFAULT_THRESHOLD = 0.804
+DEFAULT_MIN_GAP = 0.01
 MIN_ALNUM_CHARS = 10
 MIN_WORD_COUNT = 3
 MAX_JUNK_RATIO = 0.70
@@ -61,6 +62,14 @@ _PROCEDURAL_CUT_RE = re.compile(
     r"|,?\s*contestat(?:oarea|orul)?\s+a\s+solicitat"
     r"|,?\s*prin\s+care\s+se\s+solicit[ăa]"
     r"|,?\s*s-a\s+formulat",
+    re.IGNORECASE,
+)
+
+# Boilerplate phrases that don't describe the actual contract object
+_BOILERPLATE_RE = re.compile(
+    r"^(?:de\s+)?achizi[tț]i[ea]\s+public[ăa]\s+(?:av[aâ]nd\s+ca\s+obiect|de\s+tip|privind)\s*$"
+    r"|^procedur[aă]\s+de\s+achizi[tț]i[ea]\s+public[ăa]\s*$"
+    r"|^contractul\s+de\s+achizi[tț]i[ea]\s+public[ăa]\s*$",
     re.IGNORECASE,
 )
 
@@ -96,6 +105,10 @@ def _clean_for_embedding(text: str) -> str | None:
     # Filter 3: minimum word count (real words, not dots/symbols)
     words = [w for w in re.split(r'\s+', text) if len(w) >= 2 and any(c.isalpha() for c in w)]
     if len(words) < MIN_WORD_COUNT:
+        return None
+
+    # Filter 4: boilerplate procurement phrases (no actual contract object)
+    if _BOILERPLATE_RE.match(text.strip()):
         return None
 
     return text
