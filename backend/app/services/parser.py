@@ -432,6 +432,16 @@ class CNSCDecisionParser:
             r"(?:achiziți(?:i|ilor|ilor)|contract(?:e|elor))\s+sectoriale",
             re.IGNORECASE
         ),
+        # HG 395/2016 = norme aplicare Legea 98 (achiziții publice)
+        "hg_395": re.compile(
+            r"(?:H\.?G\.?|Hot[aă]r[âa]rea\s+Guvernului)\s*(?:nr\.?\s*)?395/2016",
+            re.IGNORECASE
+        ),
+        # HG 394/2016 = norme aplicare Legea 99 (achiziții sectoriale)
+        "hg_394": re.compile(
+            r"(?:H\.?G\.?|Hot[aă]r[âa]rea\s+Guvernului)\s*(?:nr\.?\s*)?394/2016",
+            re.IGNORECASE
+        ),
         # "concesiune de lucrări" / "concesiune de servicii" / "contract de concesiune"
         "concesiune": re.compile(
             r"concesiun(?:e|i|ea|ii)\s+de\s+(?:lucrări|servicii)|contract\s+de\s+concesiune",
@@ -995,11 +1005,16 @@ class CNSCDecisionParser:
         if self.PATTERNS["sectoriale"].search(search_text):
             return "achizitii_sectoriale"
 
+        # Check for HG 394/2016 (norme aplicare Legea 99 = sectoriale)
+        if self.PATTERNS["hg_394"].search(text):
+            return "achizitii_sectoriale"
+
         # Check for "entitate contractantă" (strong indicator of sectorial)
         if self.PATTERNS["entitate_contractanta"].search(text):
             return "achizitii_sectoriale"
 
         # Default: achiziții publice (Legea 98/2016)
+        # Reinforced by HG 395/2016 presence (norme aplicare Legea 98)
         return "achizitii_publice"
 
     def _extract_tip_procedura(self, text: str) -> Optional[str]:
