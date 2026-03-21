@@ -109,7 +109,7 @@ async def generate_cpv_embeddings(embedding_service, cpv_list: list[dict]) -> li
     all_embeddings = []
     for i in range(0, len(texts), BATCH_SIZE):
         batch = texts[i:i + BATCH_SIZE]
-        embeddings = await embedding_service.generate_embeddings(batch)
+        embeddings = await embedding_service.embed_batch(batch)
         all_embeddings.extend(embeddings)
         if (i + BATCH_SIZE) % 200 == 0:
             print(f"  Embedded {min(i + BATCH_SIZE, len(texts))}/{len(texts)} CPV codes")
@@ -192,7 +192,7 @@ async def main():
 
             try:
                 # Generate embedding for query text
-                query_embeddings = await embedding_service.generate_embeddings([query_text])
+                query_embeddings = await embedding_service.embed_batch([query_text])
                 query_embedding = query_embeddings[0]
 
                 # Find best matches
