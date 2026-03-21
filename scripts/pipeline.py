@@ -3,17 +3,24 @@
 
 Orchestrates the full data pipeline:
   1. IMPORT  — Download new decisions from GCS → database
-  2. ANALYZE — Extract ArgumentareCritica via LLM (Gemini)
+  2. ANALYZE — Extract ArgumentareCritica + obiect_contract via LLM
   3. EMBED   — Generate vector embeddings for RAG search
+  4. CPV     — Deduce CPV codes via embedding similarity
 
 Each step is idempotent: it skips already-processed records.
 Safe to run repeatedly (daily cron, Cloud Scheduler, manual).
 
+Note: obiect_contract is now extracted by the LLM during analysis (step 2).
+The regex-based extract_obiect_contract.py script remains available as
+a standalone fallback for decisions not yet analyzed by LLM:
+    python scripts/extract_obiect_contract.py
+
 Usage:
-    python scripts/pipeline.py                    # Full pipeline (import → analyze → embed)
+    python scripts/pipeline.py                    # Full pipeline (all 4 steps)
     python scripts/pipeline.py --step analyze     # Only analysis
     python scripts/pipeline.py --step embed       # Only embeddings
-    python scripts/pipeline.py --step import      # Only import
+    python scripts/pipeline.py --step cpv         # Only CPV deduction
+    python scripts/pipeline.py --step extract     # Retroactive regex extraction (standalone)
     python scripts/pipeline.py --daily            # Alias for full pipeline (for cron)
     python scripts/pipeline.py --limit 10         # Limit each step to 10 records (testing)
 
@@ -85,11 +92,11 @@ def parse_imported_count(output: str) -> int | None:
 
 def main():
     parser = argparse.ArgumentParser(
-        description="ExpertAP unified data pipeline: import → analyze → embed"
+        description="ExpertAP unified data pipeline: import → analyze → embed → cpv"
     )
     parser.add_argument(
         "--step",
-        choices=["import", "analyze", "embed"],
+        choices=["import", "analyze", "embed", "cpv", "extract"],
         help="Run only a specific step (default: all steps)",
     )
     parser.add_argument(
@@ -112,6 +119,23 @@ def main():
         action="store_true",
         help="Force re-processing (re-analyze, re-embed)",
     )
+    parser.add_argument(
+        "--provider",
+        help="LLM provider for analysis step (e.g. gemini, anthropic, groq, openrouter)",
+    )
+    parser.add_argument(
+        "--model",
+        help="LLM model for analysis step (e.g. gemini-2.5-flash, gemini-2.5-pro)",
+    )
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Preview what would be processed without making changes",
+    )
+    parser.add_argument(
+        "--since",
+        help="Only scan GCS files with this prefix (e.g. 'BO2026_'). Speeds up import.",
+    )
 
     args = parser.parse_args()
 
@@ -119,10 +143,10 @@ def main():
     if args.step:
         steps_to_run = [args.step]
     else:
-        # Full pipeline
+        # Full pipeline: import → analyze → embed → cpv
         if not args.skip_import:
             steps_to_run.append("import")
-        steps_to_run.extend(["analyze", "embed"])
+        steps_to_run.extend(["analyze", "embed", "cpv"])
 
     pipeline_start = time.time()
     results = {}
@@ -135,6 +159,14 @@ def main():
         print(f"Limit: {args.limit} records per step")
     if args.force:
         print(f"Mode: FORCE (re-process existing)")
+    if args.provider:
+        print(f"LLM Provider: {args.provider}")
+    if args.model:
+        print(f"LLM Model: {args.model}")
+    if args.dry_run:
+        print(f"Mode: DRY RUN (preview only)")
+    if args.since:
+        print(f"GCS filter: {args.since}*")
     print("=" * 60)
 
     # Step 1: Import from GCS
@@ -142,6 +174,8 @@ def main():
         import_args = ["--skip-embeddings"]
         if args.limit:
             import_args.extend(["--limit", str(args.limit)])
+        if args.since:
+            import_args.extend(["--since", args.since])
         success, output = run_step(
             "import_decisions_from_gcs.py", import_args, "Import decisions from GCS"
         )
@@ -150,7 +184,7 @@ def main():
         if new_imported is not None:
             print(f"\n>>> New decisions imported: {new_imported}")
 
-    # Step 2: LLM Analysis
+    # Step 2: LLM Analysis (ArgumentareCritica + obiect_contract + rezumat)
     if "analyze" in steps_to_run:
         analyze_args = []
         if args.limit:
@@ -165,26 +199,54 @@ def main():
         if "analyze" not in results:
             if args.force:
                 analyze_args.append("--force")
+            if args.provider:
+                analyze_args.extend(["--provider", args.provider])
+            if args.model:
+                analyze_args.extend(["--model", args.model])
+            if args.dry_run:
+                analyze_args.append("--dry-run")
             success, _ = run_step(
-                "generate_analysis.py", analyze_args, "LLM Analysis (ArgumentareCritica)"
+                "generate_analysis.py", analyze_args,
+                "LLM Analysis (ArgumentareCritica + obiect_contract)"
             )
             results["analyze"] = success
 
-    # Step 3: Embeddings
+    # Step 3: Embeddings (ArgumentareCritica vectors for RAG)
+    # Note: --limit is NOT passed to embeddings because it means different things:
+    # pipeline --limit = N decisions, but embeddings --limit = N rows of ArgumentareCritica.
+    # Each decision has ~5 argumentari, so --limit 5 would only embed 5 rows (1 decision).
+    # Embeddings are fast and cheap, so we always process all missing ones.
     if "embed" in steps_to_run:
         embed_args = []
-        if args.limit:
-            embed_args.extend(["--limit", str(args.limit)])
         if args.force:
             embed_args.append("--force")
-        if new_imported == 0 and not args.force:
-            print("\n>>> No new decisions — skipping embeddings")
-            results["embed"] = True
-        else:
-            success, _ = run_step(
-                "generate_embeddings.py", embed_args, "Generate Embeddings"
-            )
-            results["embed"] = success
+        success, _ = run_step(
+            "generate_embeddings.py", embed_args, "Generate Embeddings"
+        )
+        results["embed"] = success
+
+    # Step 4: Deduce CPV codes via embedding similarity
+    if "cpv" in steps_to_run:
+        cpv_args = []
+        if args.limit:
+            cpv_args.extend(["--limit", str(args.limit)])
+        success, _ = run_step(
+            "deduce_cpv.py", cpv_args, "Deduce CPV codes (embedding similarity)"
+        )
+        results["cpv"] = success
+
+    # Standalone: Extract obiect_contract via regex (retroactive fallback)
+    if "extract" in steps_to_run:
+        extract_args = []
+        if args.limit:
+            extract_args.extend(["--limit", str(args.limit)])
+        if args.force:
+            extract_args.append("--force")
+        success, _ = run_step(
+            "extract_obiect_contract.py", extract_args,
+            "Extract obiect_contract (regex fallback)"
+        )
+        results["extract"] = success
 
     # Pipeline summary
     total_elapsed = time.time() - pipeline_start

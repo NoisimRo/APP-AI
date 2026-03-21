@@ -78,17 +78,22 @@ class DecisionImporter:
         self,
         existing_filenames: set[str],
         limit: Optional[int] = None,
+        since: Optional[str] = None,
     ) -> tuple[list[str], int]:
         """List only NEW decision files by filtering against existing DB filenames during GCS iteration.
 
         Args:
             existing_filenames: Set of filenames already in DB.
             limit: Maximum number of new files to return.
+            since: Only list files with names starting with this prefix (e.g. "BO2026_" for year 2026).
 
         Returns:
             Tuple of (new_file_blob_names, already_existed_count).
         """
         prefix = f"{self.folder_name}/" if self.folder_name else ""
+        if since:
+            prefix = f"{prefix}{since}"
+            logger.info("gcs_listing_with_prefix", prefix=prefix)
         blobs = self.bucket.list_blobs(prefix=prefix, timeout=300)
 
         new_files = []
@@ -249,15 +254,25 @@ class DecisionImporter:
             return {row[0] for row in result.all()}
 
     async def _load_cpv_nomenclator(self) -> dict:
-        """Load CPV nomenclator into memory for enrichment during import."""
+        """Load CPV nomenclator into memory for enrichment during import.
+
+        Only loads the columns needed for enrichment (no embeddings).
+        """
         async with db_session.async_session_factory() as session:
-            result = await session.execute(select(NomenclatorCPV))
+            result = await session.execute(
+                select(
+                    NomenclatorCPV.cod_cpv,
+                    NomenclatorCPV.descriere,
+                    NomenclatorCPV.categorie_achizitii,
+                    NomenclatorCPV.clasa_produse,
+                )
+            )
             cpv_map = {}
-            for cpv in result.scalars().all():
-                cpv_map[cpv.cod_cpv] = {
-                    "descriere": cpv.descriere,
-                    "categorie": cpv.categorie_achizitii,
-                    "clasa": cpv.clasa_produse,
+            for row in result.all():
+                cpv_map[row.cod_cpv] = {
+                    "descriere": row.descriere,
+                    "categorie": row.categorie_achizitii,
+                    "clasa": row.clasa_produse,
                 }
             return cpv_map
 
@@ -265,12 +280,14 @@ class DecisionImporter:
         self,
         limit: Optional[int] = None,
         batch_size: int = 50,
+        since: Optional[str] = None,
     ) -> dict:
         """Import all decisions from GCS.
 
         Args:
             limit: Maximum number of NEW files to import
             batch_size: Number of decisions to commit in each batch
+            since: GCS filename prefix filter (e.g. "BO2026_" to only scan 2026 files)
 
         Returns:
             Dictionary with import statistics
@@ -294,8 +311,8 @@ class DecisionImporter:
         logger.info("cpv_nomenclator_loaded", count=len(cpv_map))
 
         # List GCS files, filtering out already-imported ones during iteration
-        logger.info("gcs_listing_starting", limit=limit)
-        new_files, already_existed = self.list_new_files(existing_filenames, limit=limit)
+        logger.info("gcs_listing_starting", limit=limit, since=since)
+        new_files, already_existed = self.list_new_files(existing_filenames, limit=limit, since=since)
         stats["already_existed"] = already_existed
         stats["total_files"] = len(new_files) + already_existed
 
@@ -450,6 +467,11 @@ async def main():
         help="Batch size for commits (default: 50)",
     )
     parser.add_argument(
+        "--since",
+        help="Only scan GCS files starting with this prefix (e.g. 'BO2026_' for year 2026). "
+             "Drastically speeds up listing when most files are already imported.",
+    )
+    parser.add_argument(
         "--skip-embeddings",
         action="store_true",
         help="Skip embedding generation",
@@ -583,6 +605,7 @@ async def main():
     stats = await importer.import_all(
         limit=args.limit,
         batch_size=args.batch_size,
+        since=args.since,
     )
 
     # Print summary

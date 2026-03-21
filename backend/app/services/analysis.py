@@ -28,14 +28,25 @@ ANALYSIS_SYSTEM_PROMPT = """Ești un analist juridic expert în achiziții publi
 
 Sarcina ta: Analizează textul integral al unei decizii CNSC și extrage:
 1. Un REZUMAT scurt al deciziei (2-3 propoziții)
-2. Codul CPV sugerat (dacă nu este deja specificat)
-3. Argumentația structurată per critică (per motiv de contestare)
+2. OBIECTUL CONTRACTULUI — descrierea clară a ce se achiziționează
+3. Codul CPV sugerat (dacă nu este deja specificat)
+4. Argumentația structurată per critică (per motiv de contestare)
 
 Returnează un obiect JSON cu structura de mai jos.
 
 REZUMAT (rezumat):
 - 2-3 propoziții concise care descriu: cine a contestat, ce obiect are contractul, care este soluția CNSC
 - Exemplu: "Contestatorul SC Alfa SRL a contestat rezultatul procedurii de atribuire a contractului de furnizare echipamente medicale, susținând că oferta sa a fost respinsă nejustificat ca neconformă. CNSC a admis contestația, constatând că autoritatea contractantă nu a solicitat clarificări conform art. 209 din Legea 98/2016."
+
+OBIECTUL CONTRACTULUI (obiect_contract):
+- Descrierea clară și concisă a ce se achiziționează (furnizare, servicii, lucrări)
+- Extrage din text formulări precum "având ca obiect", "obiectul contractului", "achiziția de"
+- Exemplu: "Furnizare echipamente medicale pentru Spitalul Județean de Urgență Cluj"
+- Exemplu: "Servicii de proiectare și execuție pentru modernizarea drumului comunal DC12"
+- Exemplu: "Lucrări de reabilitare termică a blocurilor de locuințe din Municipiul Suceava"
+- NU include informații procedurale (cine a contestat, ce s-a solicitat)
+- Maxim 200 de caractere
+- Dacă nu se poate determina clar, returnează null
 
 CPV SUGERAT (cpv_sugerat):
 - Dacă decizia NU are cod CPV specificat, identifică obiectul contractului și sugerează codul CPV cel mai probabil (format: "XXXXXXXX-X", ex: "33100000-1")
@@ -81,6 +92,7 @@ ANALIZA CNSC:
 Format JSON strict (fără alte texte înainte sau după JSON):
 {
   "rezumat": "Rezumat concis al deciziei în 2-3 propoziții...",
+  "obiect_contract": "Descrierea obiectului contractului sau null",
   "cpv_sugerat": "XXXXXXXX-X sau null dacă CPV-ul este deja cunoscut",
   "critici": [
     {
@@ -243,6 +255,8 @@ class DecisionAnalysisService:
         if isinstance(parsed, dict) and "critici" in parsed:
             if parsed.get("rezumat"):
                 decision_metadata["rezumat"] = str(parsed["rezumat"])
+            if parsed.get("obiect_contract"):
+                decision_metadata["obiect_contract"] = str(parsed["obiect_contract"])[:200]
             if parsed.get("cpv_sugerat"):
                 decision_metadata["cpv_sugerat"] = str(parsed["cpv_sugerat"])
             parsed = parsed["critici"]
@@ -369,6 +383,14 @@ class DecisionAnalysisService:
                 "rezumat_saved",
                 external_id=decision.external_id,
                 rezumat_length=len(decision_metadata["rezumat"]),
+            )
+
+        if decision_metadata.get("obiect_contract") and not decision.obiect_contract:
+            decision.obiect_contract = decision_metadata["obiect_contract"]
+            logger.info(
+                "obiect_contract_saved",
+                external_id=decision.external_id,
+                obiect_contract=decision_metadata["obiect_contract"][:80],
             )
 
         if decision_metadata.get("cpv_sugerat") and not decision.cod_cpv:
