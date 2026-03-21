@@ -211,6 +211,10 @@ class ParsedDecision:
     numar_anunt_participare: Optional[str] = None
     data_raport_procedura: Optional[datetime] = None
 
+    # Legislative domain and procedure type
+    domeniu_legislativ: Optional[str] = None
+    tip_procedura: Optional[str] = None
+
     # Sections (populated by section parser)
     sectiuni: list[DecisionSection] = field(default_factory=list)
 
@@ -404,6 +408,79 @@ class CNSCDecisionParser:
         # Date format: nr/DD.MM.YYYY or nr.../DD.MM.YYYY or complex nr like 2/2135/29.04.2025
         "raport_procedura": re.compile(
             r"raportul\s+procedurii\s+nr\.?\s*(?:[\d/]+/)?(\d{1,2})[./](\d{1,2})[./](\d{4})",
+            re.IGNORECASE
+        ),
+
+        # Legislative domain detection
+        # Legea 99/2016 = achiziții sectoriale
+        "legea_99": re.compile(
+            r"Leg(?:ea|ii)\s+(?:nr\.?\s*)?99/2016",
+            re.IGNORECASE
+        ),
+        # Legea 100/2016 = concesiuni
+        "legea_100": re.compile(
+            r"Leg(?:ea|ii)\s+(?:nr\.?\s*)?100/2016",
+            re.IGNORECASE
+        ),
+        # "entitate contractantă" (indicator sectorial)
+        "entitate_contractanta": re.compile(
+            r"entitate\s+contractant[aă]",
+            re.IGNORECASE
+        ),
+        # "achiziții sectoriale" / "contracte sectoriale"
+        "sectoriale": re.compile(
+            r"(?:achiziți(?:i|ilor|ilor)|contract(?:e|elor))\s+sectoriale",
+            re.IGNORECASE
+        ),
+        # "concesiune de lucrări" / "concesiune de servicii" / "contract de concesiune"
+        "concesiune": re.compile(
+            r"concesiun(?:e|i|ea|ii)\s+de\s+(?:lucrări|servicii)|contract\s+de\s+concesiune",
+            re.IGNORECASE
+        ),
+
+        # Procedure type detection
+        "proc_licitatie_deschisa": re.compile(
+            r"licitați[ea]\s+deschis[aă]",
+            re.IGNORECASE
+        ),
+        "proc_licitatie_restransa": re.compile(
+            r"licitați[ea]\s+restrâns[aă]",
+            re.IGNORECASE
+        ),
+        "proc_negociere_competitiva": re.compile(
+            r"negociere(?:a)?\s+competitiv[aă]",
+            re.IGNORECASE
+        ),
+        "proc_dialog_competitiv": re.compile(
+            r"dialog(?:ul)?\s+competitiv",
+            re.IGNORECASE
+        ),
+        "proc_parteneriat_inovare": re.compile(
+            r"parteneriat(?:ul)?\s+pentru\s+inovare",
+            re.IGNORECASE
+        ),
+        "proc_negociere_fara_publicare": re.compile(
+            r"negociere(?:a)?\s+fără\s+publicare\s+prealabil[aă]",
+            re.IGNORECASE
+        ),
+        "proc_negociere_fara_invitatie": re.compile(
+            r"negociere(?:a)?\s+fără\s+invitați[ea]\s+prealabil[aă]",
+            re.IGNORECASE
+        ),
+        "proc_negociere_fara_anunt": re.compile(
+            r"negociere(?:a)?\s+fără\s+publicare(?:a)?\s+(?:unui\s+)?anunț\s+de\s+concesionare",
+            re.IGNORECASE
+        ),
+        "proc_concurs_solutii": re.compile(
+            r"concurs(?:ul)?\s+de\s+soluții",
+            re.IGNORECASE
+        ),
+        "proc_servicii_sociale": re.compile(
+            r"procedur[aă]\s+(?:de\s+)?atribuire\s+aplicabil[aă]\s+(?:în\s+cazul\s+)?servicii(?:lor)?\s+sociale",
+            re.IGNORECASE
+        ),
+        "proc_simplificata": re.compile(
+            r"procedur[aă]\s+simplificat[aă]",
             re.IGNORECASE
         ),
     }
@@ -713,6 +790,10 @@ class CNSCDecisionParser:
         decision.numar_anunt_participare = self._extract_numar_anunt(text)
         decision.data_raport_procedura = self._extract_data_raport(text)
 
+        # Extract legislative domain and procedure type
+        decision.domeniu_legislativ = self._extract_domeniu_legislativ(text)
+        decision.tip_procedura = self._extract_tip_procedura(text)
+
     def _extract_date(self, text: str) -> Optional[datetime]:
         """Extract date from text."""
         # Try text format first (e.g., "10 decembrie 2025")
@@ -855,6 +936,97 @@ class CNSCDecisionParser:
                 return datetime(year, month, day)
             except ValueError:
                 pass
+        return None
+
+    def _extract_domeniu_legislativ(self, text: str) -> str:
+        """Detect legislative domain from decision text.
+
+        Priority:
+        1. Explicit reference to Legea 100/2016 → concesiuni
+        2. Explicit reference to Legea 99/2016 → achizitii_sectoriale
+        3. "concesiune de lucrări/servicii" → concesiuni
+        4. "achiziții/contracte sectoriale" or "entitate contractantă" → achizitii_sectoriale
+        5. Default → achizitii_publice (Legea 98/2016)
+
+        Note: Legea 101/2016 (remedii) mentions all three domains in its title,
+        so we exclude occurrences within the standard Legea 101 preamble.
+        """
+        # Remove ALL references to Legea 101/2016 full title which mentions
+        # "contracte sectoriale" and "concesiune de lucrări/servicii" — false positives.
+        cleaned = re.sub(
+            r"Leg(?:ea|ii)\s+(?:nr\.?\s*)?101/2016\s+privind\s+remediile.*?"
+            r"Contestați(?:i|ilor)",
+            "",
+            text,
+            flags=re.IGNORECASE | re.DOTALL
+        )
+        # Remove the standard legal enumeration "concesiune de lucrări și concesiune
+        # de servicii" which appears in Legea 101 citations, ANAP references, etc.
+        # Note: both ș (U+0219) and ş (U+015F, cedilla) variants exist in texts.
+        search_text = re.sub(
+            r"(?:contracte(?:lor)?(?:/acorduri(?:lor)?[\s\-]*cadru)?\s+)?sectoriale\s+"
+            r"[sșş]i\s+a\s+(?:contractelor\s+)?(?:de\s+)?concesiun[eă]\s+"
+            r"de\s+lucrări\s+[sșş]i\s+(?:de\s+)?concesiun[eă]\s+de\s+servicii",
+            "",
+            cleaned,
+            flags=re.IGNORECASE
+        )
+        # Also catch standalone "concesiune de lucrări și concesiune de servicii"
+        search_text = re.sub(
+            r"concesiun[eă]\s+de\s+lucrări\s+[sșş]i\s+(?:de\s+)?concesiun[eă]\s+de\s+servicii",
+            "",
+            search_text,
+            flags=re.IGNORECASE
+        )
+
+        # Check for Legea 100/2016 (concesiuni)
+        if self.PATTERNS["legea_100"].search(search_text):
+            return "concesiuni"
+
+        # Check for Legea 99/2016 (sectoriale)
+        if self.PATTERNS["legea_99"].search(search_text):
+            return "achizitii_sectoriale"
+
+        # Check for "concesiune de lucrări/servicii" (excluding Legea 101 preamble)
+        if self.PATTERNS["concesiune"].search(search_text):
+            return "concesiuni"
+
+        # Check for "achiziții/contracte sectoriale"
+        if self.PATTERNS["sectoriale"].search(search_text):
+            return "achizitii_sectoriale"
+
+        # Check for "entitate contractantă" (strong indicator of sectorial)
+        if self.PATTERNS["entitate_contractanta"].search(text):
+            return "achizitii_sectoriale"
+
+        # Default: achiziții publice (Legea 98/2016)
+        return "achizitii_publice"
+
+    def _extract_tip_procedura(self, text: str) -> Optional[str]:
+        """Extract procedure type from decision text.
+
+        Searches for procedure type mentions like "procedura simplificată",
+        "licitație deschisă", etc. Returns canonical code.
+        """
+        # Map pattern keys to canonical procedure codes
+        procedure_patterns = [
+            ("proc_licitatie_deschisa", "licitatie_deschisa"),
+            ("proc_licitatie_restransa", "licitatie_restransa"),
+            ("proc_negociere_competitiva", "negociere_competitiva"),
+            ("proc_dialog_competitiv", "dialog_competitiv"),
+            ("proc_parteneriat_inovare", "parteneriat_inovare"),
+            ("proc_negociere_fara_publicare", "negociere_fara_publicare"),
+            ("proc_negociere_fara_invitatie", "negociere_fara_invitatie"),
+            ("proc_negociere_fara_anunt", "negociere_fara_anunt"),
+            ("proc_concurs_solutii", "concurs_solutii"),
+            ("proc_servicii_sociale", "servicii_sociale"),
+            ("proc_simplificata", "procedura_simplificata"),
+        ]
+
+        for pattern_key, code in procedure_patterns:
+            if self.PATTERNS[pattern_key].search(text):
+                return code
+
         return None
 
     def _extract_parties(self, decision: ParsedDecision, text: str) -> None:

@@ -46,6 +46,8 @@ FIELDS = [
     "valoare_estimata",
     "numar_anunt_participare",
     "data_raport_procedura",
+    "domeniu_legislativ",
+    "tip_procedura",
 ]
 
 
@@ -77,6 +79,8 @@ async def main():
                     DecizieCNSC.valoare_estimata.is_(None),
                     DecizieCNSC.numar_anunt_participare.is_(None),
                     DecizieCNSC.data_raport_procedura.is_(None),
+                    DecizieCNSC.domeniu_legislativ.is_(None),
+                    DecizieCNSC.tip_procedura.is_(None),
                 )
             )
 
@@ -147,6 +151,24 @@ async def main():
                 if not args.dry_run:
                     decision.data_raport_procedura = data_rap
                 counters["data_raport_procedura"] += 1
+                any_change = True
+
+            # domeniu_legislativ
+            domeniu = cnsc_parser._extract_domeniu_legislativ(text)
+            if domeniu and (args.force or not decision.domeniu_legislativ):
+                changes.append(f"domeniu={domeniu}")
+                if not args.dry_run:
+                    decision.domeniu_legislativ = domeniu
+                counters["domeniu_legislativ"] += 1
+                any_change = True
+
+            # tip_procedura
+            procedura = cnsc_parser._extract_tip_procedura(text)
+            if procedura and (args.force or not decision.tip_procedura):
+                changes.append(f"procedura={procedura}")
+                if not args.dry_run:
+                    decision.tip_procedura = procedura
+                counters["tip_procedura"] += 1
                 any_change = True
 
             if changes:

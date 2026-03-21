@@ -219,6 +219,8 @@ class DecisionImporter:
                 moneda=parsed.moneda,
                 numar_anunt_participare=parsed.numar_anunt_participare,
                 data_raport_procedura=parsed.data_raport_procedura,
+                domeniu_legislativ=parsed.domeniu_legislativ,
+                tip_procedura=parsed.tip_procedura,
                 parse_warnings=parsed.parse_warnings,
             )
 

@@ -90,6 +90,10 @@ class DecizieCNSC(Base):
     criteriu_atribuire: Mapped[Optional[str]] = mapped_column(String(100))
     numar_oferte: Mapped[Optional[int]] = mapped_column(Integer)
 
+    # Legislative domain and procedure type
+    domeniu_legislativ: Mapped[Optional[str]] = mapped_column(String(30))
+    tip_procedura: Mapped[Optional[str]] = mapped_column(String(80))
+
     # Parties
     contestator: Mapped[Optional[str]] = mapped_column(String(500))
     autoritate_contractanta: Mapped[Optional[str]] = mapped_column(String(500))
