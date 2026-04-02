@@ -24,7 +24,7 @@ from pydantic import BaseModel
 from app.core.logging import get_logger
 from app.models.decision import (
     DecizieCNSC, ArgumentareCritica, NomenclatorCPV,
-    LegislatieFragment, ActNormativ,
+    LegislatieFragment, ActNormativ, SpetaANAP,
 )
 from app.services.embedding import EmbeddingService
 from app.services.llm.base import LLMProvider
@@ -556,6 +556,92 @@ class RAGService:
             contexts.append("\n".join(parts))
 
         return contexts
+
+    async def _search_spete_anap(
+        self,
+        query: str,
+        session: AsyncSession,
+        limit: int = 3,
+        query_vector: list[float] | None = None,
+    ) -> list[SpetaANAP]:
+        """Vector search on ANAP spete (official ANAP case interpretations).
+
+        Args:
+            query: User's query.
+            session: Database session.
+            limit: Maximum spete to return.
+            query_vector: Pre-computed embedding vector.
+
+        Returns:
+            List of SpetaANAP objects sorted by relevance.
+        """
+        try:
+            if query_vector is None:
+                query_vector = await self.embedding_service.embed_query(query)
+
+            stmt = (
+                select(
+                    SpetaANAP,
+                    SpetaANAP.embedding.cosine_distance(query_vector).label("distance"),
+                )
+                .where(SpetaANAP.embedding.isnot(None))
+                .order_by("distance")
+                .limit(limit)
+            )
+
+            result = await session.execute(stmt)
+            rows = result.all()
+
+            # Filter by reasonable similarity (distance < 0.6)
+            spete = [row[0] for row in rows if row.distance < 0.6]
+
+            if spete:
+                logger.info(
+                    "spete_anap_vector_search",
+                    count=len(spete),
+                    top_distance=rows[0].distance if rows else None,
+                )
+            return spete
+
+        except Exception as e:
+            logger.warning("spete_anap_search_failed", error=str(e))
+            return []
+
+    def _build_spete_context(self, spete: list[SpetaANAP]) -> list[str]:
+        """Build context strings from ANAP spete.
+
+        Args:
+            spete: List of SpetaANAP objects.
+
+        Returns:
+            List of context strings, one per speță.
+        """
+        contexts = []
+        for s in spete:
+            parts = [
+                f"=== SPEȚĂ ANAP nr. {s.numar_speta} (Categorie: {s.categorie}) ===",
+                "",
+                f"Întrebare: {s.intrebare}",
+                "",
+                f"Răspuns ANAP: {s.raspuns}",
+            ]
+            if s.taguri:
+                parts.append(f"\nTaguri: {', '.join(s.taguri)}")
+            contexts.append("\n".join(parts))
+        return contexts
+
+    def _build_spete_citations(self, spete: list[SpetaANAP]) -> list[Citation]:
+        """Build citations from ANAP spete."""
+        citations = []
+        for s in spete:
+            # Use first sentence of answer as citation text
+            first_sentence = s.raspuns.split(".")[0] + "." if s.raspuns else ""
+            citations.append(Citation(
+                decision_id=f"ANAP_speta_{s.numar_speta}",
+                text=first_sentence[:300],
+                verified=True,
+            ))
+        return citations
 
     async def _search_by_legal_reference(
         self,
@@ -1601,6 +1687,14 @@ class RAGService:
                      duration_s=round(t_legis - t_embed, 2),
                      results=len(legislation_fragments))
 
+        spete_anap = await self._search_spete_anap(
+            query, session, limit=3, query_vector=query_vector
+        )
+        t_spete = time.monotonic()
+        logger.info("timing_spete_search",
+                     duration_s=round(t_spete - t_legis, 2),
+                     results=len(spete_anap))
+
         decisions, matched_chunks = await self.search_decisions(
             query, session, limit=max_decisions,
             scope_decision_ids=scope_decision_ids,
@@ -1610,7 +1704,7 @@ class RAGService:
         )
         t_decisions = time.monotonic()
         logger.info("timing_decision_search",
-                     duration_s=round(t_decisions - t_legis, 2),
+                     duration_s=round(t_decisions - t_spete, 2),
                      decisions=len(decisions),
                      chunks=len(matched_chunks))
 
@@ -1618,31 +1712,42 @@ class RAGService:
                      duration_s=round(t_decisions - t0, 2),
                      embedding_s=round(t_embed - t0, 2),
                      legislation_s=round(t_legis - t_embed, 2),
-                     decisions_s=round(t_decisions - t_legis, 2))
+                     spete_s=round(t_spete - t_legis, 2),
+                     decisions_s=round(t_decisions - t_spete, 2))
 
-        if not decisions and not legislation_fragments:
+        if not decisions and not legislation_fragments and not spete_anap:
             return None, None, [], 0.0, ["Ce decizii CNSC sunt disponibile?", "Arată-mi toate deciziile"]
 
         contexts = []
         if legislation_fragments:
             contexts.extend(self._build_legislation_context(legislation_fragments))
+        if spete_anap:
+            contexts.extend(self._build_spete_context(spete_anap))
         if decisions:
             contexts.extend(self._build_context(decisions, matched_chunks))
 
         system_prompt = self._build_system_prompt(
-            bool(legislation_fragments), bool(decisions)
+            bool(legislation_fragments), bool(decisions), bool(spete_anap)
         )
         citations = self._build_citations(decisions, matched_chunks)
+        if spete_anap:
+            citations.extend(self._build_spete_citations(spete_anap))
         confidence = self._calculate_confidence(decisions, matched_chunks, max_decisions)
         if legislation_fragments and not decisions:
             confidence = max(confidence, 0.9)
         elif legislation_fragments:
             confidence = min(1.0, confidence + 0.1)
+        if spete_anap and not decisions:
+            confidence = max(confidence, 0.85)
+        elif spete_anap:
+            confidence = min(1.0, confidence + 0.05)
         suggested = self._generate_suggested_questions(decisions)
 
         return contexts, system_prompt, citations, confidence, suggested
 
-    def _build_system_prompt(self, has_legislation: bool, has_decisions: bool) -> str:
+    def _build_system_prompt(
+        self, has_legislation: bool, has_decisions: bool, has_spete: bool = False,
+    ) -> str:
         """Build the system prompt based on available context types."""
         system_prompt = """Ești un consultant senior în achiziții publice specializat în legislația și jurisprudența CNSC (Consiliul Național de Soluționare a Contestațiilor) din România.
 
@@ -1659,10 +1764,16 @@ Contextul conține atât TEXTE LEGISLATIVE (articole din Legea 98/2016, HG 395/2
 
 Contextul conține TEXTE LEGISLATIVE (articole din Legea 98/2016, HG 395/2016, etc.).
 Citează textul exact al articolelor, inclusiv alineatele și literele relevante."""
-        else:
+        elif has_decisions:
             system_prompt += """
 
 Contextul conține DECIZII CNSC relevante pentru întrebare."""
+
+        if has_spete:
+            system_prompt += """
+
+Contextul conține și SPEȚE ANAP — interpretări oficiale ale Autorității Naționale pentru Achiziții Publice pe cazuri concrete. Acestea reprezintă poziția oficială a autorității de reglementare.
+Citează-le astfel: "Conform **Speței ANAP nr. {număr}**: ..." """
 
         system_prompt += """
 

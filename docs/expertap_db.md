@@ -14,9 +14,10 @@
  public | nomenclator_cpv          | table | expertap | permanent   | heap          | 8192 bytes |
  public | red_flags_salvate        | table | expertap | permanent   | heap          | 8192 bytes |
  public | search_scopes            | table | expertap | permanent   | heap          | 8192 bytes |
+ public | spete_anap               | table | expertap | permanent   | heap          | 8192 bytes |
  public | training_materials       | table | expertap | permanent   | heap          | 8192 bytes |
  public | users                    | table | expertap | permanent   | heap          | 8192 bytes |
-(13 rows)
+(14 rows)
 
 
 # \d decizii_cnsc
@@ -368,9 +369,31 @@ Foreign-key constraints:
     "training_materials_user_id_fkey" FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 
 
+# \d spete_anap
+                              Table "public.spete_anap"
+       Column        |            Type             | Collation | Nullable |      Default
+---------------------+-----------------------------+-----------+----------+--------------------
+ id                  | uuid                        |           | not null | gen_random_uuid()
+ numar_speta         | integer                     |           | not null |
+ versiune            | integer                     |           | not null | 1
+ data_publicarii     | timestamp without time zone |           | not null |
+ categorie           | character varying(200)      |           | not null |
+ intrebare           | text                        |           | not null |
+ raspuns             | text                        |           | not null |
+ taguri              | text[]                      |           |          |
+ embedding           | vector(2000)                |           |          |
+ created_at          | timestamp without time zone |           | not null | now()
+Indexes:
+    "spete_anap_pkey" PRIMARY KEY, btree (id)
+    "spete_anap_numar_speta_key" UNIQUE CONSTRAINT, btree (numar_speta)
+    "ix_spete_categorie" btree (categorie)
+    "ix_spete_embedding_hnsw" hnsw (embedding vector_cosine_ops)
+    "ix_spete_taguri" gin (taguri)
+
+
 ---
 
-# Ultima sincronizare cu producția: 2026-03-21
+# Ultima sincronizare cu producția: 2026-04-02
 
 # Changelog Schema Producție
 
@@ -411,3 +434,4 @@ Foreign-key constraints:
 | 2026-03-21 | `COMMENT ON COLUMN decizii_cnsc.tip_procedura IS 'licitatie_deschisa, licitatie_restransa, negociere_competitiva, dialog_competitiv, parteneriat_inovare, negociere_fara_publicare, concurs_solutii, servicii_sociale, procedura_simplificata';` | Utilizator | DA |
 | 2026-03-21 | `CREATE INDEX ix_decizii_domeniu ON decizii_cnsc (domeniu_legislativ);` | Utilizator | DA |
 | 2026-03-21 | `CREATE INDEX ix_decizii_procedura ON decizii_cnsc (tip_procedura);` | Utilizator | DA |
+| 2026-04-02 | `CREATE TABLE spete_anap (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), numar_speta INTEGER NOT NULL UNIQUE, versiune INTEGER NOT NULL DEFAULT 1, data_publicarii TIMESTAMP NOT NULL, categorie VARCHAR(200) NOT NULL, intrebare TEXT NOT NULL, raspuns TEXT NOT NULL, taguri TEXT[], embedding vector(2000), created_at TIMESTAMP NOT NULL DEFAULT now());` + 3 indexuri (categorie, taguri GIN, embedding HNSW) | Utilizator | DA |
