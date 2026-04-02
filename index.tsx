@@ -53,7 +53,7 @@ import {
 
 // --- Types ---
 
-type AppMode = 'dashboard' | 'datalake' | 'drafter' | 'redflags' | 'chat' | 'clarification' | 'rag' | 'training' | 'settings' | 'profile' | 'pricing';
+type AppMode = 'dashboard' | 'datalake' | 'spete' | 'drafter' | 'redflags' | 'chat' | 'clarification' | 'rag' | 'training' | 'settings' | 'profile' | 'pricing';
 
 interface AuthUser {
   id: string;
@@ -311,11 +311,11 @@ const authFetchStream = async (
 
 // Feature access rules per role
 const ROLE_FEATURES: Record<string, string[]> = {
-  registered: ['chat', 'dashboard', 'datalake', 'rag', 'profile', 'pricing'],
-  paid_basic: ['chat', 'dashboard', 'datalake', 'rag', 'drafter', 'redflags', 'clarification', 'profile', 'pricing'],
-  paid_pro: ['chat', 'dashboard', 'datalake', 'rag', 'drafter', 'redflags', 'clarification', 'training', 'export', 'profile', 'pricing'],
-  paid_enterprise: ['chat', 'dashboard', 'datalake', 'rag', 'drafter', 'redflags', 'clarification', 'training', 'export', 'profile', 'pricing'],
-  admin: ['chat', 'dashboard', 'datalake', 'rag', 'drafter', 'redflags', 'clarification', 'training', 'export', 'settings', 'profile', 'pricing'],
+  registered: ['chat', 'dashboard', 'datalake', 'spete', 'rag', 'profile', 'pricing'],
+  paid_basic: ['chat', 'dashboard', 'datalake', 'spete', 'rag', 'drafter', 'redflags', 'clarification', 'profile', 'pricing'],
+  paid_pro: ['chat', 'dashboard', 'datalake', 'spete', 'rag', 'drafter', 'redflags', 'clarification', 'training', 'export', 'profile', 'pricing'],
+  paid_enterprise: ['chat', 'dashboard', 'datalake', 'spete', 'rag', 'drafter', 'redflags', 'clarification', 'training', 'export', 'profile', 'pricing'],
+  admin: ['chat', 'dashboard', 'datalake', 'spete', 'rag', 'drafter', 'redflags', 'clarification', 'training', 'export', 'settings', 'profile', 'pricing'],
 };
 
 const PLAN_LABELS: Record<string, string> = {
@@ -358,6 +358,8 @@ const formatMarkdown = (text: string): string => {
     .replace(/>/g, '&gt;')
     // Citation links: [[BO2025_1000]] -> clickable pill tag
     .replace(/\[\[(BO\d{4}_\d+)\]\]/g, '<a href="#" data-decision="$1" onclick="window.__openDecision && window.__openDecision(\'$1\'); return false;" style="display:inline-flex;align-items:center;background:#eff6ff;color:#1d4ed8;padding:2px 10px;border-radius:9999px;border:1px solid #bfdbfe;font-family:monospace;font-size:0.8em;font-weight:600;cursor:pointer;text-decoration:none;margin:2px 3px;transition:background 0.15s" onmouseover="this.style.background=\'#dbeafe\'" onmouseout="this.style.background=\'#eff6ff\'">$1</a>')
+    // ANAP spete: [[ANAP_speta_123]] -> clickable teal pill
+    .replace(/\[\[ANAP_speta_(\d+)\]\]/g, '<a href="#" data-speta="$1" onclick="window.__openSpeta && window.__openSpeta($1); return false;" style="display:inline-flex;align-items:center;background:#f0fdfa;color:#0d9488;padding:2px 10px;border-radius:9999px;border:1px solid #99f6e4;font-family:monospace;font-size:0.8em;font-weight:600;cursor:pointer;text-decoration:none;margin:2px 3px;transition:background 0.15s" onmouseover="this.style.background=\'#ccfbf1\'" onmouseout="this.style.background=\'#f0fdfa\'">Speța ANAP $1</a>')
     // Bold: **text**
     .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
     // Italic: *text*
@@ -675,6 +677,27 @@ const App = () => {
   const [decisionSearchIndex, setDecisionSearchIndex] = useState(0);
   const decisionContentRef = useRef<HTMLDivElement>(null);
 
+  // ANAP Speta Viewer State
+  const [viewingSpeta, setViewingSpeta] = useState<any>(null);
+  const [isLoadingSpeta, setIsLoadingSpeta] = useState(false);
+
+  // ANAP Spete Page State
+  const [spete, setSpete] = useState<any[]>([]);
+  const [spetePage, setSpetePage] = useState(1);
+  const [speteTotal, setSpeteTotal] = useState(0);
+  const [spetePages, setSpetePages] = useState(1);
+  const [speteCategories, setSpeteCategories] = useState<{categorie: string, count: number}[]>([]);
+  const [speteTags, setSpeteTags] = useState<{tag: string, count: number}[]>([]);
+  const [speteSearch, setSpeteSearch] = useState('');
+  const [speteFilterCat, setSpeteFilterCat] = useState('');
+  const [speteFilterTag, setSpeteFilterTag] = useState('');
+  const [speteSemantic, setSpeteSemantic] = useState(false);
+  const [speteStats, setSpeteStats] = useState<any>(null);
+  const [isLoadingSpete, setIsLoadingSpete] = useState(false);
+
+  // RAG Memo save state
+  const [ragMemoSaved, setRagMemoSaved] = useState(false);
+
   // Search Scopes State
   const [scopes, setScopes] = useState<{id: string, name: string, description: string | null, filters: any, decision_count: number}[]>([]);
   const [activeScopeId, setActiveScopeId] = useState<string | null>(null);
@@ -915,12 +938,18 @@ const App = () => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [chatMessages, generatedContent]);
 
-  // Register global handler for citation clicks
+  // Register global handlers for citation clicks
   useEffect(() => {
     (window as any).__openDecision = (decisionId: string) => {
       openDecision(decisionId);
     };
-    return () => { delete (window as any).__openDecision; };
+    (window as any).__openSpeta = (numarSpeta: number) => {
+      openSpeta(numarSpeta);
+    };
+    return () => {
+      delete (window as any).__openDecision;
+      delete (window as any).__openSpeta;
+    };
   }, []);
 
   // Scroll to active search match in decision modal
@@ -1336,6 +1365,23 @@ const App = () => {
     }
   };
 
+  const openSpeta = async (numarSpeta: number) => {
+    setIsLoadingSpeta(true);
+    try {
+      const res = await authFetch(`/api/v1/spete/${numarSpeta}`);
+      if (res.ok) {
+        setViewingSpeta(await res.json());
+      } else {
+        alert('Nu s-a putut încărca speța ANAP.');
+      }
+    } catch (error) {
+      console.error('Failed to fetch speta:', error);
+      alert('Eroare la încărcarea speței.');
+    } finally {
+      setIsLoadingSpeta(false);
+    }
+  };
+
   const fetchDecisionAnalysis = async (decisionId: string) => {
     setIsLoadingAnalysis(true);
     try {
@@ -1568,7 +1614,7 @@ const App = () => {
           // Append citations + timing on completion
           let suffix = "";
           if (meta.citations && meta.citations.length > 0) {
-            suffix += "\n\n📚 **Surse:** " + meta.citations.map((c: any) => `[[${c.decision_id}]]`).join(" ");
+            suffix += "\n\n📚 **Surse:** " + meta.citations.slice(0, 10).map((c: any) => `[[${c.decision_id}]]`).join(" ");
           }
           if (meta.search_duration_s !== undefined) {
             suffix += `\n\n⏱ *Căutare: ${meta.search_duration_s}s*`;
@@ -1784,6 +1830,34 @@ const App = () => {
     }
   };
 
+  const handleRAGMemoExport = async (format: 'docx' | 'pdf' | 'md') => {
+    if (!generatedContent) return;
+    try {
+      const response = await authFetch('/api/v1/training/export', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          content: generatedContent,
+          format,
+          titlu: `Memo RAG — ${memoTopic.slice(0, 100) || 'Jurisprudență'}`,
+          metadata: {},
+        }),
+      });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      const ext = format === 'docx' ? 'docx' : format === 'pdf' ? 'pdf' : 'md';
+      a.download = `Memo_RAG_Jurisprudenta.${ext}`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error('Export failed:', err);
+      alert('Eroare la export. Verificați consola.');
+    }
+  };
+
   const handleRedFlagsExport = async (format: 'docx' | 'pdf' | 'md') => {
     if (selectedRedFlags.length === 0) return;
 
@@ -1852,6 +1926,56 @@ const App = () => {
     }
   };
 
+  // --- ANAP Spete Page Functions ---
+  const fetchSpete = async (page = 1, search = '', categorie = '', tag = '', semantic = false) => {
+    setIsLoadingSpete(true);
+    try {
+      const params = new URLSearchParams({ page: String(page), limit: '20' });
+      if (search.trim()) params.set('search', search.trim());
+      if (categorie) params.set('categorie', categorie);
+      if (tag) params.set('tag', tag);
+      if (semantic && search.trim()) params.set('semantic', 'true');
+      const res = await authFetch(`/api/v1/spete/?${params}`);
+      if (res.ok) {
+        const data = await res.json();
+        setSpete(data.items);
+        setSpeteTotal(data.total);
+        setSpetePages(data.pages);
+        setSpetePage(data.page);
+      }
+    } catch (err) { console.error('Failed to fetch spete:', err); }
+    finally { setIsLoadingSpete(false); }
+  };
+
+  const fetchSpeteFilters = async () => {
+    try {
+      const [catRes, tagRes, statsRes] = await Promise.all([
+        authFetch('/api/v1/spete/categories'),
+        authFetch('/api/v1/spete/tags'),
+        authFetch('/api/v1/spete/stats'),
+      ]);
+      if (catRes.ok) setSpeteCategories(await catRes.json());
+      if (tagRes.ok) setSpeteTags(await tagRes.json());
+      if (statsRes.ok) setSpeteStats(await statsRes.json());
+    } catch (err) { console.error('Failed to fetch spete filters:', err); }
+  };
+
+  useEffect(() => {
+    if (mode === 'spete') {
+      fetchSpete(1, speteSearch, speteFilterCat, speteFilterTag, speteSemantic);
+      fetchSpeteFilters();
+    }
+  }, [mode]);
+
+  // Debounced search for spete
+  useEffect(() => {
+    if (mode !== 'spete') return;
+    const t = setTimeout(() => {
+      fetchSpete(1, speteSearch, speteFilterCat, speteFilterTag, speteSemantic);
+    }, 300);
+    return () => clearTimeout(t);
+  }, [speteSearch, speteFilterCat, speteFilterTag, speteSemantic]);
+
   const handleRAGMemo = async () => {
     if (!memoTopic || memoTopic.trim().length < 3) {
       alert("Introduceți un topic pentru memo juridic (min. 3 caractere).");
@@ -1861,6 +1985,7 @@ const App = () => {
     setIsLoading(true);
     setStreamStatus("Se caută jurisprudență relevantă...");
     setGeneratedContent("");
+    setRagMemoSaved(false);
 
     try {
       await authFetchStream(
@@ -1896,7 +2021,8 @@ const App = () => {
 
   const MODE_LABELS: Record<AppMode, string> = {
     dashboard: 'Dashboard',
-    datalake: 'Filtrare date',
+    datalake: 'Decizii CNSC',
+    spete: 'Spețe ANAP',
     chat: 'Asistent AP',
     drafter: 'Drafter Contestații',
     redflags: 'Red Flags Detector',
@@ -1958,10 +2084,17 @@ const App = () => {
            <div className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3 px-2">Workspace</div>
            <SidebarItem icon={MessageSquare} label="Asistent AP" active={mode === 'chat'} onClick={() => { setMode('chat'); setSidebarOpen(false); }} />
            {canAccess('datalake') ? (
-             <SidebarItem icon={Filter} label="Filtrare date" active={mode === 'datalake'} onClick={() => { setMode('datalake'); setSidebarOpen(false); }} badge={files.length} />
+             <SidebarItem icon={Filter} label="Decizii CNSC" active={mode === 'datalake'} onClick={() => { setMode('datalake'); setSidebarOpen(false); }} badge={files.length} />
            ) : (
              <div className="opacity-50 cursor-not-allowed" title="Creează un cont gratuit">
-               <SidebarItem icon={Filter} label="Filtrare date" active={false} onClick={() => setShowAuthModal(true)} />
+               <SidebarItem icon={Filter} label="Decizii CNSC" active={false} onClick={() => setShowAuthModal(true)} />
+             </div>
+           )}
+           {canAccess('spete') ? (
+             <SidebarItem icon={Layers} label="Spețe ANAP" active={mode === 'spete'} onClick={() => { setMode('spete'); setSidebarOpen(false); }} />
+           ) : (
+             <div className="opacity-50 cursor-not-allowed" title="Creează un cont gratuit">
+               <SidebarItem icon={Layers} label="Spețe ANAP" active={false} onClick={() => setShowAuthModal(true)} />
              </div>
            )}
            {canAccess('dashboard') ? (
@@ -2394,7 +2527,7 @@ const App = () => {
         </button>
         <button onClick={() => setMode('datalake')} className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm hover:shadow-md hover:border-purple-200 transition text-left group">
           <Filter size={20} className="text-purple-500 mb-2 group-hover:scale-110 transition-transform" />
-          <h4 className="font-bold text-slate-800 text-sm">Filtrare date</h4>
+          <h4 className="font-bold text-slate-800 text-sm">Decizii CNSC</h4>
           <p className="text-xs text-slate-500 mt-1">Explorează și filtrează decizii CNSC</p>
         </button>
         <button onClick={() => setMode('training')} className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm hover:shadow-md hover:border-amber-200 transition text-left group">
@@ -2461,7 +2594,7 @@ const App = () => {
           <div className="flex items-center gap-3 md:gap-4 flex-wrap">
             <div className="shrink-0">
               <h2 className="text-xl font-bold text-slate-800 flex items-center gap-2">
-                <Filter className="text-blue-600" size={22}/> Filtrare date
+                <Filter className="text-blue-600" size={22}/> Decizii CNSC
               </h2>
               <div className="flex items-center gap-2 mt-1">
                 <div className="flex items-center gap-1.5 bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded-full border border-emerald-200 text-[11px] font-medium">
@@ -4690,6 +4823,158 @@ const App = () => {
     );
   };
 
+  const renderSpeteANAP = () => {
+    return (
+      <div className="h-full flex flex-col p-4 md:p-6 overflow-auto">
+        {/* Header */}
+        <header className="mb-4 md:mb-6 shrink-0">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mb-4">
+            <h2 className="text-2xl font-bold text-slate-800 flex items-center gap-2">
+              <Layers className="text-teal-600" size={22} /> Spețe ANAP
+            </h2>
+            {speteStats && (
+              <div className="flex gap-2 flex-wrap">
+                <span className="text-xs bg-teal-50 text-teal-700 px-3 py-1.5 rounded-lg border border-teal-200 font-medium">
+                  Total: {speteStats.total}
+                </span>
+                <span className="text-xs bg-slate-50 text-slate-600 px-3 py-1.5 rounded-lg border border-slate-200 font-medium">
+                  Categorii: {speteStats.categories}
+                </span>
+              </div>
+            )}
+          </div>
+
+          {/* Search bar */}
+          <div className="flex flex-col sm:flex-row gap-2 mb-4">
+            <div className="flex-1 relative">
+              <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+              <input
+                type="text"
+                className="w-full border border-slate-300 rounded-lg pl-9 pr-3 py-2.5 text-sm focus:ring-2 focus:ring-teal-500 outline-none"
+                placeholder="Caută în spețe (întrebare, răspuns)..."
+                value={speteSearch}
+                onChange={(e) => setSpeteSearch(e.target.value)}
+              />
+            </div>
+            <button
+              onClick={() => setSpeteSemantic(!speteSemantic)}
+              className={`px-3 py-2 rounded-lg text-xs font-medium border transition whitespace-nowrap ${
+                speteSemantic
+                  ? 'bg-teal-600 text-white border-teal-600'
+                  : 'bg-white text-slate-600 border-slate-300 hover:bg-slate-50'
+              }`}
+            >
+              {speteSemantic ? '✓ Căutare semantică' : 'Căutare semantică'}
+            </button>
+          </div>
+
+          {/* Filters */}
+          <div className="flex flex-wrap gap-2">
+            {/* Category filter */}
+            <select
+              className="text-sm border border-slate-300 rounded-lg px-3 py-2 bg-white focus:ring-2 focus:ring-teal-500 outline-none"
+              value={speteFilterCat}
+              onChange={(e) => setSpeteFilterCat(e.target.value)}
+            >
+              <option value="">Toate categoriile</option>
+              {speteCategories.map((c) => (
+                <option key={c.categorie} value={c.categorie}>
+                  {c.categorie} ({c.count})
+                </option>
+              ))}
+            </select>
+            {/* Tag filter */}
+            <select
+              className="text-sm border border-slate-300 rounded-lg px-3 py-2 bg-white focus:ring-2 focus:ring-teal-500 outline-none"
+              value={speteFilterTag}
+              onChange={(e) => setSpeteFilterTag(e.target.value)}
+            >
+              <option value="">Toate tagurile</option>
+              {speteTags.map((t) => (
+                <option key={t.tag} value={t.tag}>
+                  {t.tag} ({t.count})
+                </option>
+              ))}
+            </select>
+            {/* Clear filters */}
+            {(speteFilterCat || speteFilterTag || speteSearch) && (
+              <button
+                onClick={() => { setSpeteFilterCat(''); setSpeteFilterTag(''); setSpeteSearch(''); }}
+                className="text-xs text-red-500 hover:text-red-700 px-2 py-2 underline"
+              >
+                Șterge filtrele
+              </button>
+            )}
+          </div>
+        </header>
+
+        {/* Results */}
+        {isLoadingSpete ? (
+          <div className="flex items-center justify-center py-20">
+            <Loader2 size={28} className="animate-spin text-teal-600" />
+            <span className="ml-3 text-slate-500">Se încarcă spețele...</span>
+          </div>
+        ) : spete.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-20 text-slate-400">
+            <Layers size={48} className="mb-4 opacity-20" />
+            <p>Nu s-au găsit spețe{speteSearch ? ` pentru "${speteSearch}"` : ''}.</p>
+          </div>
+        ) : (
+          <>
+            <div className="text-xs text-slate-500 mb-3">
+              {speteTotal} spețe găsite{speteSemantic && speteSearch ? ' (ordonate după relevanță)' : ''}
+            </div>
+            <div className="grid gap-3 md:gap-4 grid-cols-1 lg:grid-cols-2">
+              {spete.map((s: any) => (
+                <div
+                  key={s.numar_speta}
+                  onClick={() => openSpeta(s.numar_speta)}
+                  className="bg-white border border-slate-200 rounded-xl p-4 hover:border-teal-300 hover:shadow-md transition cursor-pointer group"
+                >
+                  <div className="flex items-start justify-between gap-2 mb-2">
+                    <span className="text-sm font-bold text-teal-700 font-mono">Speța nr. {s.numar_speta}</span>
+                    <span className="text-xs bg-teal-50 text-teal-600 px-2 py-0.5 rounded border border-teal-100 shrink-0 max-w-[200px] truncate">{s.categorie}</span>
+                  </div>
+                  <p className="text-sm text-slate-700 line-clamp-3 leading-relaxed mb-2">
+                    {s.intrebare}
+                  </p>
+                  <div className="flex gap-1.5 flex-wrap">
+                    {s.taguri && s.taguri.map((tag: string, i: number) => (
+                      <span key={i} className="text-xs bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded">{tag}</span>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Pagination */}
+            {spetePages > 1 && (
+              <div className="flex items-center justify-center gap-2 mt-6 shrink-0">
+                <button
+                  onClick={() => fetchSpete(spetePage - 1, speteSearch, speteFilterCat, speteFilterTag, speteSemantic)}
+                  disabled={spetePage <= 1}
+                  className="px-3 py-1.5 rounded-lg border border-slate-300 text-sm disabled:opacity-40 hover:bg-slate-50"
+                >
+                  ← Anterior
+                </button>
+                <span className="text-sm text-slate-600">
+                  Pagina {spetePage} / {spetePages}
+                </span>
+                <button
+                  onClick={() => fetchSpete(spetePage + 1, speteSearch, speteFilterCat, speteFilterTag, speteSemantic)}
+                  disabled={spetePage >= spetePages}
+                  className="px-3 py-1.5 rounded-lg border border-slate-300 text-sm disabled:opacity-40 hover:bg-slate-50"
+                >
+                  Următor →
+                </button>
+              </div>
+            )}
+          </>
+        )}
+      </div>
+    );
+  };
+
   const renderChat = () => {
     const handleTextareaInput = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
       setChatInput(e.target.value);
@@ -5055,6 +5340,7 @@ const App = () => {
         <div className="flex-1 overflow-hidden flex flex-col">
         {mode === 'dashboard' && renderDashboard()}
         {mode === 'datalake' && renderDataLake()}
+        {mode === 'spete' && renderSpeteANAP()}
         {mode === 'drafter' && renderDrafter()}
         {mode === 'chat' && renderChat()}
         {mode === 'redflags' && (
@@ -5550,8 +5836,23 @@ const App = () => {
                  <div className="flex-1 bg-white border border-slate-200 rounded-xl shadow-sm p-4 md:p-8 overflow-y-auto text-slate-800 leading-relaxed">
                     {generatedContent ? (
                        <div>
-                         <div className="flex justify-end gap-2 mb-4">
-                           <button onClick={() => saveDocument('rag_memo', memoTopic.slice(0, 200) || 'Memo RAG', generatedContent, generatedDecisionRefs, { topic: memoTopic })} className="text-xs text-green-600 font-medium hover:underline flex items-center gap-1"><Save size={12} /> Salvează</button>
+                         <div className="flex justify-end gap-2 mb-4 flex-wrap">
+                           <button
+                             onClick={async () => {
+                               if (ragMemoSaved) return;
+                               await saveDocument('rag_memo', memoTopic.slice(0, 200) || 'Memo RAG', generatedContent, generatedDecisionRefs, { topic: memoTopic });
+                               setRagMemoSaved(true);
+                             }}
+                             disabled={ragMemoSaved}
+                             className={`text-xs font-medium flex items-center gap-1 ${ragMemoSaved ? 'text-green-400 cursor-default' : 'text-green-600 hover:underline'}`}
+                           >
+                             <Save size={12} /> {ragMemoSaved ? 'Salvat ✓' : 'Salvează'}
+                           </button>
+                           {(['docx', 'pdf', 'md'] as const).map(fmt => (
+                             <button key={fmt} onClick={() => handleRAGMemoExport(fmt)} className="text-xs text-blue-600 font-medium hover:underline flex items-center gap-1">
+                               <Download size={12} /> {fmt.toUpperCase()}
+                             </button>
+                           ))}
                            <button onClick={() => loadHistory('rag_memo')} className="text-xs text-slate-500 font-medium hover:underline flex items-center gap-1"><Bookmark size={12} /> Istoric</button>
                          </div>
                          <div className="prose prose-slate max-w-none" dangerouslySetInnerHTML={{ __html: formatMarkdown(generatedContent) }} />
@@ -5646,7 +5947,7 @@ const App = () => {
               <div className="text-center py-12 text-slate-400">
                 <Bookmark size={32} className="mx-auto mb-3 opacity-30" />
                 <p className="text-sm">Nu ai niciun scope salvat.</p>
-                <p className="text-xs mt-1">Mergi pe pagina Filtrare date, aplică filtre, apoi apasă "Salvează Scope".</p>
+                <p className="text-xs mt-1">Mergi pe pagina Decizii CNSC, aplică filtre, apoi apasă "Salvează Scope".</p>
               </div>
             ) : (
               <div className="flex-1 overflow-y-auto space-y-3">
@@ -6379,6 +6680,71 @@ const App = () => {
               </>
               );
             })()}
+          </div>
+        </div>
+      )}
+
+      {/* ANAP Speta viewer modal */}
+      {(viewingSpeta || isLoadingSpeta) && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={() => !isLoadingSpeta && setViewingSpeta(null)}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl max-h-[85vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
+            {isLoadingSpeta ? (
+              <div className="flex items-center justify-center p-20">
+                <Loader2 size={32} className="animate-spin text-teal-600" />
+                <span className="ml-3 text-slate-600">Se încarcă speța ANAP...</span>
+              </div>
+            ) : viewingSpeta && (
+              <>
+                {/* Header */}
+                <div className="p-5 md:p-6 border-b border-slate-200 shrink-0">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <h2 className="text-lg md:text-xl font-bold text-slate-900">Speță ANAP nr. {viewingSpeta.numar_speta}</h2>
+                      <div className="flex gap-2 mt-2 flex-wrap">
+                        <span className="text-xs bg-teal-50 text-teal-700 px-2 py-1 rounded border border-teal-200 font-medium">{viewingSpeta.categorie}</span>
+                        {viewingSpeta.versiune > 1 && (
+                          <span className="text-xs bg-slate-100 text-slate-600 px-2 py-1 rounded border border-slate-200">v{viewingSpeta.versiune}</span>
+                        )}
+                        {viewingSpeta.data_publicarii && (
+                          <span className="text-xs bg-slate-100 text-slate-600 px-2 py-1 rounded border border-slate-200">
+                            {new Date(viewingSpeta.data_publicarii).toLocaleDateString('ro-RO')}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    <button onClick={() => setViewingSpeta(null)} className="text-slate-400 hover:text-slate-700 p-1 shrink-0">
+                      <X size={20} />
+                    </button>
+                  </div>
+                </div>
+
+                {/* Content */}
+                <div className="flex-1 overflow-y-auto p-5 md:p-6 space-y-5">
+                  <div>
+                    <h3 className="text-sm font-bold text-teal-700 uppercase tracking-wide mb-2">Întrebare</h3>
+                    <div className="bg-teal-50 border border-teal-100 rounded-lg p-4 text-slate-800 leading-relaxed whitespace-pre-wrap text-sm">{viewingSpeta.intrebare}</div>
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-bold text-teal-700 uppercase tracking-wide mb-2">Răspuns ANAP</h3>
+                    <div className="bg-white border border-slate-200 rounded-lg p-4 text-slate-800 leading-relaxed whitespace-pre-wrap text-sm">{viewingSpeta.raspuns}</div>
+                  </div>
+                </div>
+
+                {/* Footer */}
+                <div className="p-4 border-t border-slate-200 shrink-0 flex items-center justify-between">
+                  <div className="flex gap-1.5 flex-wrap">
+                    {viewingSpeta.taguri && viewingSpeta.taguri.length > 0 ? (
+                      viewingSpeta.taguri.map((tag: string, i: number) => (
+                        <span key={i} className="text-xs bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full border border-slate-200">{tag}</span>
+                      ))
+                    ) : (
+                      <span className="text-xs text-slate-400">Fără taguri</span>
+                    )}
+                  </div>
+                  <button onClick={() => setViewingSpeta(null)} className="bg-slate-100 text-slate-700 px-4 py-2 rounded-lg text-sm font-medium hover:bg-slate-200 transition">Închide</button>
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}
