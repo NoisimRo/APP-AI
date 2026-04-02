@@ -843,6 +843,52 @@ class TrainingMaterial(Base):
 
 
 # =============================================================================
+# SPETE ANAP (cazuistică oficială ANAP)
+# =============================================================================
+
+
+class SpetaANAP(Base):
+    """Speță ANAP — cazuistică oficială în achiziții publice.
+
+    Sursa: ANAP (Autoritatea Națională pentru Achiziții Publice).
+    Fiecare speță conține o întrebare + răspunsul oficial ANAP,
+    cu referințe la legislația aplicabilă.
+    """
+
+    __tablename__ = "spete_anap"
+
+    id: Mapped[str] = mapped_column(
+        UUID(as_uuid=False), primary_key=True, default=lambda: str(uuid4())
+    )
+    numar_speta: Mapped[int] = mapped_column(Integer, nullable=False, unique=True)
+    versiune: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    data_publicarii: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    categorie: Mapped[str] = mapped_column(String(200), nullable=False)
+    intrebare: Mapped[str] = mapped_column(Text, nullable=False)
+    raspuns: Mapped[str] = mapped_column(Text, nullable=False)
+    taguri: Mapped[Optional[list]] = mapped_column(ARRAY(Text), default=list)
+    embedding: Mapped[Optional[list]] = mapped_column(Vector(2000))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(), nullable=False
+    )
+
+    __table_args__ = (
+        Index("ix_spete_categorie", categorie),
+        Index("ix_spete_taguri", taguri, postgresql_using="gin"),
+        Index(
+            "ix_spete_embedding_hnsw",
+            embedding,
+            postgresql_using="hnsw",
+            postgresql_ops={"embedding": "vector_cosine_ops"},
+            postgresql_with={"m": 16, "ef_construction": 64},
+        ),
+    )
+
+    def __repr__(self) -> str:
+        return f"<SpetaANAP nr.{self.numar_speta}: '{self.categorie}'>"
+
+
+# =============================================================================
 # LEGACY COMPATIBILITY (if needed)
 # =============================================================================
 

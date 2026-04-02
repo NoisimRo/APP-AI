@@ -36,7 +36,7 @@ DATABASE_URL="postgresql+asyncpg://..." python scripts/generate_embeddings.py
 - **Frontend:** Single `index.tsx` file (React 19 + Vite + TailwindCSS)
 - **Backend:** `backend/app/` - FastAPI with async SQLAlchemy
 - **LLM:** Multi-provider (Gemini + Claude + OpenAI + Groq + OpenRouter) via factory pattern (`backend/app/services/llm/factory.py`). Groq = modele open-source gratuite (Llama, GPT-OSS, Qwen, Llama 4 Scout). OpenRouter = 400+ modele, multe gratuite (suffix `:free`). Fiecare provider cu token-aware context truncation (estimare ~4 chars/token, truncare proporțională automată). Embeddings always on Gemini.
-- **RAG Pipeline:** `backend/app/services/rag.py` - vector search on ArgumentareCritica → LLM generation
+- **RAG Pipeline:** `backend/app/services/rag.py` - vector search on ArgumentareCritica + LegislatieFragmente + SpeteANAP → LLM generation
 - **Auth:** JWT-based (python-jose + bcrypt), `backend/app/core/auth.py` + `deps.py`. Role-based feature gating + in-memory rate limiting per role.
 - **Database Models:** `backend/app/models/decision.py` - DecizieCNSC, ArgumentareCritica, User, Conversatie, MesajConversatie, DocumentGenerat, RedFlagsSalvate, TrainingMaterial, etc.
 
@@ -95,6 +95,7 @@ DATABASE_URL="postgresql+asyncpg://..." python scripts/generate_embeddings.py
 | `scripts/extract_obiect_contract.py` | Retroactive obiect_contract extraction (regex, no LLM) |
 | `scripts/deduce_cpv.py` | CPV deduction via embedding similarity with nomenclator_cpv |
 | `scripts/import_legislatie.py` | Legislation .md → DB import (alineat-level) |
+| `scripts/import_spete_anap.py` | ANAP spete JSON → DB import (427 active spete, with embeddings) |
 | `backend/app/services/training_generator.py` | TrainingAP: generare materiale didactice (RAG + LLM) |
 | `backend/app/services/export_service.py` | Export materiale DOCX/PDF/MD |
 | `backend/app/api/v1/training.py` | TrainingAP API endpoints (generate, stream, export) |
@@ -146,7 +147,7 @@ DATABASE_URL="postgresql+asyncpg://..." python scripts/generate_embeddings.py
 - **History:** Started at 768 (text-embedding-004 convention) → tried 3072 (native) but hit pgvector HNSW limit → settled on 2000.
 - After dimension changes, regenerate embeddings: `python scripts/generate_embeddings.py --force`
 
-### Key Tables (13 în producție)
+### Key Tables (14 în producție)
 
 | Table | Purpose | RAG? |
 |-------|---------|------|
@@ -155,6 +156,7 @@ DATABASE_URL="postgresql+asyncpg://..." python scripts/generate_embeddings.py
 | `nomenclator_cpv` | CPV codes nomenclator | No |
 | `acte_normative` | Master table acte legislative (Legea 98/2016, HG 395/2016, etc.) | No |
 | `legislatie_fragmente` | Fragmente legislație la granularitate maximă (articol/alineat/literă) | Yes (2000-dim) |
+| `spete_anap` | Spețe ANAP — cazuistică oficială (întrebare + răspuns ANAP) | Yes (2000-dim) |
 | `llm_settings` | LLM provider config (single-row: active provider, model, encrypted API keys for Gemini/Anthropic/OpenAI/Groq/OpenRouter) | No |
 | `search_scopes` | Saved filter presets for RAG pre-filtering (name, JSONB filters, cached decision_count) | No (pre-filter) |
 | `users` | Conturi utilizatori cu JWT auth (password_hash, roluri: admin, registered, paid_basic/pro/enterprise) | No |
@@ -220,6 +222,23 @@ Permite citări exacte: `art. 2 alin. (2) lit. a) din Legea nr. 98/2016`
 **Supported formats:** Markdown (old, with `## ### ####` headers) and plaintext (new, legislație consolidată from legislatie.just.ro)
 **Superscript handling:** Articles like `61^1` → `numar_articol=6101`, alineats like `(2^1)` → `alineat=201` (encoding: main*100+sub)
 **Update mode (`--update`):** Compares existing DB records with parsed file — inserts new, updates changed text + re-embeds, removes obsolete fragments. Ideal for frequent legislative updates.
+
+### spete_anap (populated by import_spete_anap.py)
+
+Cazuistică oficială ANAP (Autoritatea Națională pentru Achiziții Publice). 427 spețe active — fiecare conține o întrebare practică + răspunsul oficial ANAP, cu referințe la legislația aplicabilă. Spețele sunt a 3-a sursă RAG (alături de legislație și decizii CNSC).
+
+- `numar_speta` - UNIQUE, identificator numeric al speței
+- `versiune` - versiunea speței (default 1)
+- `data_publicarii` - data publicării pe achizitiipublice.gov.ro
+- `categorie` - categoria tematică (ex: "7.1 Garanția de participare", "12.2 Verificarea și evaluarea ofertelor")
+- `intrebare` - întrebarea practică (plain text)
+- `raspuns` - răspunsul oficial ANAP (plain text)
+- `taguri` - array de taguri (ex: ["CISA", "DUAE"])
+- `embedding` - Vector(2000) cu HNSW index pentru RAG
+
+**Sursa:** JSON exportat din https://achizitiipublice.gov.ro, stocat pe GCS la `gs://date-expert-app/spete-anap/`
+**Filtrare:** Se importă doar spețele active (non-arhivate) excluzând categoria "24. Spete care nu mai sunt valabile"
+**Import:** `python scripts/import_spete_anap.py` (idempotent, skip-uri dacă `numar_speta` există)
 
 ### ArgumentareCritica Fields (populated by LLM analysis)
 
@@ -310,6 +329,12 @@ DATABASE_URL="..." python scripts/extract_obiect_contract.py --force      # Re-e
 DATABASE_URL="..." python scripts/deduce_cpv.py --dry-run            # Preview matches
 DATABASE_URL="..." python scripts/deduce_cpv.py --limit 10 --top-k 5 # Test with top 5 candidates
 DATABASE_URL="..." python scripts/deduce_cpv.py --threshold 0.75     # Stricter matching
+
+# Import ANAP spete (cazuistică oficială, 427 active spete)
+DATABASE_URL="..." python scripts/import_spete_anap.py --dry-run                        # Preview
+DATABASE_URL="..." python scripts/import_spete_anap.py --local docs/biblioteca_spete_anap.json  # From local file
+DATABASE_URL="..." python scripts/import_spete_anap.py                                  # From GCS (default)
+DATABASE_URL="..." python scripts/import_spete_anap.py --force                          # Delete all + reimport
 ```
 
 ### What still needs to be done
