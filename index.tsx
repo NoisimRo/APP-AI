@@ -4541,6 +4541,22 @@ const App = () => {
           )}
           {strategyResult && (
             <div className="max-w-3xl mx-auto space-y-6">
+              {/* Toolbar */}
+              <div className="flex justify-end gap-3">
+                <button onClick={() => {
+                  const fullText = (strategyResult.overall_assessment?.text || '') + '\n\n' +
+                    (strategyResult.per_criticism || []).map((r: any) =>
+                      `## ${r.code} — ${r.label}\n${r.recommendation || ''}\n\nArgumente: ${(r.arguments || []).join('; ')}\nTemei legal: ${(r.legal_basis || []).join('; ')}\nProbabilitate: ${r.success_probability}%`
+                    ).join('\n\n');
+                  const refs = (strategyResult.precedents || []).map((p: any) => p.bo_reference);
+                  saveDocument('strategie', strategyInput.description.slice(0, 200) || 'Strategie contestare', fullText, refs, {
+                    coduri_critici: strategyInput.coduri_critici,
+                    cod_cpv: strategyInput.cod_cpv,
+                    complet: strategyInput.complet,
+                    probability: strategyResult.overall_assessment?.overall_probability,
+                  });
+                }} className="text-sm text-green-600 font-medium hover:underline flex items-center gap-1"><Save size={12} /> Salvează</button>
+              </div>
               {/* Overall assessment */}
               <div className={`rounded-2xl p-6 ${strategyResult.overall_assessment?.recommendation === 'ADMIS' ? 'bg-green-50 border-2 border-green-300' : 'bg-red-50 border-2 border-red-300'}`}>
                 <div className="flex items-center justify-between mb-3">
