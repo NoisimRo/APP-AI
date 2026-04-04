@@ -123,7 +123,7 @@ async def chat(
             for c in citations
         ]
 
-        increment_usage(rate_user, http_request)
+        await increment_usage(rate_user, http_request)
 
         return ChatResponse(
             message=response_text,
@@ -195,7 +195,7 @@ async def chat_stream(
         if n_sources:
             status_msgs.append(f"Am identificat {n_sources} decizii CNSC relevante")
 
-        increment_usage(rate_user, http_request)
+        await increment_usage(rate_user, http_request)
 
         # Stream the LLM response
         return await create_sse_response(

@@ -116,7 +116,7 @@ async def get_user(
         "created_at": user.created_at.isoformat() if user.created_at else None,
         "updated_at": user.updated_at.isoformat() if user.updated_at else None,
         "last_login": user.last_login.isoformat() if user.last_login else None,
-        "queries_today": get_user_usage(user.id),
+        "queries_today": await get_user_usage(user.id),
     }
 
 

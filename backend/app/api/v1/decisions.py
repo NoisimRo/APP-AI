@@ -749,6 +749,7 @@ async def get_stats(
 ):
     """
     Get statistics overview for the decision database.
+    Results are cached in Redis for 5 minutes.
     """
     if not is_db_available():
         return {
@@ -757,6 +758,13 @@ async def get_stats(
             "by_type": {},
             "last_updated": None,
         }
+
+    # Check Redis cache (5 min TTL)
+    from app.core.redis import cache_get_json, cache_set_json
+    cache_key = "expertap:stats:overview"
+    cached = await cache_get_json(cache_key)
+    if cached is not None:
+        return cached
 
     # Total count
     total_result = await session.execute(select(func.count()).select_from(DecizieCNSC))
@@ -782,12 +790,15 @@ async def get_stats(
     )
     last_updated = last_result.scalar()
 
-    return {
+    result = {
         "total_decisions": total,
         "by_ruling": by_ruling,
         "by_type": by_type,
         "last_updated": last_updated.isoformat() if last_updated else None,
     }
+
+    await cache_set_json(cache_key, result, ttl_seconds=300)
+    return result
 
 
 @router.get("/stats/win-rate-by-category")

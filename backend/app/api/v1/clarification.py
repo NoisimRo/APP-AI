@@ -186,7 +186,7 @@ async def generate_clarification(
             decision_refs=decision_refs,
         )
         logger.info("timing_clarification_total", duration_s=round(time.monotonic() - t0, 2))
-        increment_usage(rate_user, http_request)
+        await increment_usage(rate_user, http_request)
         return ClarificationResponse(content=response_text, decision_refs=decision_refs)
 
     except Exception as e:
@@ -204,7 +204,7 @@ async def generate_clarification_stream(
 ):
     """Stream a clarification request via SSE."""
     logger.info("clarification_stream_request", clause_length=len(request.clause))
-    increment_usage(rate_user, http_request)
+    await increment_usage(rate_user, http_request)
 
     llm = await get_active_llm_provider(session)
     prompt, decision_refs = await _build_clarification_context(request.clause, session)

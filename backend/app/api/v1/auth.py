@@ -240,7 +240,7 @@ async def get_me(
 ):
     """Get current user profile and usage stats."""
     from app.core.rate_limiter import get_user_usage
-    queries_today = get_user_usage(user.id)
+    queries_today = await get_user_usage(user.id)
     return _user_to_dict(user, queries_today=queries_today)
 
 
