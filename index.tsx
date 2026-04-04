@@ -5532,6 +5532,35 @@ const App = () => {
     );
   };
 
+  const MemoryList = () => {
+    const [items, setItems] = useState<any[]>([]);
+    const [loaded, setLoaded] = useState(false);
+    useEffect(() => {
+      if (loaded) return;
+      authFetch('/api/v1/chat/memory').then(r => r.ok ? r.json() : []).then(data => { setItems(data); setLoaded(true); }).catch(() => setLoaded(true));
+    }, [loaded]);
+    if (!loaded) return <p className="text-xs text-slate-400">Se încarcă...</p>;
+    if (items.length === 0) return <p className="text-xs text-slate-400 italic">Nicio informație memorată încă. AI-ul va învăța din conversațiile tale.</p>;
+    return (
+      <div className="space-y-1.5 max-h-40 overflow-y-auto">
+        {items.map((item: any) => (
+          <div key={item.id} className="flex items-center justify-between bg-slate-50 rounded-lg px-3 py-1.5 text-xs">
+            <div className="flex items-center gap-2 flex-1 min-w-0">
+              <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${item.fact_type === 'preference' ? 'bg-blue-100 text-blue-700' : item.fact_type === 'expertise' ? 'bg-green-100 text-green-700' : item.fact_type === 'case_detail' ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-600'}`}>
+                {item.fact_type}
+              </span>
+              <span className="text-slate-700 truncate">{item.content}</span>
+            </div>
+            <button onClick={async () => {
+              await authFetch(`/api/v1/chat/memory/${item.id}`, { method: 'DELETE' });
+              setItems(prev => prev.filter(i => i.id !== item.id));
+            }} className="text-slate-400 hover:text-red-600 ml-2 flex-shrink-0">&times;</button>
+          </div>
+        ))}
+      </div>
+    );
+  };
+
   const renderProfile = () => {
     const user = authState.user;
     if (!user) return null;
@@ -5754,6 +5783,22 @@ const App = () => {
             <button onClick={handleChangePassword} disabled={profileLoading || !profileCurrentPassword || !profileNewPassword} className="w-full mt-4 py-2.5 rounded-lg bg-slate-800 text-white font-medium text-sm hover:bg-slate-900 disabled:opacity-50 transition-colors">
               {profileLoading ? 'Se schimbă...' : 'Schimbă parola'}
             </button>
+          </div>
+
+          {/* Persistent Memory Section */}
+          <div className="bg-white border border-slate-200 rounded-xl p-6 mb-6">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-sm font-bold text-slate-700 flex items-center gap-2">
+                <Database size={16} className="text-blue-500" /> Memorie Persistentă AI
+              </h3>
+              <button onClick={async () => {
+                if (!confirm('Ștergi toată memoria? AI-ul nu va mai reține informațiile despre tine.')) return;
+                await authFetch('/api/v1/chat/memory', { method: 'DELETE' });
+                setProfileMessage({ type: 'success', text: 'Memoria a fost ștearsă' });
+              }} className="text-xs text-red-600 hover:text-red-800 font-medium">Șterge tot</button>
+            </div>
+            <p className="text-xs text-slate-500 mb-3">AI-ul reține automat informații utile din conversațiile tale (domeniu activitate, cazuri în curs, preferințe).</p>
+            <MemoryList />
           </div>
 
           {/* Messages */}

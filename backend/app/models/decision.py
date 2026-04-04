@@ -889,6 +889,48 @@ class SpetaANAP(Base):
 
 
 # =============================================================================
+# USER CONTEXT / PERSISTENT MEMORY
+# =============================================================================
+
+class UserContext(Base):
+    """Persistent memory entries for a user.
+
+    Stores facts extracted from conversations that the AI should remember
+    across sessions: user preferences, case details, frequently referenced
+    topics, etc.
+    """
+
+    __tablename__ = "user_context"
+
+    id: Mapped[str] = mapped_column(
+        UUID(as_uuid=False), primary_key=True, default=lambda: str(uuid4())
+    )
+    user_id: Mapped[str] = mapped_column(
+        UUID(as_uuid=False), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    fact_type: Mapped[str] = mapped_column(
+        String(50), nullable=False, default="general"
+    )  # general, preference, case_detail, expertise, frequent_topic
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    source: Mapped[Optional[str]] = mapped_column(
+        String(50)
+    )  # conversation, manual, system
+    importance: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=5
+    )  # 1-10 scale
+    active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, server_default=func.now(), onupdate=func.now()
+    )
+
+    def __repr__(self) -> str:
+        return f"<UserContext user={self.user_id} type={self.fact_type}: '{self.content[:50]}'>"
+
+
+# =============================================================================
 # LEGACY COMPATIBILITY (if needed)
 # =============================================================================
 
