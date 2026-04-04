@@ -32,6 +32,10 @@ logger = get_logger(__name__)
 MAX_CONCURRENT_CHECKS = 6
 LLM_CALL_TIMEOUT = 120
 MAX_REQUIREMENTS = 15  # Cap on number of requirements to check
+# Document excerpt sizes for LLM context
+DOC_EXCERPT_FULL = 60000    # Max chars sent to per-requirement checks
+DOC_SUMMARY_PASS1 = 15000   # Max chars for requirements identification
+DOC_PER_CHECK = 30000       # Max chars per individual compliance check
 
 
 class ComplianceChecker:
@@ -101,7 +105,7 @@ class ComplianceChecker:
 
         # Phase 2b: Parallel LLM compliance checks
         semaphore = asyncio.Semaphore(MAX_CONCURRENT_CHECKS)
-        doc_excerpt = document_text[:12000]  # Cap document for LLM context
+        doc_excerpt = document_text[:DOC_EXCERPT_FULL]
 
         tasks = [
             self._check_single_requirement(
@@ -170,11 +174,11 @@ class ComplianceChecker:
     ) -> list[dict]:
         """Identify which legal requirements apply to this document."""
         # Search legislation by document content embedding
-        doc_summary = document_text[:3000]
+        doc_summary = document_text[:DOC_SUMMARY_PASS1]
         query = f"cerințe legale obligatorii {tip_document or 'documentație achiziții publice'}"
         if tip_procedura:
             query += f" {tip_procedura}"
-        query += f" {doc_summary[:500]}"
+        query += f" {document_text[:1000]}"
 
         query_vector = await self.embedding_service.embed_query(query)
 
@@ -216,7 +220,7 @@ class ComplianceChecker:
         prompt = f"""Ești un expert în achiziții publice din România.
 
 DOCUMENT DE VERIFICAT (extras):
-{doc_summary[:2000]}
+{doc_summary}
 
 {f"TIP PROCEDURĂ: {tip_procedura}" if tip_procedura else ""}
 {f"TIP DOCUMENT: {tip_document}" if tip_document else ""}
@@ -286,7 +290,7 @@ CE TREBUIE VERIFICAT:
 {requirement['descriere']}
 
 DOCUMENT DE VERIFICAT (extras):
-{document_excerpt[:5000]}
+{document_excerpt[:DOC_PER_CHECK]}
 
 {f"JURISPRUDENȚĂ RELEVANTĂ:{chr(10)}{jur_text}" if jur_text else ""}
 

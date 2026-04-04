@@ -26,7 +26,7 @@ logger = get_logger(__name__)
 
 LLM_CALL_TIMEOUT = 180
 MAX_DOCUMENTS = 5
-MAX_DOC_CHARS = 30000
+MAX_DOC_CHARS = 60000
 
 
 class MultiDocumentAnalyzer:
@@ -194,7 +194,7 @@ class MultiDocumentAnalyzer:
                     for f in analyses[i]["flags"][:5]
                 )
             summary = f"**{doc['filename']}** ({doc.get('word_count', 0)} cuvinte):\n"
-            summary += f"Conținut: {doc['text'][:800]}\n"
+            summary += f"Conținut: {doc['text'][:5000]}\n"
             if flags_text:
                 summary += f"Red flags identificate:\n{flags_text}\n"
             doc_summaries.append(summary)
