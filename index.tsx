@@ -53,7 +53,7 @@ import {
 
 // --- Types ---
 
-type AppMode = 'dashboard' | 'datalake' | 'spete' | 'drafter' | 'redflags' | 'chat' | 'clarification' | 'rag' | 'training' | 'settings' | 'profile' | 'pricing';
+type AppMode = 'dashboard' | 'datalake' | 'spete' | 'drafter' | 'redflags' | 'chat' | 'clarification' | 'rag' | 'training' | 'analytics' | 'settings' | 'profile' | 'pricing';
 
 interface AuthUser {
   id: string;
@@ -311,11 +311,11 @@ const authFetchStream = async (
 
 // Feature access rules per role
 const ROLE_FEATURES: Record<string, string[]> = {
-  registered: ['chat', 'dashboard', 'datalake', 'spete', 'rag', 'profile', 'pricing'],
-  paid_basic: ['chat', 'dashboard', 'datalake', 'spete', 'rag', 'drafter', 'redflags', 'clarification', 'profile', 'pricing'],
-  paid_pro: ['chat', 'dashboard', 'datalake', 'spete', 'rag', 'drafter', 'redflags', 'clarification', 'training', 'export', 'profile', 'pricing'],
-  paid_enterprise: ['chat', 'dashboard', 'datalake', 'spete', 'rag', 'drafter', 'redflags', 'clarification', 'training', 'export', 'profile', 'pricing'],
-  admin: ['chat', 'dashboard', 'datalake', 'spete', 'rag', 'drafter', 'redflags', 'clarification', 'training', 'export', 'settings', 'profile', 'pricing'],
+  registered: ['chat', 'dashboard', 'datalake', 'spete', 'rag', 'analytics', 'profile', 'pricing'],
+  paid_basic: ['chat', 'dashboard', 'datalake', 'spete', 'rag', 'analytics', 'drafter', 'redflags', 'clarification', 'profile', 'pricing'],
+  paid_pro: ['chat', 'dashboard', 'datalake', 'spete', 'rag', 'analytics', 'drafter', 'redflags', 'clarification', 'training', 'export', 'profile', 'pricing'],
+  paid_enterprise: ['chat', 'dashboard', 'datalake', 'spete', 'rag', 'analytics', 'drafter', 'redflags', 'clarification', 'training', 'export', 'profile', 'pricing'],
+  admin: ['chat', 'dashboard', 'datalake', 'spete', 'rag', 'analytics', 'drafter', 'redflags', 'clarification', 'training', 'export', 'settings', 'profile', 'pricing'],
 };
 
 const PLAN_LABELS: Record<string, string> = {
@@ -608,6 +608,19 @@ const App = () => {
   // Specialized Input States
   const [drafterContext, setDrafterContext] = useState({ facts: "", authorityArgs: "", legalGrounds: "", remediiSolicitate: "", detaliiProcedura: "", numarDecizieCnsc: "" });
   const [drafterDocType, setDrafterDocType] = useState<'contestatie' | 'plangere'>('contestatie');
+
+  // Analytics States
+  const [analyticsTab, setAnalyticsTab] = useState<'panels' | 'predictor' | 'compare'>('panels');
+  const [panelsList, setPanelsList] = useState<any[]>([]);
+  const [selectedPanel, setSelectedPanel] = useState<string | null>(null);
+  const [panelProfile, setPanelProfile] = useState<any>(null);
+  const [panelsLoading, setPanelsLoading] = useState(false);
+  const [predictorInput, setPredictorInput] = useState({ coduri_critici: '' as string, cod_cpv: '', complet: '', tip_procedura: '', tip_contestatie: '' });
+  const [predictorResult, setPredictorResult] = useState<any>(null);
+  const [predictorLoading, setPredictorLoading] = useState(false);
+  const [compareIds, setCompareIds] = useState<string[]>(['', '']);
+  const [compareResult, setCompareResult] = useState<any>(null);
+  const [compareLoading, setCompareLoading] = useState(false);
 
   // Import States (Data Lake)
   const [showImportModal, setShowImportModal] = useState(false);
@@ -2102,6 +2115,13 @@ const App = () => {
            ) : (
              <div className="opacity-50 cursor-not-allowed" title="Creează un cont gratuit">
                <SidebarItem icon={LayoutDashboard} label="Dashboard" active={false} onClick={() => setShowAuthModal(true)} />
+             </div>
+           )}
+           {canAccess('analytics') ? (
+             <SidebarItem icon={TrendingUp} label="Analiză CNSC" active={mode === 'analytics'} onClick={() => { setMode('analytics'); setSidebarOpen(false); }} />
+           ) : (
+             <div className="opacity-50 cursor-not-allowed" title="Creează un cont gratuit">
+               <SidebarItem icon={TrendingUp} label="Analiză CNSC" active={false} onClick={() => setShowAuthModal(true)} />
              </div>
            )}
         </div>
@@ -3899,6 +3919,401 @@ const App = () => {
     }
 
     return sections;
+  };
+
+  // ---------------------------------------------------------------------------
+  // Analytics Page — Panel Profiles, Outcome Predictor, Decision Comparison
+  // ---------------------------------------------------------------------------
+  const loadPanelsList = async () => {
+    setPanelsLoading(true);
+    try {
+      const res = await authFetch('/api/v1/analytics/panels');
+      if (res.ok) setPanelsList(await res.json());
+    } catch (e) { console.error(e); }
+    setPanelsLoading(false);
+  };
+  const loadPanelProfile = async (complet: string) => {
+    setSelectedPanel(complet);
+    setPanelProfile(null);
+    setPanelsLoading(true);
+    try {
+      const res = await authFetch(`/api/v1/analytics/panel/${complet}`);
+      if (res.ok) setPanelProfile(await res.json());
+    } catch (e) { console.error(e); }
+    setPanelsLoading(false);
+  };
+  const runPrediction = async () => {
+    const codes = predictorInput.coduri_critici.split(',').map(s => s.trim()).filter(Boolean);
+    if (codes.length === 0) return;
+    setPredictorLoading(true);
+    setPredictorResult(null);
+    try {
+      const body: any = { coduri_critici: codes };
+      if (predictorInput.cod_cpv) body.cod_cpv = predictorInput.cod_cpv;
+      if (predictorInput.complet) body.complet = predictorInput.complet;
+      if (predictorInput.tip_procedura) body.tip_procedura = predictorInput.tip_procedura;
+      if (predictorInput.tip_contestatie) body.tip_contestatie = predictorInput.tip_contestatie;
+      const res = await authFetch('/api/v1/analytics/predict-outcome', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+      if (res.ok) setPredictorResult(await res.json());
+    } catch (e) { console.error(e); }
+    setPredictorLoading(false);
+  };
+  const runComparison = async () => {
+    const ids = compareIds.filter(Boolean);
+    if (ids.length < 2) return;
+    setCompareLoading(true);
+    setCompareResult(null);
+    try {
+      const res = await authFetch('/api/v1/analytics/compare', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ decision_ids: ids }) });
+      if (res.ok) setCompareResult(await res.json());
+    } catch (e) { console.error(e); }
+    setCompareLoading(false);
+  };
+
+  const renderAnalytics = () => {
+    // Load panels on first visit
+    if (panelsList.length === 0 && !panelsLoading) loadPanelsList();
+
+    return (
+      <div className="h-full overflow-y-auto">
+        <div className="p-4 md:p-8 max-w-7xl mx-auto">
+          <h1 className="text-2xl font-bold text-slate-800 mb-2">Analiză CNSC</h1>
+          <p className="text-slate-500 mb-6">Profiluri complete, predictor rezultat și comparare decizii</p>
+
+          {/* Tab Navigation */}
+          <div className="flex gap-2 mb-6 border-b border-slate-200 pb-2">
+            {[
+              { key: 'panels' as const, label: 'Profiluri Complete', icon: '⚖️' },
+              { key: 'predictor' as const, label: 'Predictor Rezultat', icon: '🎯' },
+              { key: 'compare' as const, label: 'Comparare Decizii', icon: '🔀' },
+            ].map(tab => (
+              <button key={tab.key} onClick={() => setAnalyticsTab(tab.key)}
+                className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${analyticsTab === tab.key ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-100'}`}>
+                {tab.icon} {tab.label}
+              </button>
+            ))}
+          </div>
+
+          {/* PANELS TAB */}
+          {analyticsTab === 'panels' && (
+            <div>
+              {!selectedPanel ? (
+                <div>
+                  <h2 className="text-lg font-semibold text-slate-700 mb-4">Complete CNSC (C1-C20)</h2>
+                  {panelsLoading ? (
+                    <div className="flex items-center gap-2 text-slate-500"><Loader2 className="w-5 h-5 animate-spin" /> Se încarcă...</div>
+                  ) : (
+                    <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-3">
+                      {panelsList.map((p: any) => (
+                        <button key={p.complet} onClick={() => loadPanelProfile(p.complet)}
+                          className="bg-white border border-slate-200 rounded-xl p-4 hover:border-blue-400 hover:shadow-md transition-all text-left">
+                          <div className="text-lg font-bold text-blue-700">{p.complet}</div>
+                          <div className="text-2xl font-black text-slate-800">{p.total}</div>
+                          <div className="text-xs text-slate-500">decizii</div>
+                          <div className="mt-2 flex items-center gap-1">
+                            <div className="flex-1 bg-slate-100 rounded-full h-2 overflow-hidden">
+                              <div className="bg-green-500 h-2 rounded-full" style={{ width: `${p.win_rate}%` }} />
+                            </div>
+                            <span className="text-xs font-semibold text-green-700">{p.win_rate}%</span>
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div>
+                  <button onClick={() => { setSelectedPanel(null); setPanelProfile(null); }}
+                    className="text-blue-600 hover:text-blue-800 text-sm mb-4 flex items-center gap-1">
+                    ← Înapoi la lista completelor
+                  </button>
+                  {panelsLoading || !panelProfile ? (
+                    <div className="flex items-center gap-2 text-slate-500"><Loader2 className="w-5 h-5 animate-spin" /> Se încarcă profilul {selectedPanel}...</div>
+                  ) : (
+                    <div>
+                      <h2 className="text-xl font-bold text-slate-800 mb-4">Completul {panelProfile.complet}</h2>
+
+                      {/* Summary cards */}
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+                        <div className="bg-blue-50 p-4 rounded-xl">
+                          <div className="text-xs text-blue-600 font-medium">Total Decizii</div>
+                          <div className="text-2xl font-black text-blue-800">{panelProfile.total_decisions}</div>
+                        </div>
+                        <div className="bg-green-50 p-4 rounded-xl">
+                          <div className="text-xs text-green-600 font-medium">Rată Admitere</div>
+                          <div className="text-2xl font-black text-green-800">{panelProfile.win_rate}%</div>
+                        </div>
+                        <div className="bg-emerald-50 p-4 rounded-xl">
+                          <div className="text-xs text-emerald-600 font-medium">ADMIS</div>
+                          <div className="text-2xl font-black text-emerald-800">{panelProfile.rulings?.ADMIS || 0}</div>
+                        </div>
+                        <div className="bg-red-50 p-4 rounded-xl">
+                          <div className="text-xs text-red-600 font-medium">RESPINS</div>
+                          <div className="text-2xl font-black text-red-800">{panelProfile.rulings?.RESPINS || 0}</div>
+                        </div>
+                      </div>
+
+                      {/* By type */}
+                      <div className="bg-white border border-slate-200 rounded-xl p-5 mb-6">
+                        <h3 className="font-semibold text-slate-700 mb-3">Pe tip contestație</h3>
+                        <div className="space-y-2">
+                          {panelProfile.by_type?.map((t: any) => (
+                            <div key={t.type} className="flex items-center gap-3">
+                              <span className="text-sm font-medium text-slate-600 w-28">{t.type}</span>
+                              <div className="flex-1 bg-slate-100 rounded-full h-3 overflow-hidden">
+                                <div className="bg-blue-500 h-3 rounded-full transition-all" style={{ width: `${t.win_rate}%` }} />
+                              </div>
+                              <span className="text-sm font-semibold w-16 text-right">{t.win_rate}%</span>
+                              <span className="text-xs text-slate-400 w-20 text-right">({t.total} dec.)</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Criticism code tendencies */}
+                      <div className="bg-white border border-slate-200 rounded-xl p-5 mb-6">
+                        <h3 className="font-semibold text-slate-700 mb-3">Tendințe per cod de critică</h3>
+                        <div className="space-y-2">
+                          {panelProfile.criticism_stats?.slice(0, 10).map((c: any) => (
+                            <div key={c.code} className="flex items-center gap-3">
+                              <span className="text-sm font-mono font-bold text-slate-700 w-12">{c.code}</span>
+                              <div className="flex-1 bg-slate-100 rounded-full h-3 overflow-hidden">
+                                <div className="bg-green-500 h-3 rounded-full" style={{ width: `${c.contestator_win_rate}%` }} />
+                              </div>
+                              <span className="text-sm font-semibold w-16 text-right text-green-700">{c.contestator_win_rate}%</span>
+                              <span className="text-xs text-slate-400 w-20 text-right">({c.total} cazuri)</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Top CPV domains */}
+                      {panelProfile.top_cpv?.length > 0 && (
+                        <div className="bg-white border border-slate-200 rounded-xl p-5 mb-6">
+                          <h3 className="font-semibold text-slate-700 mb-3">Domenii CPV frecvente</h3>
+                          <div className="space-y-2">
+                            {panelProfile.top_cpv.slice(0, 8).map((c: any) => (
+                              <div key={c.cpv_group} className="flex items-center gap-3">
+                                <span className="text-sm font-mono text-slate-600 w-12">{c.cpv_group}*</span>
+                                <span className="text-xs text-slate-500 flex-1">{c.categorie || ''}</span>
+                                <span className="text-sm font-semibold text-green-700">{c.win_rate}%</span>
+                                <span className="text-xs text-slate-400">({c.total})</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Yearly trend */}
+                      {panelProfile.yearly_trend?.length > 0 && (
+                        <div className="bg-white border border-slate-200 rounded-xl p-5">
+                          <h3 className="font-semibold text-slate-700 mb-3">Evoluție anuală</h3>
+                          <div className="flex items-end gap-2 h-32">
+                            {panelProfile.yearly_trend.map((y: any) => {
+                              const maxTotal = Math.max(...panelProfile.yearly_trend.map((t: any) => t.total));
+                              const h = maxTotal > 0 ? (y.total / maxTotal) * 100 : 0;
+                              return (
+                                <div key={y.year} className="flex-1 flex flex-col items-center gap-1">
+                                  <div className="text-xs font-semibold text-green-700">{y.win_rate}%</div>
+                                  <div className="w-full bg-slate-100 rounded-t-md overflow-hidden" style={{ height: `${h}%`, minHeight: '4px' }}>
+                                    <div className="bg-blue-500 w-full h-full rounded-t-md" />
+                                  </div>
+                                  <div className="text-xs text-slate-500">{y.year}</div>
+                                  <div className="text-xs text-slate-400">{y.total}</div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* PREDICTOR TAB */}
+          {analyticsTab === 'predictor' && (
+            <div className="max-w-2xl">
+              <h2 className="text-lg font-semibold text-slate-700 mb-4">Predictor Rezultat Contestație</h2>
+              <p className="text-sm text-slate-500 mb-6">Introdu parametrii cazului pentru a estima probabilitatea de admitere pe baza statisticilor istorice CNSC.</p>
+              <div className="space-y-4 bg-white border border-slate-200 rounded-xl p-5 mb-6">
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Coduri critică *</label>
+                  <input type="text" value={predictorInput.coduri_critici}
+                    onChange={e => setPredictorInput(p => ({ ...p, coduri_critici: e.target.value }))}
+                    placeholder="ex: D3, R2, R4" className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm" />
+                  <p className="text-xs text-slate-400 mt-1">Separă cu virgulă (D1-D8, R1-R8, DAL, RAL)</p>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-1">Cod CPV</label>
+                    <input type="text" value={predictorInput.cod_cpv}
+                      onChange={e => setPredictorInput(p => ({ ...p, cod_cpv: e.target.value }))}
+                      placeholder="ex: 45310000-3" className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm" />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-1">Complet CNSC</label>
+                    <input type="text" value={predictorInput.complet}
+                      onChange={e => setPredictorInput(p => ({ ...p, complet: e.target.value }))}
+                      placeholder="ex: C5" className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm" />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Tip procedură</label>
+                  <input type="text" value={predictorInput.tip_procedura}
+                    onChange={e => setPredictorInput(p => ({ ...p, tip_procedura: e.target.value }))}
+                    placeholder="ex: licitație deschisă" className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm" />
+                </div>
+                <button onClick={runPrediction} disabled={predictorLoading || !predictorInput.coduri_critici.trim()}
+                  className="w-full bg-blue-600 text-white py-2.5 rounded-lg font-medium hover:bg-blue-700 disabled:opacity-50 flex items-center justify-center gap-2">
+                  {predictorLoading ? <><Loader2 className="w-4 h-4 animate-spin" /> Se calculează...</> : 'Generează Predicție'}
+                </button>
+              </div>
+
+              {predictorResult && (
+                <div className="space-y-4">
+                  {/* Main prediction */}
+                  <div className={`rounded-xl p-6 text-center ${predictorResult.prediction.outcome === 'ADMIS' ? 'bg-green-50 border-2 border-green-300' : 'bg-red-50 border-2 border-red-300'}`}>
+                    <div className="text-sm font-medium text-slate-600 mb-1">Predicție</div>
+                    <div className={`text-3xl font-black ${predictorResult.prediction.outcome === 'ADMIS' ? 'text-green-700' : 'text-red-700'}`}>
+                      {predictorResult.prediction.outcome}
+                    </div>
+                    <div className="text-lg font-bold mt-1">{predictorResult.prediction.probability}% probabilitate</div>
+                    <div className="text-xs text-slate-500 mt-1">Încredere: {(predictorResult.prediction.confidence * 100).toFixed(0)}%</div>
+                  </div>
+
+                  {/* Dimension stats */}
+                  <div className="bg-white border border-slate-200 rounded-xl p-5">
+                    <h3 className="font-semibold text-slate-700 mb-3">Statistici pe dimensiuni</h3>
+                    <div className="space-y-3">
+                      {Object.entries(predictorResult.stats).map(([key, s]: [string, any]) => (
+                        <div key={key} className="flex items-center gap-3">
+                          <span className="text-sm font-medium text-slate-600 w-32 truncate">{key.replace('critica_', 'Critica ').replace('cpv_domain', 'Domeniu CPV').replace('panel', 'Complet').replace('procedure', 'Procedură')}</span>
+                          <div className="flex-1 bg-slate-100 rounded-full h-3 overflow-hidden">
+                            <div className={`h-3 rounded-full ${s.win_rate >= 50 ? 'bg-green-500' : 'bg-red-400'}`}
+                              style={{ width: `${s.win_rate}%` }} />
+                          </div>
+                          <span className="text-sm font-semibold w-14 text-right">{s.win_rate}%</span>
+                          <span className="text-xs text-slate-400 w-16 text-right">({s.total || s.total_cases || 0})</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* LLM reasoning */}
+                  {predictorResult.reasoning && (
+                    <div className="bg-amber-50 border border-amber-200 rounded-xl p-5">
+                      <h3 className="font-semibold text-amber-800 mb-2">Analiză AI</h3>
+                      <p className="text-sm text-amber-900 whitespace-pre-wrap">{predictorResult.reasoning}</p>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* COMPARE TAB */}
+          {analyticsTab === 'compare' && (
+            <div>
+              <h2 className="text-lg font-semibold text-slate-700 mb-4">Comparare Decizii</h2>
+              <p className="text-sm text-slate-500 mb-6">Introdu ID-urile a 2-3 decizii pentru o comparație detaliată cu analiză AI.</p>
+              <div className="bg-white border border-slate-200 rounded-xl p-5 mb-6">
+                <div className="space-y-3">
+                  {compareIds.map((id, i) => (
+                    <div key={i} className="flex items-center gap-2">
+                      <span className="text-sm font-medium text-slate-600 w-20">Decizia {i + 1}{i < 2 ? ' *' : ''}</span>
+                      <input type="text" value={id}
+                        onChange={e => { const n = [...compareIds]; n[i] = e.target.value; setCompareIds(n); }}
+                        placeholder="ID decizie (UUID)" className="flex-1 border border-slate-300 rounded-lg px-3 py-2 text-sm font-mono" />
+                    </div>
+                  ))}
+                  {compareIds.length < 3 && (
+                    <button onClick={() => setCompareIds([...compareIds, ''])}
+                      className="text-blue-600 text-sm hover:text-blue-800">+ Adaugă decizie</button>
+                  )}
+                </div>
+                <button onClick={runComparison} disabled={compareLoading || compareIds.filter(Boolean).length < 2}
+                  className="mt-4 w-full bg-blue-600 text-white py-2.5 rounded-lg font-medium hover:bg-blue-700 disabled:opacity-50 flex items-center justify-center gap-2">
+                  {compareLoading ? <><Loader2 className="w-4 h-4 animate-spin" /> Se analizează...</> : 'Compară Decizii'}
+                </button>
+              </div>
+
+              {compareResult && (
+                <div className="space-y-4">
+                  {/* Metadata comparison table */}
+                  <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-sm">
+                        <thead className="bg-slate-50">
+                          <tr>
+                            <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500">Câmp</th>
+                            {compareResult.decisions.map((d: any) => (
+                              <th key={d.id} className="px-4 py-3 text-left text-xs font-semibold text-slate-700">{d.numar_bo}</th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100">
+                          {['complet', 'solutie', 'tip_contestatie', 'tip_procedura', 'criteriu_atribuire', 'cod_cpv', 'data_decizie'].map(field => (
+                            <tr key={field} className="hover:bg-slate-50">
+                              <td className="px-4 py-2 text-xs font-medium text-slate-500">{field}</td>
+                              {compareResult.decisions.map((d: any) => (
+                                <td key={d.id} className={`px-4 py-2 text-xs ${field === 'solutie' ? (d[field] === 'ADMIS' ? 'text-green-700 font-bold' : d[field] === 'RESPINS' ? 'text-red-700 font-bold' : 'text-amber-700 font-bold') : 'text-slate-700'}`}>
+                                  {d[field] || '—'}
+                                </td>
+                              ))}
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+
+                  {/* Per-decision argumentation */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {compareResult.decisions.map((d: any) => (
+                      <div key={d.id} className="bg-white border border-slate-200 rounded-xl p-4">
+                        <div className="flex items-center justify-between mb-3">
+                          <span className="font-bold text-slate-800">{d.numar_bo}</span>
+                          <span className={`px-2 py-0.5 rounded text-xs font-bold ${d.solutie === 'ADMIS' ? 'bg-green-100 text-green-800' : d.solutie === 'RESPINS' ? 'bg-red-100 text-red-800' : 'bg-amber-100 text-amber-800'}`}>
+                            {d.solutie}
+                          </span>
+                        </div>
+                        {d.rezumat && <p className="text-xs text-slate-600 mb-3">{d.rezumat}</p>}
+                        <div className="space-y-2">
+                          {d.argumentari?.map((a: any, i: number) => (
+                            <div key={i} className="border-l-2 border-slate-300 pl-3">
+                              <div className="flex items-center gap-2 mb-1">
+                                <span className="text-xs font-mono font-bold text-slate-700">{a.cod_critica}</span>
+                                <span className={`text-xs px-1.5 py-0.5 rounded ${a.castigator === 'contestator' ? 'bg-green-100 text-green-700' : a.castigator === 'autoritate' ? 'bg-red-100 text-red-700' : 'bg-slate-100 text-slate-600'}`}>
+                                  {a.castigator}
+                                </span>
+                              </div>
+                              {a.argumentatie_cnsc && (
+                                <p className="text-xs text-slate-500 line-clamp-3">{a.argumentatie_cnsc}</p>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* LLM analysis */}
+                  {compareResult.analysis && (
+                    <div className="bg-blue-50 border border-blue-200 rounded-xl p-5">
+                      <h3 className="font-semibold text-blue-800 mb-3">Analiză Comparativă AI</h3>
+                      <div className="text-sm text-blue-900 whitespace-pre-wrap">{compareResult.analysis}</div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+    );
   };
 
   const renderTraining = () => {
@@ -5867,6 +6282,7 @@ const App = () => {
               </div>
            </div>
         )}
+        {mode === 'analytics' && renderAnalytics()}
         {mode === 'training' && renderTraining()}
         {mode === 'settings' && renderSettings()}
         {mode === 'profile' && renderProfile()}
