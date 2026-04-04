@@ -2152,6 +2152,13 @@ const App = () => {
 
         <div>
            <div className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3 px-2">Instrumente Juridice</div>
+           {canAccess('compliance') ? (
+             <SidebarItem icon={ClipboardCheck} label="Verificator Conformitate" active={mode === 'compliance'} onClick={() => { setMode('compliance'); setSidebarOpen(false); }} />
+           ) : (
+             <div className="opacity-50 cursor-not-allowed" title="Disponibil în planul Basic">
+               <SidebarItem icon={ClipboardCheck} label="Verificator Conformitate" active={false} onClick={() => setShowAuthModal(true)} />
+             </div>
+           )}
            {canAccess('drafter') ? (
              <SidebarItem icon={Scale} label="Drafter Contestații" active={mode === 'drafter'} onClick={() => { setMode('drafter'); setSidebarOpen(false); }} />
            ) : (
@@ -4012,6 +4019,160 @@ const App = () => {
       if (res.ok) setCompareResult(await res.json());
     } catch (e) { console.error(e); }
     setCompareLoading(false);
+  };
+
+  // =========================================================================
+  // COMPLIANCE PAGE
+  // =========================================================================
+  const runComplianceCheck = async () => {
+    if (!complianceText.trim() && !(document.getElementById('compliance-file') as HTMLInputElement)?.files?.length) return;
+    setComplianceLoading(true);
+    setComplianceResult(null);
+    try {
+      const formData = new FormData();
+      const fileInput = document.getElementById('compliance-file') as HTMLInputElement;
+      if (fileInput?.files?.length) {
+        formData.append('file', fileInput.files[0]);
+      } else {
+        formData.append('text', complianceText);
+      }
+      if (complianceProcedura) formData.append('tip_procedura', complianceProcedura);
+      formData.append('tip_document', 'documentație achiziție');
+
+      const res = await authFetch('/api/v1/compliance/check', { method: 'POST', body: formData });
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).detail || `Eroare ${res.status}`);
+      setComplianceResult(await res.json());
+    } catch (err: any) {
+      alert(`Eroare: ${err.message}`);
+    } finally {
+      setComplianceLoading(false);
+    }
+  };
+
+  const renderCompliance = () => {
+    if (analyticsFilterOptions.proceduri.length === 0) loadAnalyticsFilters();
+    return (
+      <div className="h-full flex flex-col md:flex-row bg-white">
+        {/* Left panel */}
+        <div className="w-full md:w-1/3 border-r border-slate-200 p-6 overflow-y-auto bg-slate-50/50">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-lg font-bold text-slate-800 flex gap-2 items-center">
+              <ClipboardCheck className="text-emerald-600" size={20}/> Verificator Conformitate
+            </h2>
+          </div>
+          <p className="text-xs text-slate-500 mb-6">Încarcă documentația de achiziție și AI verifică conformitatea cu legislația aplicabilă.</p>
+
+          <div className="space-y-4">
+            <div className="bg-slate-50 p-4 rounded-lg border border-dashed border-slate-300">
+              <label className="text-xs font-bold text-slate-500 uppercase mb-2 block">Încarcă document (.pdf, .docx, .txt)</label>
+              <input id="compliance-file" type="file" accept=".pdf,.docx,.doc,.txt,.md"
+                onChange={() => setComplianceText('')}
+                className="w-full text-xs text-slate-500 file:mr-2 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-emerald-50 file:text-emerald-600 hover:file:bg-emerald-100" />
+            </div>
+            <div className="text-center text-xs text-slate-400">— sau —</div>
+            <div>
+              <label className="block text-xs font-bold text-slate-600 uppercase mb-1">Textul documentului</label>
+              <textarea rows={8} value={complianceText}
+                onChange={e => setComplianceText(e.target.value)}
+                placeholder="Lipește textul documentației de achiziție aici..."
+                className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm resize-none focus:ring-2 focus:ring-emerald-500/40 outline-none" />
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-slate-600 uppercase mb-1">Tip procedură</label>
+              <select value={complianceProcedura}
+                onChange={e => setComplianceProcedura(e.target.value)}
+                className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm bg-white">
+                <option value="">— Autodetect —</option>
+                {analyticsFilterOptions.proceduri.map((p: any) => (
+                  <option key={p.name} value={p.name}>{p.name}</option>
+                ))}
+              </select>
+            </div>
+
+            <button onClick={runComplianceCheck}
+              disabled={complianceLoading || (!complianceText.trim() && !(document.getElementById('compliance-file') as HTMLInputElement)?.files?.length)}
+              className="w-full bg-emerald-600 text-white py-3 rounded-xl font-semibold hover:bg-emerald-700 disabled:opacity-50 transition flex items-center justify-center gap-2 text-sm">
+              {complianceLoading ? <><Loader2 className="w-4 h-4 animate-spin" /> Se verifică conformitatea...</> : <><ClipboardCheck size={16} /> Verifică Conformitate</>}
+            </button>
+          </div>
+        </div>
+
+        {/* Right panel — results */}
+        <div className="w-full md:w-2/3 p-4 md:p-8 overflow-y-auto bg-white">
+          {!complianceResult && !complianceLoading && (
+            <div className="h-full flex items-center justify-center text-slate-400">
+              <div className="text-center">
+                <ClipboardCheck size={48} className="mx-auto mb-4 opacity-30" />
+                <p className="text-lg font-medium">Verificator Conformitate</p>
+                <p className="text-sm mt-1">Încarcă un document pentru verificare</p>
+              </div>
+            </div>
+          )}
+          {complianceLoading && (
+            <div className="h-full flex items-center justify-center">
+              <div className="text-center">
+                <Loader2 size={40} className="animate-spin text-emerald-500 mx-auto mb-4" />
+                <p className="text-slate-600 font-medium">Se verifică conformitatea cu legislația...</p>
+                <p className="text-xs text-slate-400 mt-1">Poate dura 30-90 secunde</p>
+              </div>
+            </div>
+          )}
+          {complianceResult && (
+            <div className="max-w-3xl mx-auto space-y-6">
+              {/* Score header */}
+              <div className={`rounded-2xl p-6 text-center ${(complianceResult.score ?? 0) >= 80 ? 'bg-green-50 border-2 border-green-300' : (complianceResult.score ?? 0) >= 50 ? 'bg-amber-50 border-2 border-amber-300' : 'bg-red-50 border-2 border-red-300'}`}>
+                <div className={`text-4xl font-black mb-2 ${(complianceResult.score ?? 0) >= 80 ? 'text-green-700' : (complianceResult.score ?? 0) >= 50 ? 'text-amber-700' : 'text-red-700'}`}>
+                  {complianceResult.score}%
+                </div>
+                <p className="text-sm text-slate-600">Scor conformitate</p>
+                <div className="flex justify-center gap-6 mt-3 text-sm">
+                  <span className="text-green-700 font-semibold">{complianceResult.conform} conforme</span>
+                  <span className="text-red-700 font-semibold">{complianceResult.neconform} neconforme</span>
+                  <span className="text-slate-500">{complianceResult.neclar} neclar</span>
+                </div>
+              </div>
+
+              {/* Summary */}
+              {complianceResult.summary && (
+                <div className="bg-slate-50 border border-slate-200 rounded-xl p-4">
+                  <div className="prose prose-sm max-w-none text-slate-700" dangerouslySetInnerHTML={{ __html: formatMarkdown(complianceResult.summary) }} />
+                </div>
+              )}
+
+              {/* Compliance items */}
+              <div>
+                <h3 className="text-lg font-bold text-slate-800 mb-3">Matrice Conformitate</h3>
+                <div className="space-y-3">
+                  {(complianceResult.compliance_items || []).map((item: any, i: number) => (
+                    <div key={i} className={`border rounded-xl p-4 ${item.verdict === 'CONFORM' ? 'border-green-200 bg-green-50/50' : item.verdict === 'NECONFORM' ? 'border-red-200 bg-red-50/50' : 'border-slate-200 bg-slate-50/50'}`}>
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="font-mono text-sm font-bold text-slate-800">{item.citare}</span>
+                        <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold ${item.verdict === 'CONFORM' ? 'bg-green-200 text-green-800' : item.verdict === 'NECONFORM' ? 'bg-red-200 text-red-800' : 'bg-slate-200 text-slate-600'}`}>
+                          {item.verdict}
+                        </span>
+                      </div>
+                      <p className="text-xs text-slate-500 mb-1">{item.act}</p>
+                      <p className="text-sm text-slate-700">{item.explicatie}</p>
+                      {item.recomandare && (
+                        <div className="mt-2 p-2 bg-amber-50 rounded-lg border border-amber-200">
+                          <p className="text-xs font-bold text-amber-700">Recomandare:</p>
+                          <p className="text-xs text-amber-800">{item.recomandare}</p>
+                        </div>
+                      )}
+                      {item.citat_document && (
+                        <div className="mt-2 text-xs text-slate-500 italic border-l-2 border-slate-300 pl-2">
+                          &ldquo;{item.citat_document}&rdquo;
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    );
   };
 
   // =========================================================================
@@ -6701,6 +6862,7 @@ const App = () => {
            </div>
         )}
         {mode === 'strategy' && renderStrategy()}
+        {mode === 'compliance' && renderCompliance()}
         {mode === 'analytics' && renderAnalytics()}
         {mode === 'training' && renderTraining()}
         {mode === 'settings' && renderSettings()}
