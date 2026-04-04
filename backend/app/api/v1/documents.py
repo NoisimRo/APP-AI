@@ -185,13 +185,8 @@ async def extract_entities(
     if file and not doc_text:
         processor = DocumentProcessor()
         content = await file.read()
-        filename = file.filename or ""
-        if filename.lower().endswith(".pdf"):
-            doc_text = processor.extract_text_from_pdf(content)
-        elif filename.lower().endswith((".docx", ".doc")):
-            doc_text = processor.extract_text_from_docx(content)
-        else:
-            doc_text = processor.extract_text_from_txt(content)
+        filename = file.filename or "document.txt"
+        doc_text = processor.extract_text_from_file(content, filename)
 
     if not doc_text or len(doc_text.strip()) < 30:
         raise HTTPException(status_code=400, detail="Text prea scurt pentru extragere.")
