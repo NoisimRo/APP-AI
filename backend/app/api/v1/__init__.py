@@ -2,7 +2,7 @@
 
 from fastapi import APIRouter
 
-from app.api.v1 import auth, chat, search, decisions, documents, redflags, ragmemo, drafter, clarification, training, settings, scopes, saved, users, spete_anap, analytics, strategy, compliance, multi_document
+from app.api.v1 import auth, chat, search, decisions, documents, redflags, ragmemo, drafter, clarification, training, settings, scopes, saved, users, spete_anap, analytics, strategy, compliance, multi_document, dosare, alerts, comments
 
 api_router = APIRouter()
 
@@ -25,3 +25,6 @@ api_router.include_router(analytics.router, prefix="/analytics", tags=["analytic
 api_router.include_router(strategy.router, prefix="/strategy", tags=["strategy"])
 api_router.include_router(compliance.router, prefix="/compliance", tags=["compliance"])
 api_router.include_router(multi_document.router, prefix="/multi-document", tags=["multi-document"])
+api_router.include_router(dosare.router, prefix="/dosare", tags=["dosare"])
+api_router.include_router(alerts.router, prefix="/alerts", tags=["alerts"])
+api_router.include_router(comments.router, prefix="/documents", tags=["comments"])

@@ -114,6 +114,9 @@ DATABASE_URL="postgresql+asyncpg://..." python scripts/generate_embeddings.py
 | `backend/app/api/v1/multi_document.py` | Multi-Document API endpoint (POST /analyze, 2-5 files) |
 | `backend/app/services/entity_extractor.py` | NER: extragere CPV, procedură, valoare din documente |
 | `backend/app/api/v1/analytics.py` | Analytics API (panel profiles, predictor, compare) |
+| `backend/app/api/v1/dosare.py` | Dosare Digitale CRUD API (case management) |
+| `backend/app/api/v1/alerts.py` | Alert Rules CRUD API (decision alerts) |
+| `backend/app/api/v1/comments.py` | Document Comments API (inline comments, resolve/unresolve) |
 
 ## Code Conventions
 
@@ -155,7 +158,7 @@ DATABASE_URL="postgresql+asyncpg://..." python scripts/generate_embeddings.py
 - **History:** Started at 768 (text-embedding-004 convention) → tried 3072 (native) but hit pgvector HNSW limit → settled on 2000.
 - After dimension changes, regenerate embeddings: `python scripts/generate_embeddings.py --force`
 
-### Key Tables (15 în producție)
+### Key Tables (18 în producție)
 
 | Table | Purpose | RAG? |
 |-------|---------|------|
@@ -169,11 +172,14 @@ DATABASE_URL="postgresql+asyncpg://..." python scripts/generate_embeddings.py
 | `search_scopes` | Saved filter presets for RAG pre-filtering (name, JSONB filters, cached decision_count) | No (pre-filter) |
 | `users` | Conturi utilizatori cu JWT auth (password_hash, roluri: admin, registered, paid_basic/pro/enterprise) | No |
 | `user_context` | Memorie persistentă AI per utilizator (fapte, preferințe, expertiză — extrase din conversații) | No |
-| `conversatii` | Conversații chat salvate (titlu, nr mesaje, scope_id, user_id FK) | No |
+| `conversatii` | Conversații chat salvate (titlu, nr mesaje, scope_id, dosar_id FK) | No |
 | `mesaje_conversatie` | Mesajele individuale din conversații (rol, conținut, citations, ordine) | No |
-| `documente_generate` | Documente generate salvate: contestații, clarificări, RAG memo (tip_document, conținut, referințe) | No |
-| `red_flags_salvate` | Analize Red Flags salvate (rezultate JSONB, statistici severitate) | No |
-| `training_materials` | Materiale didactice salvate (tip, temă, nivel, secțiuni parsate, referințe legale) | No |
+| `documente_generate` | Documente generate salvate: contestații, clarificări, RAG memo (tip_document, conținut, dosar_id FK) | No |
+| `red_flags_salvate` | Analize Red Flags salvate (rezultate JSONB, statistici severitate, dosar_id FK) | No |
+| `training_materials` | Materiale didactice salvate (tip, temă, nivel, secțiuni parsate, dosar_id FK) | No |
+| `dosare` | Dosare digitale — case management (client, AC, CPV, termene, status, artefacte linkuite) | No |
+| `alert_rules` | Reguli alerte decizii noi (filtre JSONB, frecvență, status activ/inactiv) | No |
+| `document_comments` | Comentarii inline pe documente generate (anchor text, resolved tracking) | No |
 
 ### Tabele eliminate (2026-03-07)
 
@@ -346,13 +352,109 @@ DATABASE_URL="..." python scripts/import_spete_anap.py                          
 DATABASE_URL="..." python scripts/import_spete_anap.py --force                          # Delete all + reimport
 ```
 
+### Sprint 4 — Workflow & Case Management (2026-04-04)
+
+8. **Dosar Digital (2.2)** — full case management system
+   - New `dosare` table (user_id, titlu, client, AC, CPV, termene, status)
+   - Added nullable `dosar_id` FK to `conversatii`, `documente_generate`, `red_flags_salvate`, `training_materials`
+   - CRUD API: `/api/v1/dosare/` with link/unlink artifact endpoints
+   - Frontend: pagină completă cu lista dosarelor, formular CRUD, detaliu cu artefacte linkuite
+   - Status tracking: activ → in_lucru → depus → finalizat → arhivat
+   - Urgent indicator for deadlines < 3 days
+
+9. **Alerte Decizii Noi (2.3)** — email alerts for new matching decisions
+   - New `alert_rules` table (user_id, nume, filters JSONB, activ, frecventa, ultima_notificare)
+   - CRUD API: `/api/v1/alerts/` with toggle endpoint
+   - Filters: cod_cpv, coduri_critici, complet, tip_procedura, solutie, keywords
+   - Frontend: pagină cu lista regulilor, formular CRUD, toggle activ/inactiv
+   - Max 20 rules per user
+
+10. **Comentarii pe Documente (3.3)** — inline collaborative review
+    - New `document_comments` table (document_id, user_id, anchor positions, text, resolved)
+    - CRUD API: `/api/v1/documents/{id}/comments/` with resolve/unresolve
+    - Comment stats endpoint per document
+    - Backend ready for frontend integration in document viewer
+
+### Sprint 4 SQL Migration (trebuie executat în producție)
+
+```sql
+-- 1. Dosare Digitale
+CREATE TABLE dosare (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  titlu VARCHAR(300) NOT NULL,
+  descriere TEXT,
+  numar_dosar VARCHAR(100),
+  client VARCHAR(300),
+  autoritate_contractanta VARCHAR(300),
+  numar_procedura VARCHAR(100),
+  cod_cpv VARCHAR(20),
+  valoare_estimata NUMERIC(15,2),
+  tip_procedura VARCHAR(80),
+  status VARCHAR(30) NOT NULL DEFAULT 'activ',
+  termen_depunere TIMESTAMP,
+  termen_solutionare TIMESTAMP,
+  note TEXT,
+  metadata JSONB DEFAULT '{}',
+  created_at TIMESTAMP NOT NULL DEFAULT now(),
+  updated_at TIMESTAMP NOT NULL DEFAULT now()
+);
+CREATE INDEX ix_dosare_user ON dosare(user_id);
+CREATE INDEX ix_dosare_status ON dosare(status);
+CREATE INDEX ix_dosare_created ON dosare(created_at DESC);
+
+-- 2. FK dosar_id pe tabelele existente
+ALTER TABLE conversatii ADD COLUMN dosar_id UUID REFERENCES dosare(id) ON DELETE SET NULL;
+ALTER TABLE documente_generate ADD COLUMN dosar_id UUID REFERENCES dosare(id) ON DELETE SET NULL;
+ALTER TABLE red_flags_salvate ADD COLUMN dosar_id UUID REFERENCES dosare(id) ON DELETE SET NULL;
+ALTER TABLE training_materials ADD COLUMN dosar_id UUID REFERENCES dosare(id) ON DELETE SET NULL;
+
+-- 3. Alert Rules
+CREATE TABLE alert_rules (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  nume VARCHAR(200) NOT NULL,
+  descriere TEXT,
+  filters JSONB NOT NULL DEFAULT '{}',
+  activ BOOLEAN NOT NULL DEFAULT true,
+  frecventa VARCHAR(20) NOT NULL DEFAULT 'zilnic',
+  ultima_notificare TIMESTAMP,
+  total_notificari INTEGER NOT NULL DEFAULT 0,
+  metadata JSONB DEFAULT '{}',
+  created_at TIMESTAMP NOT NULL DEFAULT now(),
+  updated_at TIMESTAMP NOT NULL DEFAULT now()
+);
+CREATE INDEX ix_alert_user ON alert_rules(user_id);
+CREATE INDEX ix_alert_activ ON alert_rules(activ);
+
+-- 4. Document Comments
+CREATE TABLE document_comments (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  document_id UUID NOT NULL REFERENCES documente_generate(id) ON DELETE CASCADE,
+  user_id UUID REFERENCES users(id) ON DELETE SET NULL,
+  anchor_start INTEGER,
+  anchor_end INTEGER,
+  anchor_text TEXT,
+  text TEXT NOT NULL,
+  resolved BOOLEAN NOT NULL DEFAULT false,
+  resolved_by UUID,
+  resolved_at TIMESTAMP,
+  created_at TIMESTAMP NOT NULL DEFAULT now(),
+  updated_at TIMESTAMP NOT NULL DEFAULT now()
+);
+CREATE INDEX ix_dc_document ON document_comments(document_id);
+CREATE INDEX ix_dc_user ON document_comments(user_id);
+CREATE INDEX ix_dc_resolved ON document_comments(resolved);
+```
+
 ### What still needs to be done
 1. **Run LLM analysis** on all decisions: `python scripts/generate_analysis.py` (or `pipeline.py --step analyze`)
 2. **Generate embeddings**: `python scripts/generate_embeddings.py` (or `pipeline.py --step embed`)
 3. **Generate retroactive summaries**: `python scripts/generate_summaries.py` (lightweight, ~1600 tokens/decision)
 4. **Extract obiect_contract**: `python scripts/extract_obiect_contract.py` (regex, instant, prerequisite for CPV deduction)
 5. **Deduce CPV codes**: `python scripts/deduce_cpv.py` (for decisions without CPV, uses embedding similarity)
-6. **Deploy**: Push to `main` to trigger Cloud Build → Cloud Run
+6. **Execute Sprint 4 SQL migration** in production (see above)
+7. **Deploy**: Push to `main` to trigger Cloud Build → Cloud Run
 
 ### Future: Daily Automation (Cloud Run Job + Cloud Scheduler)
 
@@ -481,7 +583,7 @@ Toate deciziile CNSC au datele părților anonimizate (`autoritate_contractanta`
 | **1 — Foundation** | Redis Rate Limiting (6.2), Redis Cache (6.1), Deep Health Check (6.5), DB Pool Tuning (6.6) | Infrastructură | ✅ DONE |
 | **2 — Intelligence** | Profil Complet CNSC (1.2), Predictor Rezultat (1.1), Analiză Comparativă (1.4) | Analytics | ✅ DONE |
 | **3 — AI** | Strategie Contestare (4.2), Verificator Conformitate (4.5), Multi-Document (4.1), NER Entități (4.3), Memorie Persistentă (4.4) | AI Avansat | ✅ DONE |
-| **4 — Workflow** | Dosar Digital (2.2), Alerte Decizii (2.3), Comentarii Documente (3.3) | Flux de lucru | |
+| **4 — Workflow** | Dosar Digital (2.2), Alerte Decizii (2.3), Comentarii Documente (3.3) | Flux de lucru | ✅ DONE |
 | **5 — Data Moat** | Import Curtea de Apel (5.1), Hartă Jurisprudențială (1.5) | Date | |
 | **6 — UX** | Frontend Modular (8.1), Dark Mode (8.4) | Experiență | |
 

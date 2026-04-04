@@ -109,6 +109,9 @@ FEATURE_ROLES = {
     "strategy": ["paid_basic", "paid_pro", "paid_enterprise", "admin"],
     "compliance": ["paid_basic", "paid_pro", "paid_enterprise", "admin"],
     "multi_document": ["paid_pro", "paid_enterprise", "admin"],
+    "dosare": ["paid_basic", "paid_pro", "paid_enterprise", "admin"],
+    "alerts": ["paid_basic", "paid_pro", "paid_enterprise", "admin"],
+    "comments": ["paid_basic", "paid_pro", "paid_enterprise", "admin"],
 }
 
 
