@@ -456,3 +456,34 @@ Modul pentru generarea de materiale didactice destinate formării specialiștilo
 - **Teme predefinite**: dropdown cu teme populare (ex: "Evaluarea ofertelor", "Contestarea procedurii", "Conflictul de interese")
 - **Template-uri personalizate**: trainer-ul poate salva prompt-uri/instrucțiuni custom reutilizabile
 - **Preview print**: vizualizare print-friendly înainte de export
+
+## Feature Roadmap (2026-04-04)
+
+Planificare detaliată a funcționalităților noi, documentată în `docs/FEATURE_ROADMAP_2026_04.md`.
+
+### Data Reality Check — Anonimizare
+
+Toate deciziile CNSC au datele părților anonimizate (`autoritate_contractanta` și `contestator` sunt întotdeauna NULL în DB — numele sunt înlocuite cu "........."). Orice funcționalitate care depinde de identificarea părților este **imposibilă** cu datele actuale. Câmpurile disponibile: `complet` (C1-C20), `coduri_critici`, `cod_cpv`, `solutie_contestatie`, `tip_procedura`, `criteriu_atribuire`, `data_decizie`, `valoare_estimata`.
+
+### Funcționalități Aprobate (19) — 6 Sprinturi
+
+| Sprint | Funcționalități | Temă |
+|--------|----------------|------|
+| **1 — Foundation** | Redis Rate Limiting (6.2), Redis Cache (6.1), Deep Health Check (6.5), DB Pool Tuning (6.6) | Infrastructură |
+| **2 — Intelligence** | Profil Complet CNSC (1.2), Predictor Rezultat (1.1), Analiză Comparativă (1.4) | Analytics |
+| **3 — AI** | Strategie Contestare (4.2), Verificator Conformitate (4.5), Multi-Document (4.1), NER Entități (4.3), Memorie Persistentă (4.4) | AI Avansat |
+| **4 — Workflow** | Dosar Digital (2.2), Alerte Decizii (2.3), Comentarii Documente (3.3) | Flux de lucru |
+| **5 — Data Moat** | Import Curtea de Apel (5.1), Hartă Jurisprudențială (1.5) | Date |
+| **6 — UX** | Frontend Modular (8.1), Dark Mode (8.4) | Experiență |
+
+### Funcționalități Amânate (15)
+
+Trend Analytics, Audit Trail, Șabloane Personalizate, Notițe pe Decizii, Organizații & Echipe, Partajare Documente, Rezumat Executiv, Monitorizare SEAP, API Enterprise, Legislație Auto-update, Observabilitate, Background Task Queue, Registru Clienți, Rapoarte Client, PWA + Command Palette.
+
+### Funcționalități Respinse (2)
+
+Calculator Termene Legale, Export Structurat CSV/JSON.
+
+### Funcționalitate Invalidată (1)
+
+**Profil Autoritate Contractantă** — imposibil din cauza anonimizării datelor.
