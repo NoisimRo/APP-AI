@@ -32,6 +32,8 @@ logger = get_logger(__name__)
 MAX_CONCURRENT_CHECKS = 6
 LLM_CALL_TIMEOUT = 120
 MAX_REQUIREMENTS = 15  # Cap on number of requirements to check
+# No artificial truncation — LLM providers handle context limits internally
+# via token-aware truncation (~4 chars/token). Gemini supports 1M tokens.
 
 
 class ComplianceChecker:
@@ -101,7 +103,7 @@ class ComplianceChecker:
 
         # Phase 2b: Parallel LLM compliance checks
         semaphore = asyncio.Semaphore(MAX_CONCURRENT_CHECKS)
-        doc_excerpt = document_text[:12000]  # Cap document for LLM context
+        doc_excerpt = document_text  # Full text — LLM handles truncation
 
         tasks = [
             self._check_single_requirement(
@@ -170,11 +172,11 @@ class ComplianceChecker:
     ) -> list[dict]:
         """Identify which legal requirements apply to this document."""
         # Search legislation by document content embedding
-        doc_summary = document_text[:3000]
+        doc_summary = document_text  # Full text for requirements identification
         query = f"cerințe legale obligatorii {tip_document or 'documentație achiziții publice'}"
         if tip_procedura:
             query += f" {tip_procedura}"
-        query += f" {doc_summary[:500]}"
+        query += f" {document_text[:2000]}"  # Embedding query — keep reasonable for vector search
 
         query_vector = await self.embedding_service.embed_query(query)
 
@@ -209,14 +211,14 @@ class ComplianceChecker:
 
         # Use LLM to filter to truly applicable requirements
         candidates_text = "\n".join(
-            f"{i+1}. {c['citare']} ({c['act']}): {c['text'][:300]}"
+            f"{i+1}. {c['citare']} ({c['act']}): {c['text']}"
             for i, c in enumerate(candidates[:20])
         )
 
         prompt = f"""Ești un expert în achiziții publice din România.
 
 DOCUMENT DE VERIFICAT (extras):
-{doc_summary[:2000]}
+{doc_summary}
 
 {f"TIP PROCEDURĂ: {tip_procedura}" if tip_procedura else ""}
 {f"TIP DOCUMENT: {tip_document}" if tip_document else ""}
@@ -286,7 +288,7 @@ CE TREBUIE VERIFICAT:
 {requirement['descriere']}
 
 DOCUMENT DE VERIFICAT (extras):
-{document_excerpt[:5000]}
+{document_excerpt}
 
 {f"JURISPRUDENȚĂ RELEVANTĂ:{chr(10)}{jur_text}" if jur_text else ""}
 

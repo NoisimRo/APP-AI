@@ -590,12 +590,12 @@ Severitate:
                     if arg.jurisprudenta_cnsc:
                         section.append(f"Jurisprudență citată CNSC: {'; '.join(arg.jurisprudenta_cnsc)}")
                     if arg.argumente_contestator:
-                        section.append(f"Argumente contestator: {arg.argumente_contestator[:500]}")
+                        section.append(f"Argumente contestator: {arg.argumente_contestator}")
                     if arg.argumente_ac:
-                        section.append(f"Argumente AC: {arg.argumente_ac[:500]}")
+                        section.append(f"Argumente AC: {arg.argumente_ac}")
                     if arg.argumente_intervenienti:
                         for interv in arg.argumente_intervenienti:
-                            section.append(f"Intervenient {interv.get('nr', '?')}: {interv.get('argumente', '')[:300]}")
+                            section.append(f"Intervenient {interv.get('nr', '?')}: {interv.get('argumente', '')}")
                 parts.append("\n".join(section))
             jurisprudence_context = "\n\n---\n\n".join(parts)
 
