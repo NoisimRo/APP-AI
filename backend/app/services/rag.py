@@ -762,7 +762,7 @@ class RAGService:
                     all_chunk_texts.append(text)
             # For semantic search, use CNSC argumentation from high-relevance chunks
             if arg.argumentatie_cnsc and dist < 0.5:
-                semantic_parts.append(arg.argumentatie_cnsc[:500])
+                semantic_parts.append(arg.argumentatie_cnsc)
 
         combined_text = "\n".join(all_chunk_texts)
 
@@ -1038,7 +1038,7 @@ class RAGService:
         candidates = chunks[:15]
         numbered_parts = []
         for i, (arg, dist) in enumerate(candidates):
-            text = (arg.argumentatie_cnsc or arg.argumente_contestator or "")[:200]
+            text = arg.argumentatie_cnsc or arg.argumente_contestator or ""
             numbered_parts.append(f"[{i + 1}] {arg.cod_critica}: {text}")
 
         rerank_prompt = (

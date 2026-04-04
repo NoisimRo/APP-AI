@@ -538,9 +538,9 @@ async def compare_decisions(
             "argumentari": [
                 {
                     "cod_critica": a.cod_critica,
-                    "argumente_contestator": a.argumente_contestator[:500] if a.argumente_contestator else None,
-                    "argumente_ac": a.argumente_ac[:500] if a.argumente_ac else None,
-                    "argumentatie_cnsc": a.argumentatie_cnsc[:500] if a.argumentatie_cnsc else None,
+                    "argumente_contestator": a.argumente_contestator if a.argumente_contestator else None,
+                    "argumente_ac": a.argumente_ac if a.argumente_ac else None,
+                    "argumentatie_cnsc": a.argumentatie_cnsc if a.argumentatie_cnsc else None,
                     "castigator": a.castigator_critica,
                 }
                 for a in args
@@ -562,7 +562,7 @@ async def compare_decisions(
             for a in d["argumentari"]:
                 s += f"  Critica {a['cod_critica']}: câștigător={a['castigator']}\n"
                 if a["argumentatie_cnsc"]:
-                    s += f"    CNSC: {a['argumentatie_cnsc'][:300]}\n"
+                    s += f"    CNSC: {a['argumentatie_cnsc']}\n"
             dec_summaries.append(s)
 
         prompt = (

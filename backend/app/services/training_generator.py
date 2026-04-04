@@ -423,13 +423,13 @@ class TrainingGenerator:
                         continue
                     part = f"Decizia {dec.external_id} (soluție: {dec.solutie_contestatie or 'N/A'}):\n"
                     if arg.argumente_contestator:
-                        part += f"  Argumente contestator: {arg.argumente_contestator[:500]}\n"
+                        part += f"  Argumente contestator: {arg.argumente_contestator}\n"
                     if arg.argumentatie_cnsc:
-                        part += f"  Argumentație CNSC: {arg.argumentatie_cnsc[:500]}\n"
+                        part += f"  Argumentație CNSC: {arg.argumentatie_cnsc}\n"
                     if arg.castigator_critica and arg.castigator_critica != "unknown":
                         part += f"  Câștigător: {arg.castigator_critica}\n"
                     if arg.jurisprudenta_cnsc:
-                        part += f"  Jurisprudență CNSC: {'; '.join(arg.jurisprudenta_cnsc[:3])}\n"
+                        part += f"  Jurisprudență CNSC: {'; '.join(arg.jurisprudenta_cnsc)}\n"
                     parts.append(part)
 
                 jurisprudence_context = "\n---\n".join(parts)

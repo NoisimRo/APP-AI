@@ -36,7 +36,7 @@ class EntityExtractor:
         Returns:
             dict with extracted entities (all fields optional).
         """
-        doc_excerpt = document_text[:8000]
+        doc_excerpt = document_text  # Full text — LLM handles context limits
         logger.info("entity_extract_start", text_length=len(document_text))
 
         prompt = f"""Ești un expert în achiziții publice din România. Extrage metadatele structurate din următorul document de achiziție publică.

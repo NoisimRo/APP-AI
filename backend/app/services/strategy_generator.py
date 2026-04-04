@@ -101,7 +101,7 @@ class StrategyGenerator:
         per_code_context = {}
         for code in coduri_critici:
             label = CRITIQUE_LABELS.get(code, code)
-            search_query = f"{label} achiziții publice {description[:200]}"
+            search_query = f"{label} achiziții publice {description[:2000]}"  # Embedding query
             query_vector = await self.embedding_service.embed_query(search_query)
             legislation = await self._search_legislation(session, search_query, query_vector)
             jurisprudence = await self._search_jurisprudence(session, search_query, query_vector)
@@ -298,7 +298,7 @@ class StrategyGenerator:
         return [
             {
                 "citare": row.LegislatieFragment.citare,
-                "text": row.LegislatieFragment.text_fragment[:500],
+                "text": row.LegislatieFragment.text_fragment,
                 "act": row.ActNormativ.denumire,
                 "distance": round(row.distance, 3),
             }
@@ -346,7 +346,7 @@ class StrategyGenerator:
                     "solutie": dec.solutie_contestatie,
                     "cod_critica": arg.cod_critica,
                     "castigator": arg.castigator_critica,
-                    "argumentatie_cnsc": (arg.argumentatie_cnsc or "")[:400],
+                    "argumentatie_cnsc": arg.argumentatie_cnsc or "",
                     "distance": round(dist, 3),
                 })
         return precedents
@@ -374,7 +374,7 @@ class StrategyGenerator:
             leg_text = ""
             legal_refs = []
             for leg in context["legislation"]:
-                leg_text += f"- {leg['citare']} ({leg['act']}): {leg['text'][:300]}\n"
+                leg_text += f"- {leg['citare']} ({leg['act']}): {leg['text']}\n"
                 legal_refs.append(leg)
 
             # Format jurisprudence context
@@ -382,7 +382,7 @@ class StrategyGenerator:
             prec_list = []
             for prec in context["jurisprudence"]:
                 outcome = "câștigat de contestator" if prec["castigator"] == "contestator" else f"câștigat de {prec['castigator']}"
-                jur_text += f"- {prec['bo_reference']} ({prec['solutie']}, {outcome}): {prec['argumentatie_cnsc'][:250]}\n"
+                jur_text += f"- {prec['bo_reference']} ({prec['solutie']}, {outcome}): {prec['argumentatie_cnsc']}\n"
                 prec_list.append(prec)
 
             # Stats context
@@ -393,7 +393,7 @@ class StrategyGenerator:
 CRITICA: {code} — {label}
 
 CONTEXTUL CAZULUI:
-{description[:1500]}
+{description}
 {f"CPV: {cod_cpv}" if cod_cpv else ""}
 {f"Tip procedură: {tip_procedura}" if tip_procedura else ""}
 {f"Complet CNSC: {complet}" if complet else ""}
@@ -476,7 +476,7 @@ Răspunde în format JSON strict:
         recs_summary = ""
         for rec in recommendations:
             prob = rec.get("success_probability", "N/A")
-            recs_summary += f"- {rec['code']} ({rec['label']}): {prob}% — {rec.get('recommendation', 'N/A')[:200]}\n"
+            recs_summary += f"- {rec['code']} ({rec['label']}): {prob}% — {rec.get('recommendation', 'N/A')}\n"
 
         global_stats = stats.get("global", {})
         panel_stats = stats.get("panel", {})
@@ -485,7 +485,7 @@ Răspunde în format JSON strict:
         prompt = f"""Ești un avocat expert în contestații achiziții publice din România.
 
 CAZUL:
-{description[:1000]}
+{description}
 {f"CPV: {cod_cpv}" if cod_cpv else ""}
 {f"Procedură: {tip_procedura}" if tip_procedura else ""}
 {f"Complet: {complet}" if complet else ""}
