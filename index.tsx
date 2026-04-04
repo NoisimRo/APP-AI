@@ -56,7 +56,7 @@ import {
 
 // --- Types ---
 
-type AppMode = 'dashboard' | 'datalake' | 'spete' | 'drafter' | 'redflags' | 'chat' | 'clarification' | 'rag' | 'training' | 'analytics' | 'strategy' | 'compliance' | 'settings' | 'profile' | 'pricing';
+type AppMode = 'dashboard' | 'datalake' | 'spete' | 'drafter' | 'redflags' | 'chat' | 'clarification' | 'rag' | 'training' | 'analytics' | 'strategy' | 'compliance' | 'multi_document' | 'settings' | 'profile' | 'pricing';
 
 interface AuthUser {
   id: string;
@@ -638,6 +638,11 @@ const App = () => {
   const [complianceResult, setComplianceResult] = useState<any>(null);
   const [complianceLoading, setComplianceLoading] = useState(false);
   const [complianceProcedura, setComplianceProcedura] = useState('');
+
+  // Multi-Document Analysis
+  const [multiDocFiles, setMultiDocFiles] = useState<File[]>([]);
+  const [multiDocResult, setMultiDocResult] = useState<any>(null);
+  const [multiDocLoading, setMultiDocLoading] = useState(false);
 
   // Import States (Data Lake)
   const [showImportModal, setShowImportModal] = useState(false);
@@ -2152,6 +2157,13 @@ const App = () => {
 
         <div>
            <div className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3 px-2">Instrumente Juridice</div>
+           {canAccess('multi_document') ? (
+             <SidebarItem icon={Files} label="Analiză Multi-Document" active={mode === 'multi_document' as any} onClick={() => { setMode('multi_document' as any); setSidebarOpen(false); }} />
+           ) : (
+             <div className="opacity-50 cursor-not-allowed" title="Disponibil în planul Pro">
+               <SidebarItem icon={Files} label="Analiză Multi-Document" active={false} onClick={() => setShowAuthModal(true)} />
+             </div>
+           )}
            {canAccess('compliance') ? (
              <SidebarItem icon={ClipboardCheck} label="Verificator Conformitate" active={mode === 'compliance'} onClick={() => { setMode('compliance'); setSidebarOpen(false); }} />
            ) : (
@@ -4020,6 +4032,165 @@ const App = () => {
     } catch (e) { console.error(e); }
     setCompareLoading(false);
   };
+
+  // =========================================================================
+  // MULTI-DOCUMENT ANALYSIS PAGE
+  // =========================================================================
+  const runMultiDocAnalysis = async () => {
+    if (multiDocFiles.length < 2) return;
+    setMultiDocLoading(true);
+    setMultiDocResult(null);
+    try {
+      const formData = new FormData();
+      multiDocFiles.forEach(f => formData.append('files', f));
+      formData.append('use_jurisprudence', 'true');
+      const res = await authFetch('/api/v1/multi-document/analyze', { method: 'POST', body: formData });
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).detail || `Eroare ${res.status}`);
+      setMultiDocResult(await res.json());
+    } catch (err: any) {
+      alert(`Eroare: ${err.message}`);
+    } finally {
+      setMultiDocLoading(false);
+    }
+  };
+
+  const renderMultiDocument = () => (
+    <div className="h-full flex flex-col md:flex-row bg-white">
+      <div className="w-full md:w-1/3 border-r border-slate-200 p-6 overflow-y-auto bg-slate-50/50">
+        <h2 className="text-lg font-bold text-slate-800 mb-2 flex gap-2 items-center">
+          <Files className="text-violet-600" size={20}/> Analiză Multi-Document
+        </h2>
+        <p className="text-xs text-slate-500 mb-6">Încarcă 2-5 documente din dosarul de achiziție pentru analiză unificată: red flags per document + inconsistențe între documente.</p>
+
+        <div className="space-y-4">
+          <div className="bg-slate-50 p-4 rounded-lg border border-dashed border-violet-300">
+            <label className="text-xs font-bold text-slate-500 uppercase mb-2 block">Documente dosar (2-5 fișiere)</label>
+            <input type="file" multiple accept=".pdf,.docx,.doc,.txt,.md"
+              onChange={(e) => setMultiDocFiles(Array.from(e.target.files || []))}
+              className="w-full text-xs text-slate-500 file:mr-2 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-violet-50 file:text-violet-600 hover:file:bg-violet-100" />
+          </div>
+          {multiDocFiles.length > 0 && (
+            <div className="bg-white border border-slate-200 rounded-lg p-3">
+              <p className="text-xs font-bold text-slate-500 uppercase mb-2">{multiDocFiles.length} fișiere selectate</p>
+              {multiDocFiles.map((f, i) => (
+                <div key={i} className="flex items-center justify-between py-1 text-xs text-slate-600">
+                  <span className="truncate flex-1">{f.name}</span>
+                  <span className="text-slate-400 ml-2">{(f.size / 1024).toFixed(0)} KB</span>
+                </div>
+              ))}
+            </div>
+          )}
+          <button onClick={runMultiDocAnalysis}
+            disabled={multiDocLoading || multiDocFiles.length < 2}
+            className="w-full bg-violet-600 text-white py-3 rounded-xl font-semibold hover:bg-violet-700 disabled:opacity-50 transition flex items-center justify-center gap-2 text-sm">
+            {multiDocLoading ? <><Loader2 className="w-4 h-4 animate-spin" /> Se analizează dosarul...</> : <><Files size={16} /> Analizează Dosarul</>}
+          </button>
+          {multiDocLoading && (
+            <p className="text-xs text-slate-400 text-center">Analiza poate dura 2-5 minute pentru documente mari.</p>
+          )}
+        </div>
+      </div>
+
+      <div className="w-full md:w-2/3 p-4 md:p-8 overflow-y-auto bg-white">
+        {!multiDocResult && !multiDocLoading && (
+          <div className="h-full flex items-center justify-center text-slate-400">
+            <div className="text-center">
+              <Files size={48} className="mx-auto mb-4 opacity-30" />
+              <p className="text-lg font-medium">Analiză Multi-Document</p>
+              <p className="text-sm mt-1">Încarcă minim 2 documente pentru analiză</p>
+            </div>
+          </div>
+        )}
+        {multiDocLoading && (
+          <div className="h-full flex items-center justify-center">
+            <div className="text-center">
+              <Loader2 size={40} className="animate-spin text-violet-500 mx-auto mb-4" />
+              <p className="text-slate-600 font-medium">Se analizează {multiDocFiles.length} documente...</p>
+            </div>
+          </div>
+        )}
+        {multiDocResult && (
+          <div className="max-w-3xl mx-auto space-y-6">
+            {/* Unified assessment */}
+            <div className={`rounded-2xl p-6 ${multiDocResult.unified_assessment?.risk_level === 'LOW' ? 'bg-green-50 border-2 border-green-300' : multiDocResult.unified_assessment?.risk_level === 'CRITICAL' ? 'bg-red-50 border-2 border-red-300' : 'bg-amber-50 border-2 border-amber-300'}`}>
+              <div className="flex items-center justify-between mb-2">
+                <h3 className="text-lg font-bold text-slate-800">Evaluare Unificată</h3>
+                <span className={`px-3 py-1 rounded-full text-sm font-bold ${multiDocResult.unified_assessment?.risk_level === 'LOW' ? 'bg-green-200 text-green-800' : multiDocResult.unified_assessment?.risk_level === 'CRITICAL' ? 'bg-red-200 text-red-800' : 'bg-amber-200 text-amber-800'}`}>
+                  {multiDocResult.unified_assessment?.risk_level}
+                </span>
+              </div>
+              <p className="text-sm text-slate-700">{multiDocResult.unified_assessment?.text}</p>
+              <div className="flex gap-6 mt-3 text-xs text-slate-500">
+                <span>{multiDocResult.total_flags} red flags total</span>
+                <span>{multiDocResult.critical_flags} critice</span>
+                <span>{multiDocResult.cross_issues_count} inconsistențe</span>
+              </div>
+            </div>
+
+            {/* Cross-document issues */}
+            {multiDocResult.cross_document_issues?.length > 0 && (
+              <div>
+                <h3 className="text-lg font-bold text-slate-800 mb-3">Inconsistențe între Documente</h3>
+                <div className="space-y-3">
+                  {multiDocResult.cross_document_issues.map((issue: any, i: number) => (
+                    <div key={i} className={`border rounded-xl p-4 ${issue.severitate === 'CRITICAL' ? 'border-red-200 bg-red-50/50' : issue.severitate === 'MEDIUM' ? 'border-amber-200 bg-amber-50/50' : 'border-slate-200'}`}>
+                      <div className="flex items-center gap-2 mb-2">
+                        <span className={`px-2 py-0.5 rounded text-xs font-bold ${issue.severitate === 'CRITICAL' ? 'bg-red-200 text-red-800' : 'bg-amber-200 text-amber-800'}`}>{issue.severitate}</span>
+                        <span className="text-xs text-slate-500">{issue.tip}</span>
+                      </div>
+                      <p className="text-sm text-slate-700 mb-1">{issue.descriere}</p>
+                      {issue.documente_implicate?.length > 0 && (
+                        <p className="text-xs text-slate-400">Documente: {issue.documente_implicate.join(', ')}</p>
+                      )}
+                      {issue.recomandare && (
+                        <p className="text-xs text-amber-700 mt-1 font-medium">{issue.recomandare}</p>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Per-document results */}
+            <div>
+              <h3 className="text-lg font-bold text-slate-800 mb-3">Red Flags per Document</h3>
+              <div className="space-y-4">
+                {(multiDocResult.per_document || []).map((doc: any, i: number) => (
+                  <div key={i} className="border border-slate-200 rounded-xl overflow-hidden">
+                    <div className="bg-slate-50 px-4 py-3 flex items-center justify-between">
+                      <span className="font-medium text-slate-800 text-sm">{doc.filename}</span>
+                      <div className="flex items-center gap-3 text-xs">
+                        <span className="text-slate-400">{doc.word_count} cuvinte</span>
+                        <span className={`font-bold ${doc.flag_count > 0 ? 'text-red-600' : 'text-green-600'}`}>
+                          {doc.flag_count} flags
+                        </span>
+                      </div>
+                    </div>
+                    {doc.flags?.length > 0 && (
+                      <div className="p-4 space-y-2">
+                        {doc.flags.slice(0, 5).map((flag: any, j: number) => (
+                          <div key={j} className="text-sm text-slate-700 flex items-start gap-2">
+                            <span className={`mt-0.5 w-2 h-2 rounded-full flex-shrink-0 ${flag.severity === 'CRITICAL' ? 'bg-red-500' : flag.severity === 'MEDIUM' ? 'bg-amber-500' : 'bg-slate-400'}`} />
+                            <span>{flag.issue || flag.clause?.slice(0, 200)}</span>
+                          </div>
+                        ))}
+                        {doc.flags.length > 5 && (
+                          <p className="text-xs text-slate-400">... și încă {doc.flags.length - 5} alte probleme</p>
+                        )}
+                      </div>
+                    )}
+                    {doc.error && (
+                      <p className="px-4 py-2 text-xs text-red-600">{doc.error}</p>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
 
   // =========================================================================
   // COMPLIANCE PAGE
@@ -6863,6 +7034,7 @@ const App = () => {
         )}
         {mode === 'strategy' && renderStrategy()}
         {mode === 'compliance' && renderCompliance()}
+        {mode === 'multi_document' && renderMultiDocument()}
         {mode === 'analytics' && renderAnalytics()}
         {mode === 'training' && renderTraining()}
         {mode === 'settings' && renderSettings()}
