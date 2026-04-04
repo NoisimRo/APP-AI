@@ -114,15 +114,20 @@ async def deep_health_check():
     # LLM provider check
     try:
         from app.services.llm.factory import get_active_llm_provider
-        provider = await get_active_llm_provider()
-        if provider:
-            components["llm"] = {
-                "status": "configured",
-                "provider": provider.provider_name,
-                "model": provider.model_name,
-            }
+        from app.db.session import async_session_factory, is_db_available as is_db_ok
+        if is_db_ok() and async_session_factory:
+            async with async_session_factory() as llm_session:
+                provider = await get_active_llm_provider(llm_session)
+                if provider:
+                    components["llm"] = {
+                        "status": "configured",
+                        "provider": provider.provider_name,
+                        "model": provider.model_name,
+                    }
+                else:
+                    components["llm"] = {"status": "not_configured"}
         else:
-            components["llm"] = {"status": "not_configured"}
+            components["llm"] = {"status": "unavailable", "reason": "no_database"}
     except Exception as e:
         components["llm"] = {"status": "error", "error": str(e)}
 
