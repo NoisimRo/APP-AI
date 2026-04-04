@@ -51,15 +51,42 @@ async def init_db() -> bool:
             "echo": settings.debug,
         }
 
-        # PostgreSQL-specific settings
+        # PostgreSQL-specific settings tuned for Cloud Run
+        # - pool_size: base connections kept open (Cloud Run gets 0-80 concurrent)
+        # - max_overflow: extra connections allowed on burst
+        # - pool_recycle: recreate connections after 30 min (Cloud Run cold starts)
+        # - pool_pre_ping: detect stale connections before use
         if "postgresql" in db_url:
             engine_kwargs.update({
                 "pool_pre_ping": True,
                 "pool_size": 5,
                 "max_overflow": 10,
+                "pool_recycle": 1800,
+                "pool_timeout": 30,
             })
 
         engine = create_async_engine(db_url, **engine_kwargs)
+
+        # Log slow queries (>500ms) in non-debug mode
+        if not settings.debug:
+            import time
+            from sqlalchemy import event
+
+            @event.listens_for(engine.sync_engine, "before_cursor_execute")
+            def _before_cursor_execute(conn, cursor, statement, parameters, context, executemany):
+                conn.info["query_start_time"] = time.monotonic()
+
+            @event.listens_for(engine.sync_engine, "after_cursor_execute")
+            def _after_cursor_execute(conn, cursor, statement, parameters, context, executemany):
+                start = conn.info.get("query_start_time")
+                if start:
+                    duration_ms = (time.monotonic() - start) * 1000
+                    if duration_ms > 500:
+                        logger.warning(
+                            "slow_query",
+                            duration_ms=round(duration_ms, 1),
+                            statement=statement[:200],
+                        )
 
         async_session_factory = async_sessionmaker(
             engine,

@@ -489,7 +489,7 @@ async def draft_complaint(
             doc_type=request.doc_type,
             decision_refs=decision_refs,
         )
-        increment_usage(rate_user, http_request)
+        await increment_usage(rate_user, http_request)
         return DrafterResponse(
             content=response_text,
             decision_refs=decision_refs,
@@ -515,7 +515,7 @@ async def draft_complaint_stream(
         facts_length=len(request.facts),
         doc_type=request.doc_type,
     )
-    increment_usage(rate_user, http_request)
+    await increment_usage(rate_user, http_request)
 
     # Resolve scope
     scope_ids = None

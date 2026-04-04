@@ -94,7 +94,7 @@ async def generate_rag_memo(
             confidence=confidence
         )
 
-        increment_usage(rate_user, http_request)
+        await increment_usage(rate_user, http_request)
 
         return RAGMemoResponse(
             memo=response_text,
@@ -151,7 +151,7 @@ async def generate_rag_memo_stream(
     if n_sources:
         status_msgs.append(f"Am identificat {n_sources} decizii CNSC relevante")
 
-    increment_usage(rate_user, http_request)
+    await increment_usage(rate_user, http_request)
 
     return await create_sse_response(
         llm=rag.llm,

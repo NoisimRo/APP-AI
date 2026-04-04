@@ -94,8 +94,25 @@ class EmbeddingService:
         return results[0]
 
     async def embed_query(self, text: str) -> list[float]:
-        """Generate embedding for a search query (asymmetric retrieval)."""
-        return await self.embed_single(text, task_type="retrieval_query")
+        """Generate embedding for a search query (asymmetric retrieval).
+
+        Results are cached in Redis (7-day TTL) to avoid re-embedding
+        identical queries across requests.
+        """
+        from app.core.redis import cache_get_embedding, cache_set_embedding
+
+        # Check Redis cache first
+        cached = await cache_get_embedding(text)
+        if cached is not None:
+            logger.debug("embedding_cache_hit", text_len=len(text))
+            return cached
+
+        embedding = await self.embed_single(text, task_type="retrieval_query")
+
+        # Cache the result (fire-and-forget, don't block on failure)
+        await cache_set_embedding(text, embedding)
+
+        return embedding
 
     async def embed_batch(
         self,

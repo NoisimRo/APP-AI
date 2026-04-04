@@ -142,7 +142,7 @@ async def analyze_red_flags(
             grounded=request.use_jurisprudence,
         )
 
-        increment_usage(rate_user, http_request)
+        await increment_usage(rate_user, http_request)
 
         return RedFlagsResponse(
             red_flags=red_flags,

@@ -148,7 +148,7 @@ async def generate_material(
             legislatie_count=len(result["legislatie_citata"]),
         )
 
-        increment_usage(rate_user, http_request)
+        await increment_usage(rate_user, http_request)
         return TrainingGenerateResponse(**result)
 
     except Exception as e:
@@ -170,7 +170,7 @@ async def generate_material_stream(
         tema=request.tema[:80],
         tip=request.tip_material,
     )
-    increment_usage(rate_user, http_request)
+    await increment_usage(rate_user, http_request)
 
     llm = await get_active_llm_provider(session)
     generator = TrainingGenerator(llm_provider=llm)

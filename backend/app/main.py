@@ -39,9 +39,24 @@ async def lifespan(app: FastAPI):
     else:
         print("[LIFESPAN] Database skipped (SKIP_DB=true)", flush=True)
 
+    # Initialize Redis (non-fatal if unavailable)
+    try:
+        from app.core.redis import init_redis
+        redis_ok = await init_redis()
+        print(f"[LIFESPAN] Redis: {'OK' if redis_ok else 'UNAVAILABLE (in-memory fallback)'}", flush=True)
+    except Exception as e:
+        print(f"[LIFESPAN] Redis error (non-fatal): {e}", flush=True)
+
     print("[LIFESPAN] Ready!", flush=True)
     yield
     print("[LIFESPAN] Shutting down...", flush=True)
+
+    # Shutdown Redis
+    try:
+        from app.core.redis import close_redis
+        await close_redis()
+    except Exception:
+        pass
 
 
 # Create FastAPI app
@@ -66,6 +81,61 @@ app.add_middleware(
 async def health_check():
     """Health check endpoint for Cloud Run."""
     return {"status": "healthy", "version": "0.1.0"}
+
+
+@app.get("/health/deep")
+async def deep_health_check():
+    """Deep health check validating DB, Redis, and LLM provider."""
+    import time
+    components = {}
+
+    # Database check
+    try:
+        from app.db.session import is_db_available, engine
+        if is_db_available() and engine:
+            from sqlalchemy import text as sa_text
+            start = time.monotonic()
+            async with engine.connect() as conn:
+                await conn.execute(sa_text("SELECT 1"))
+            latency = round((time.monotonic() - start) * 1000, 1)
+            components["database"] = {"status": "healthy", "latency_ms": latency}
+        else:
+            components["database"] = {"status": "unavailable"}
+    except Exception as e:
+        components["database"] = {"status": "error", "error": str(e)}
+
+    # Redis check
+    try:
+        from app.core.redis import health_check as redis_health
+        components["redis"] = await redis_health()
+    except Exception as e:
+        components["redis"] = {"status": "error", "error": str(e)}
+
+    # LLM provider check
+    try:
+        from app.services.llm.factory import get_active_llm_provider
+        provider = await get_active_llm_provider()
+        if provider:
+            components["llm"] = {
+                "status": "configured",
+                "provider": provider.provider_name,
+                "model": provider.model_name,
+            }
+        else:
+            components["llm"] = {"status": "not_configured"}
+    except Exception as e:
+        components["llm"] = {"status": "error", "error": str(e)}
+
+    all_healthy = all(
+        c.get("status") in ("healthy", "configured")
+        for c in components.values()
+    )
+
+    return {
+        "status": "healthy" if all_healthy else "degraded",
+        "version": "0.1.0",
+        "components": components,
+    }
 
 
 @app.get("/api")
