@@ -4349,6 +4349,26 @@ const App = () => {
   // =========================================================================
   // STRATEGY PAGE
   // =========================================================================
+  const extractEntitiesFromFile = async (file: File, target: 'strategy' | 'compliance') => {
+    const formData = new FormData();
+    formData.append('file', file);
+    try {
+      const res = await authFetch('/api/v1/documents/extract-entities', { method: 'POST', body: formData });
+      if (!res.ok) return;
+      const entities = await res.json();
+      if (target === 'strategy') {
+        setStrategyInput(p => ({
+          ...p,
+          cod_cpv: entities.cod_cpv || p.cod_cpv,
+          tip_procedura: entities.tip_procedura || p.tip_procedura,
+          tip_contestatie: entities.tip_contract === 'lucrări' || entities.tip_contract === 'servicii' || entities.tip_contract === 'furnizare' ? p.tip_contestatie : p.tip_contestatie,
+          valoare_estimata: entities.valoare_estimata ? String(entities.valoare_estimata) : p.valoare_estimata,
+          description: entities.obiect_contract ? (p.description ? p.description + '\n\nObiect contract: ' + entities.obiect_contract : 'Obiect contract: ' + entities.obiect_contract) : p.description,
+        }));
+      }
+    } catch { /* silent */ }
+  };
+
   const runStrategy = async () => {
     if (strategyInput.coduri_critici.length === 0 || !strategyInput.description.trim()) return;
     setStrategyLoading(true);
@@ -4399,6 +4419,12 @@ const App = () => {
                 onChange={e => setStrategyInput(p => ({ ...p, description: e.target.value }))}
                 placeholder="Descrie situația: ce s-a întâmplat, de ce vrei să contești, ce clauze/decizii sunt problematice..."
                 className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm resize-none focus:ring-2 focus:ring-indigo-500/40 outline-none" />
+              <label className="mt-1 inline-flex items-center gap-1 text-xs text-indigo-600 hover:text-indigo-800 cursor-pointer font-medium">
+                <FolderInput size={12} />
+                <span>Auto-completează din document</span>
+                <input type="file" accept=".pdf,.docx,.txt,.md" className="hidden"
+                  onChange={e => { if (e.target.files?.[0]) extractEntitiesFromFile(e.target.files[0], 'strategy'); }} />
+              </label>
             </div>
 
             {/* Criticism codes multi-select */}

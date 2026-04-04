@@ -1,10 +1,19 @@
 """Document processing API endpoints."""
 
-from fastapi import APIRouter, HTTPException, UploadFile, File
+import asyncio
+from typing import Optional
+
+from fastapi import APIRouter, HTTPException, UploadFile, File, Form, Depends, Request
 from pydantic import BaseModel, Field
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.logging import get_logger
+from app.core.rate_limiter import require_rate_limit, increment_usage
+from app.db.session import get_session
+from app.models.decision import User
 from app.services.document_processor import DocumentProcessor
+from app.services.entity_extractor import EntityExtractor
+from app.services.llm.factory import get_active_llm_provider
 
 router = APIRouter()
 logger = get_logger(__name__)
@@ -157,3 +166,47 @@ async def upload_document(file: UploadFile = File(...)) -> DocumentAnalyzeRespon
             status_code=500,
             detail=f"Eroare la procesarea documentului: {str(e)}"
         )
+
+
+@router.post("/extract-entities")
+async def extract_entities(
+    http_request: Request,
+    text: Optional[str] = Form(None),
+    file: Optional[UploadFile] = File(None),
+    session: AsyncSession = Depends(get_session),
+    rate_user: Optional[User] = Depends(require_rate_limit),
+):
+    """Extract structured metadata (CPV, procedure type, value, etc.) from a document.
+
+    Accepts either text directly or a file upload. Returns JSON with extracted entities.
+    Used by frontend to auto-populate forms in Drafter, Strategy, Red Flags, etc.
+    """
+    doc_text = text
+    if file and not doc_text:
+        processor = DocumentProcessor()
+        content = await file.read()
+        filename = file.filename or ""
+        if filename.lower().endswith(".pdf"):
+            doc_text = processor.extract_text_from_pdf(content)
+        elif filename.lower().endswith((".docx", ".doc")):
+            doc_text = processor.extract_text_from_docx(content)
+        else:
+            doc_text = processor.extract_text_from_txt(content)
+
+    if not doc_text or len(doc_text.strip()) < 30:
+        raise HTTPException(status_code=400, detail="Text prea scurt pentru extragere.")
+
+    try:
+        llm = await get_active_llm_provider(session)
+        extractor = EntityExtractor(llm_provider=llm)
+        entities = await asyncio.wait_for(
+            extractor.extract_entities(doc_text),
+            timeout=120,
+        )
+        await increment_usage(rate_user, http_request)
+        return entities
+    except asyncio.TimeoutError:
+        raise HTTPException(status_code=504, detail="Timeout la extragerea entităților.")
+    except Exception as e:
+        logger.error("entity_extraction_error", error=str(e), exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Eroare: {str(e)}")
