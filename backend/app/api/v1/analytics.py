@@ -1,10 +1,11 @@
 """Analytics API endpoints — CNSC Panel Profiles, Outcome Prediction, Decision Comparison."""
 
+import re
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
-from sqlalchemy import select, func, case, and_, text
+from sqlalchemy import select, func, case, and_, or_, not_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.logging import get_logger
@@ -14,6 +15,33 @@ from app.models.decision import DecizieCNSC, ArgumentareCritica
 
 router = APIRouter()
 logger = get_logger(__name__)
+
+# Procedural rejection reasons — these cases were NOT judged on merits
+# and must be excluded from win rate calculations.
+PROCEDURAL_REJECTIONS = ["tardivă", "inadmisibilă", "lipsită de interes", "rămasă fără obiect"]
+
+# Valid panel code pattern (C1-C99, allows future panels)
+VALID_PANEL_RE = re.compile(r'^C\d{1,2}$')
+
+
+def _pe_fond_filter():
+    """SQLAlchemy filter that excludes procedural rejections.
+
+    Keeps: ADMIS, ADMIS_PARTIAL, and RESPINS where motiv_respingere
+    is 'nefondată' or NULL (judged on merits).
+    Excludes: RESPINS with motiv_respingere in PROCEDURAL_REJECTIONS.
+    """
+    return not_(and_(
+        DecizieCNSC.solutie_contestatie == "RESPINS",
+        DecizieCNSC.motiv_respingere.in_(PROCEDURAL_REJECTIONS),
+    ))
+
+
+def _compute_win_rate(admis: int, admis_partial: int, total_pe_fond: int) -> float:
+    """Compute win rate as percentage of decisions judged on merits."""
+    if total_pe_fond <= 0:
+        return 0.0
+    return round((admis + admis_partial) / total_pe_fond * 100, 1)
 
 
 # ---------------------------------------------------------------------------
@@ -25,55 +53,72 @@ async def get_panel_profile(
     complet: str,
     session: AsyncSession = Depends(get_session),
 ):
-    """Get comprehensive statistics for a CNSC panel (C1-C20).
+    """Get comprehensive statistics for a CNSC panel.
 
-    Returns win rates, CPV domains, criticism code tendencies, and yearly trends.
+    Win rates exclude procedural rejections (tardivă, inadmisibilă, etc.)
+    and only count decisions judged on merits.
     """
     if not is_db_available():
         raise HTTPException(status_code=503, detail="Baza de date indisponibilă")
 
     complet = complet.upper()
+    if not VALID_PANEL_RE.match(complet):
+        raise HTTPException(status_code=400, detail=f"Cod complet invalid: {complet}")
 
-    # Check cache (10 min TTL)
-    cache_key = f"expertap:analytics:panel:{complet}"
+    cache_key = f"expertap:analytics:panel:v2:{complet}"
     cached = await cache_get_json(cache_key)
     if cached is not None:
         return cached
 
-    # --- Overall stats ---
+    # --- All decisions for this panel (including procedural) ---
     base_filter = and_(
         DecizieCNSC.complet == complet,
         DecizieCNSC.solutie_contestatie.isnot(None),
     )
+    # Decisions judged on merits only
+    pe_fond = and_(base_filter, _pe_fond_filter())
 
-    total_q = await session.execute(
+    total_all_q = await session.execute(
         select(func.count()).select_from(DecizieCNSC).where(base_filter)
     )
-    total = total_q.scalar() or 0
-    if total == 0:
+    total_all = total_all_q.scalar() or 0
+    if total_all == 0:
         raise HTTPException(status_code=404, detail=f"Completul {complet} nu a fost găsit")
 
-    # Ruling distribution
+    # Count procedural rejections
+    proc_q = await session.execute(
+        select(func.count()).select_from(DecizieCNSC).where(and_(
+            base_filter,
+            DecizieCNSC.solutie_contestatie == "RESPINS",
+            DecizieCNSC.motiv_respingere.in_(PROCEDURAL_REJECTIONS),
+        ))
+    )
+    procedural_count = proc_q.scalar() or 0
+    total_pe_fond = total_all - procedural_count
+
+    # Ruling distribution (pe fond only)
     ruling_q = await session.execute(
         select(DecizieCNSC.solutie_contestatie, func.count().label("cnt"))
-        .where(base_filter)
+        .where(pe_fond)
         .group_by(DecizieCNSC.solutie_contestatie)
     )
     rulings = {r.solutie_contestatie: r.cnt for r in ruling_q}
-    admis = rulings.get("ADMIS", 0) + rulings.get("ADMIS_PARTIAL", 0)
-    win_rate = round(admis / total * 100, 1) if total > 0 else 0
+    admis = rulings.get("ADMIS", 0)
+    admis_partial = rulings.get("ADMIS_PARTIAL", 0)
+    respins_fond = rulings.get("RESPINS", 0)
+    win_rate = _compute_win_rate(admis, admis_partial, total_pe_fond)
 
-    # --- By contest type ---
+    # --- By contest type (pe fond) ---
     type_q = await session.execute(
         select(
             DecizieCNSC.tip_contestatie,
             DecizieCNSC.solutie_contestatie,
             func.count().label("cnt"),
         )
-        .where(base_filter)
+        .where(pe_fond)
         .group_by(DecizieCNSC.tip_contestatie, DecizieCNSC.solutie_contestatie)
     )
-    by_type_raw = {}
+    by_type_raw: dict = {}
     for r in type_q:
         tip = r.tip_contestatie or "necunoscut"
         if tip not in by_type_raw:
@@ -87,16 +132,13 @@ async def get_panel_profile(
             by_type_raw[tip]["respins"] += r.cnt
 
     by_type = []
-    for tip, stats in by_type_raw.items():
-        t = stats["total"]
-        w = stats["admis"] + stats["admis_partial"]
+    for tip, s in by_type_raw.items():
         by_type.append({
-            "type": tip,
-            **stats,
-            "win_rate": round(w / t * 100, 1) if t > 0 else 0,
+            "type": tip, **s,
+            "win_rate": _compute_win_rate(s["admis"], s["admis_partial"], s["total"]),
         })
 
-    # --- Top CPV domains ---
+    # --- Top CPV domains (pe fond) ---
     cpv_q = await session.execute(
         select(
             func.substring(DecizieCNSC.cod_cpv, 1, 3).label("cpv_group"),
@@ -107,59 +149,46 @@ async def get_panel_profile(
                 else_=0,
             )).label("wins"),
         )
-        .where(and_(base_filter, DecizieCNSC.cod_cpv.isnot(None)))
+        .where(and_(pe_fond, DecizieCNSC.cod_cpv.isnot(None)))
         .group_by("cpv_group", DecizieCNSC.cpv_categorie)
         .order_by(func.count().desc())
         .limit(10)
     )
     top_cpv = [
         {
-            "cpv_group": r.cpv_group,
-            "categorie": r.cpv_categorie,
-            "total": r.cnt,
-            "wins": r.wins,
+            "cpv_group": r.cpv_group, "categorie": r.cpv_categorie,
+            "total": r.cnt, "wins": r.wins,
             "win_rate": round(r.wins / r.cnt * 100, 1) if r.cnt > 0 else 0,
         }
         for r in cpv_q
     ]
 
-    # --- Criticism code tendencies (from ArgumentareCritica) ---
+    # --- Criticism code tendencies (from ArgumentareCritica, pe fond) ---
     critici_q = await session.execute(
         select(
             ArgumentareCritica.cod_critica,
             func.count().label("cnt"),
-            func.sum(case(
-                (ArgumentareCritica.castigator_critica == "contestator", 1),
-                else_=0,
-            )).label("contestator_wins"),
-            func.sum(case(
-                (ArgumentareCritica.castigator_critica == "autoritate", 1),
-                else_=0,
-            )).label("autoritate_wins"),
-            func.sum(case(
-                (ArgumentareCritica.castigator_critica == "partial", 1),
-                else_=0,
-            )).label("partial"),
+            func.sum(case((ArgumentareCritica.castigator_critica == "contestator", 1), else_=0)).label("contestator_wins"),
+            func.sum(case((ArgumentareCritica.castigator_critica == "autoritate", 1), else_=0)).label("autoritate_wins"),
+            func.sum(case((ArgumentareCritica.castigator_critica == "partial", 1), else_=0)).label("partial"),
         )
         .join(DecizieCNSC, ArgumentareCritica.decizie_id == DecizieCNSC.id)
-        .where(DecizieCNSC.complet == complet)
+        .where(and_(DecizieCNSC.complet == complet, _pe_fond_filter()))
         .group_by(ArgumentareCritica.cod_critica)
         .order_by(func.count().desc())
         .limit(15)
     )
     criticism_stats = [
         {
-            "code": r.cod_critica,
-            "total": r.cnt,
-            "contestator_wins": r.contestator_wins,
-            "autoritate_wins": r.autoritate_wins,
+            "code": r.cod_critica, "total": r.cnt,
+            "contestator_wins": r.contestator_wins, "autoritate_wins": r.autoritate_wins,
             "partial": r.partial,
-            "contestator_win_rate": round(r.contestator_wins / r.cnt * 100, 1) if r.cnt > 0 else 0,
+            "contestator_win_rate": round((r.contestator_wins + r.partial) / r.cnt * 100, 1) if r.cnt > 0 else 0,
         }
         for r in critici_q
     ]
 
-    # --- Yearly trend ---
+    # --- Yearly trend (pe fond) ---
     year_q = await session.execute(
         select(
             func.extract("year", DecizieCNSC.data_decizie).label("year"),
@@ -169,15 +198,13 @@ async def get_panel_profile(
                 else_=0,
             )).label("wins"),
         )
-        .where(and_(base_filter, DecizieCNSC.data_decizie.isnot(None)))
+        .where(and_(pe_fond, DecizieCNSC.data_decizie.isnot(None)))
         .group_by("year")
         .order_by("year")
     )
     yearly_trend = [
         {
-            "year": int(r.year),
-            "total": r.cnt,
-            "wins": r.wins,
+            "year": int(r.year), "total": r.cnt, "wins": r.wins,
             "win_rate": round(r.wins / r.cnt * 100, 1) if r.cnt > 0 else 0,
         }
         for r in year_q
@@ -185,8 +212,10 @@ async def get_panel_profile(
 
     result = {
         "complet": complet,
-        "total_decisions": total,
-        "rulings": rulings,
+        "total_decisions": total_all,
+        "total_pe_fond": total_pe_fond,
+        "procedural_exclusions": procedural_count,
+        "rulings": {"ADMIS": admis, "ADMIS_PARTIAL": admis_partial, "RESPINS": respins_fond},
         "win_rate": win_rate,
         "by_type": by_type,
         "top_cpv": top_cpv,
@@ -200,14 +229,21 @@ async def get_panel_profile(
 
 @router.get("/panels")
 async def list_panels(session: AsyncSession = Depends(get_session)):
-    """List all CNSC panels with summary stats for the overview page."""
+    """List all valid CNSC panels with summary stats.
+
+    Filters to valid panel codes (C1, C2, ..., C99) and excludes
+    procedural rejections from win rate calculation.
+    """
     if not is_db_available():
         raise HTTPException(status_code=503, detail="Baza de date indisponibilă")
 
-    cache_key = "expertap:analytics:panels_list"
+    cache_key = "expertap:analytics:panels_list:v2"
     cached = await cache_get_json(cache_key)
     if cached is not None:
         return cached
+
+    # Valid panel regex filter
+    panel_filter = DecizieCNSC.complet.op('~')(r'^C\d{1,2}$')
 
     q = await session.execute(
         select(
@@ -217,24 +253,36 @@ async def list_panels(session: AsyncSession = Depends(get_session)):
                 (DecizieCNSC.solutie_contestatie.in_(["ADMIS", "ADMIS_PARTIAL"]), 1),
                 else_=0,
             )).label("wins"),
+            # Count procedural rejections to subtract from denominator
+            func.sum(case(
+                (and_(
+                    DecizieCNSC.solutie_contestatie == "RESPINS",
+                    DecizieCNSC.motiv_respingere.in_(PROCEDURAL_REJECTIONS),
+                ), 1),
+                else_=0,
+            )).label("procedural"),
         )
         .where(and_(
-            DecizieCNSC.complet.isnot(None),
+            panel_filter,
             DecizieCNSC.solutie_contestatie.isnot(None),
         ))
         .group_by(DecizieCNSC.complet)
         .order_by(DecizieCNSC.complet)
     )
 
-    panels = [
-        {
+    panels = []
+    for r in q:
+        pe_fond = r.total - r.procedural
+        panels.append({
             "complet": r.complet,
             "total": r.total,
+            "pe_fond": pe_fond,
             "wins": r.wins,
-            "win_rate": round(r.wins / r.total * 100, 1) if r.total > 0 else 0,
-        }
-        for r in q
-    ]
+            "win_rate": _compute_win_rate(r.wins, 0, pe_fond),
+        })
+
+    # Sort naturally: C1, C2, ..., C9, C10, C11
+    panels.sort(key=lambda p: int(p["complet"][1:]))
 
     await cache_set_json(cache_key, panels, ttl_seconds=600)
     return panels
@@ -261,108 +309,89 @@ async def predict_outcome(
 ):
     """Predict ADMIS/RESPINS probability based on case parameters.
 
-    Combines historical statistics with LLM reasoning.
+    Win rates exclude procedural rejections (only decisions judged on merits).
     """
     if not is_db_available():
         raise HTTPException(status_code=503, detail="Baza de date indisponibilă")
 
     stats = {}
 
-    # --- Per-criticism win rates ---
+    # --- Per-criticism win rates (from ArgumentareCritica) ---
     for code in request.coduri_critici:
         q = await session.execute(
             select(
                 ArgumentareCritica.castigator_critica,
                 func.count().label("cnt"),
             )
-            .where(ArgumentareCritica.cod_critica == code)
+            .join(DecizieCNSC, ArgumentareCritica.decizie_id == DecizieCNSC.id)
+            .where(and_(
+                ArgumentareCritica.cod_critica == code,
+                _pe_fond_filter(),
+            ))
             .group_by(ArgumentareCritica.castigator_critica)
         )
         code_stats = {r.castigator_critica: r.cnt for r in q}
         total = sum(code_stats.values())
-        wins = code_stats.get("contestator", 0) + code_stats.get("partial", 0)
+        contest_wins = code_stats.get("contestator", 0)
+        partial = code_stats.get("partial", 0)
         stats[f"critica_{code}"] = {
             "total": total,
-            "contestator_wins": code_stats.get("contestator", 0),
+            "contestator_wins": contest_wins,
             "autoritate_wins": code_stats.get("autoritate", 0),
-            "partial": code_stats.get("partial", 0),
-            "win_rate": round(wins / total * 100, 1) if total > 0 else 0,
+            "partial": partial,
+            "win_rate": round((contest_wins + partial) / total * 100, 1) if total > 0 else 0,
         }
 
-    # --- Overall by CPV group (3-digit) ---
+    # Helper for decision-level stats with pe_fond filter
+    async def _decision_stat(extra_filter):
+        q = await session.execute(
+            select(
+                DecizieCNSC.solutie_contestatie,
+                func.count().label("cnt"),
+            )
+            .where(and_(
+                extra_filter,
+                DecizieCNSC.solutie_contestatie.isnot(None),
+                _pe_fond_filter(),
+            ))
+            .group_by(DecizieCNSC.solutie_contestatie)
+        )
+        s = {r.solutie_contestatie: r.cnt for r in q}
+        t = sum(s.values())
+        w = s.get("ADMIS", 0) + s.get("ADMIS_PARTIAL", 0)
+        return t, w
+
+    # --- CPV domain ---
     if request.cod_cpv:
         cpv_prefix = request.cod_cpv[:3]
-        q = await session.execute(
-            select(
-                DecizieCNSC.solutie_contestatie,
-                func.count().label("cnt"),
-            )
-            .where(and_(
-                DecizieCNSC.cod_cpv.startswith(cpv_prefix),
-                DecizieCNSC.solutie_contestatie.isnot(None),
-            ))
-            .group_by(DecizieCNSC.solutie_contestatie)
-        )
-        cpv_stats = {r.solutie_contestatie: r.cnt for r in q}
-        cpv_total = sum(cpv_stats.values())
-        cpv_wins = cpv_stats.get("ADMIS", 0) + cpv_stats.get("ADMIS_PARTIAL", 0)
+        t, w = await _decision_stat(DecizieCNSC.cod_cpv.startswith(cpv_prefix))
         stats["cpv_domain"] = {
-            "cpv_prefix": cpv_prefix,
-            "total": cpv_total,
-            "win_rate": round(cpv_wins / cpv_total * 100, 1) if cpv_total > 0 else 0,
+            "cpv_prefix": cpv_prefix, "total": t,
+            "win_rate": round(w / t * 100, 1) if t > 0 else 0,
         }
 
-    # --- Panel-specific rate ---
+    # --- Panel ---
     if request.complet:
-        q = await session.execute(
-            select(
-                DecizieCNSC.solutie_contestatie,
-                func.count().label("cnt"),
-            )
-            .where(and_(
-                DecizieCNSC.complet == request.complet.upper(),
-                DecizieCNSC.solutie_contestatie.isnot(None),
-            ))
-            .group_by(DecizieCNSC.solutie_contestatie)
-        )
-        panel_stats = {r.solutie_contestatie: r.cnt for r in q}
-        panel_total = sum(panel_stats.values())
-        panel_wins = panel_stats.get("ADMIS", 0) + panel_stats.get("ADMIS_PARTIAL", 0)
+        t, w = await _decision_stat(DecizieCNSC.complet == request.complet.upper())
         stats["panel"] = {
-            "complet": request.complet.upper(),
-            "total": panel_total,
-            "win_rate": round(panel_wins / panel_total * 100, 1) if panel_total > 0 else 0,
+            "complet": request.complet.upper(), "total": t,
+            "win_rate": round(w / t * 100, 1) if t > 0 else 0,
         }
 
-    # --- Procedure type rate ---
+    # --- Procedure type ---
     if request.tip_procedura:
-        q = await session.execute(
-            select(
-                DecizieCNSC.solutie_contestatie,
-                func.count().label("cnt"),
-            )
-            .where(and_(
-                DecizieCNSC.tip_procedura == request.tip_procedura,
-                DecizieCNSC.solutie_contestatie.isnot(None),
-            ))
-            .group_by(DecizieCNSC.solutie_contestatie)
-        )
-        proc_stats = {r.solutie_contestatie: r.cnt for r in q}
-        proc_total = sum(proc_stats.values())
-        proc_wins = proc_stats.get("ADMIS", 0) + proc_stats.get("ADMIS_PARTIAL", 0)
+        t, w = await _decision_stat(DecizieCNSC.tip_procedura == request.tip_procedura)
         stats["procedure"] = {
-            "tip_procedura": request.tip_procedura,
-            "total": proc_total,
-            "win_rate": round(proc_wins / proc_total * 100, 1) if proc_total > 0 else 0,
+            "tip_procedura": request.tip_procedura, "total": t,
+            "win_rate": round(w / t * 100, 1) if t > 0 else 0,
         }
 
-    # --- Composite prediction ---
-    # Weighted average of all dimensions (criticism codes weighted most)
+    # --- Composite prediction (weighted average) ---
     weights_and_rates = []
     for code in request.coduri_critici:
         s = stats.get(f"critica_{code}", {})
         if s.get("total", 0) >= 3:
-            weights_and_rates.append((3.0, s["win_rate"]))  # Highest weight
+            weights_and_rates.append((3.0, s["win_rate"]))
     if "cpv_domain" in stats and stats["cpv_domain"]["total"] >= 5:
         weights_and_rates.append((1.5, stats["cpv_domain"]["win_rate"]))
     if "panel" in stats and stats["panel"]["total"] >= 10:
@@ -374,21 +403,12 @@ async def predict_outcome(
         total_weight = sum(w for w, _ in weights_and_rates)
         weighted_rate = sum(w * r for w, r in weights_and_rates) / total_weight
     else:
-        # Global fallback
-        q = await session.execute(
-            select(func.count()).select_from(DecizieCNSC)
-            .where(DecizieCNSC.solutie_contestatie.in_(["ADMIS", "ADMIS_PARTIAL"]))
-        )
-        global_wins = q.scalar() or 0
-        q2 = await session.execute(
-            select(func.count()).select_from(DecizieCNSC)
-            .where(DecizieCNSC.solutie_contestatie.isnot(None))
-        )
-        global_total = q2.scalar() or 1
-        weighted_rate = round(global_wins / global_total * 100, 1)
+        # Global fallback (pe fond)
+        t, w = await _decision_stat(DecizieCNSC.solutie_contestatie.isnot(None))
+        weighted_rate = round(w / t * 100, 1) if t > 0 else 50.0
 
     predicted_outcome = "ADMIS" if weighted_rate >= 50 else "RESPINS"
-    confidence = abs(weighted_rate - 50) / 50  # 0-1 scale, 1 = very confident
+    confidence = abs(weighted_rate - 50) / 50
 
     # --- LLM reasoning ---
     reasoning = None
@@ -401,40 +421,33 @@ async def predict_outcome(
             s = stats.get(f"critica_{code}", {})
             if s:
                 stats_summary.append(
-                    f"- Critica {code}: {s.get('total', 0)} cazuri, "
+                    f"- Critica {code}: {s.get('total', 0)} cazuri judecate pe fond, "
                     f"rata de câștig contestator: {s.get('win_rate', 0)}%"
                 )
         if "panel" in stats:
             p = stats["panel"]
-            stats_summary.append(
-                f"- Completul {p['complet']}: {p['total']} decizii, "
-                f"rata de admitere: {p['win_rate']}%"
-            )
+            stats_summary.append(f"- Completul {p['complet']}: {p['total']} decizii pe fond, rata de admitere: {p['win_rate']}%")
         if "cpv_domain" in stats:
             c = stats["cpv_domain"]
-            stats_summary.append(
-                f"- Domeniu CPV {c['cpv_prefix']}*: {c['total']} decizii, "
-                f"rata de admitere: {c['win_rate']}%"
-            )
+            stats_summary.append(f"- Domeniu CPV {c['cpv_prefix']}*: {c['total']} decizii pe fond, rata de admitere: {c['win_rate']}%")
 
         prompt = (
             f"Ești un expert în achiziții publice din România. Pe baza statisticilor "
-            f"istorice ale CNSC de mai jos, explică în 3-5 propoziții de ce o contestație "
-            f"cu aceste caracteristici are o probabilitate de {weighted_rate:.0f}% de a fi admisă.\n\n"
+            f"istorice ale CNSC de mai jos (doar decizii judecate pe fond, excluse respingerile procedurale), "
+            f"explică în 3-5 propoziții de ce o contestație cu aceste caracteristici "
+            f"are o probabilitate de {weighted_rate:.0f}% de a fi admisă.\n\n"
             f"Caracteristici caz:\n"
             f"- Coduri critici: {', '.join(request.coduri_critici)}\n"
             f"{'- CPV: ' + request.cod_cpv + chr(10) if request.cod_cpv else ''}"
             f"{'- Complet: ' + request.complet + chr(10) if request.complet else ''}"
             f"{'- Tip procedură: ' + request.tip_procedura + chr(10) if request.tip_procedura else ''}"
-            f"\nStatistici istorice:\n" + "\n".join(stats_summary) +
+            f"\nStatistici istorice (pe fond):\n" + "\n".join(stats_summary) +
             f"\n\nPredicție: {predicted_outcome} ({weighted_rate:.0f}%)\n"
             f"Explică concis factorii care influențează această predicție."
         )
-
         reasoning = await llm.complete(prompt, temperature=0.3, max_tokens=500)
     except Exception as e:
         logger.warning("predict_llm_reasoning_failed", error=str(e))
-        reasoning = None
 
     return {
         "prediction": {
@@ -453,9 +466,17 @@ async def predict_outcome(
 # ---------------------------------------------------------------------------
 
 class CompareRequest(BaseModel):
-    """Input for decision comparison."""
+    """Input for decision comparison. Accepts BO references (BO2025_1011) or UUIDs."""
     decision_ids: list[str] = Field(..., min_length=2, max_length=3,
-                                     description="2-3 decision IDs to compare")
+                                     description="2-3 BO references or UUIDs")
+
+
+def _parse_bo_reference(ref: str) -> tuple[int, int] | None:
+    """Parse a BO reference like 'BO2025_1011' or '2025_1011' into (an_bo, numar_bo)."""
+    m = re.match(r'^(?:BO)?(\d{4})[_](\d+)$', ref.strip(), re.IGNORECASE)
+    if m:
+        return int(m.group(1)), int(m.group(2))
+    return None
 
 
 @router.post("/compare")
@@ -463,24 +484,39 @@ async def compare_decisions(
     request: CompareRequest,
     session: AsyncSession = Depends(get_session),
 ):
-    """Compare 2-3 decisions side-by-side with LLM analysis of divergences."""
+    """Compare 2-3 decisions side-by-side with LLM analysis.
+
+    Accepts BO references (e.g. BO2025_1011) or UUIDs.
+    """
     if not is_db_available():
         raise HTTPException(status_code=503, detail="Baza de date indisponibilă")
 
-    # Load decisions with their argumentation
     decisions_data = []
-    for dec_id in request.decision_ids:
-        dec_q = await session.execute(
-            select(DecizieCNSC).where(DecizieCNSC.id == dec_id)
-        )
+    for ref in request.decision_ids:
+        # Try BO reference first
+        bo = _parse_bo_reference(ref)
+        if bo:
+            an_bo, numar_bo = bo
+            dec_q = await session.execute(
+                select(DecizieCNSC).where(and_(
+                    DecizieCNSC.an_bo == an_bo,
+                    DecizieCNSC.numar_bo == numar_bo,
+                ))
+            )
+        else:
+            # Assume UUID
+            dec_q = await session.execute(
+                select(DecizieCNSC).where(DecizieCNSC.id == ref)
+            )
+
         dec = dec_q.scalar_one_or_none()
         if not dec:
-            raise HTTPException(status_code=404, detail=f"Decizia {dec_id} nu a fost găsită")
+            raise HTTPException(status_code=404, detail=f"Decizia '{ref}' nu a fost găsită")
 
         # Load argumentation
         arg_q = await session.execute(
             select(ArgumentareCritica)
-            .where(ArgumentareCritica.decizie_id == dec_id)
+            .where(ArgumentareCritica.decizie_id == dec.id)
             .order_by(ArgumentareCritica.ordine_in_decizie)
         )
         args = list(arg_q.scalars().all())
@@ -517,7 +553,6 @@ async def compare_decisions(
         from app.services.llm.factory import get_active_llm_provider
         llm = await get_active_llm_provider(session)
 
-        # Build comparison context
         dec_summaries = []
         for d in decisions_data:
             s = f"**{d['numar_bo']}** (Complet {d['complet']}, {d['solutie']})\n"
@@ -540,7 +575,6 @@ async def compare_decisions(
             "Decizii:\n\n" + "\n---\n".join(dec_summaries) +
             "\n\nRăspunde în română, structurat pe cele 4 puncte. Fii concis și practic."
         )
-
         llm_analysis = await llm.complete(prompt, temperature=0.2, max_tokens=1500)
     except Exception as e:
         logger.warning("compare_llm_analysis_failed", error=str(e))
