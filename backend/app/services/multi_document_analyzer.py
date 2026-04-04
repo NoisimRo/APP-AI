@@ -141,14 +141,9 @@ class MultiDocumentAnalyzer:
     def _extract_text(self, doc: dict) -> str:
         """Extract text from a document."""
         content = doc.get("content", b"")
-        filename = doc.get("filename", "").lower()
+        filename = doc.get("filename", "document.txt")
         try:
-            if filename.endswith(".pdf"):
-                return self.processor.extract_text_from_pdf(content)
-            elif filename.endswith((".docx", ".doc")):
-                return self.processor.extract_text_from_docx(content)
-            else:
-                return self.processor.extract_text_from_txt(content)
+            return self.processor.extract_text_from_file(content, filename)
         except Exception as e:
             logger.warning("multi_doc_extract_failed", filename=filename, error=str(e))
             return ""
