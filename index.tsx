@@ -3571,10 +3571,13 @@ const App = () => {
   const renderDrafter = () => (
     <div className="h-full flex flex-col md:flex-row bg-white">
       <div className="w-full md:w-1/3 border-r border-slate-200 p-6 overflow-y-auto bg-slate-50/50">
-        <h2 className="text-lg font-bold text-slate-800 mb-4 flex gap-2 items-center">
-          <Scale className="text-blue-600" size={20}/>
-          {drafterDocType === 'contestatie' ? 'Configurare Contestație' : 'Configurare Plângere'}
-        </h2>
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-lg font-bold text-slate-800 flex gap-2 items-center">
+            <Scale className="text-blue-600" size={20}/>
+            {drafterDocType === 'contestatie' ? 'Configurare Contestație' : 'Configurare Plângere'}
+          </h2>
+          <button onClick={() => loadHistory('contestatie')} className="text-xs bg-slate-50 text-slate-500 px-2.5 py-1 rounded-lg font-medium hover:bg-slate-100 transition flex items-center gap-1" title="Istoric"><Bookmark size={12} /> Istoric</button>
+        </div>
 
         {/* Document Type Selector */}
         <div className="flex gap-2 mb-4">
@@ -4306,7 +4309,7 @@ const App = () => {
                   {predictorResult.reasoning && (
                     <div className="bg-amber-50 border border-amber-200 rounded-xl p-5">
                       <h3 className="font-semibold text-amber-800 mb-2">Analiză AI</h3>
-                      <p className="text-sm text-amber-900 whitespace-pre-wrap">{predictorResult.reasoning}</p>
+                      <div className="text-sm text-amber-900 prose prose-sm prose-amber max-w-none" dangerouslySetInnerHTML={{ __html: formatMarkdown(predictorResult.reasoning) }} />
                     </div>
                   )}
                 </div>
@@ -4404,7 +4407,7 @@ const App = () => {
                   {compareResult.analysis && (
                     <div className="bg-blue-50 border border-blue-200 rounded-xl p-5">
                       <h3 className="font-semibold text-blue-800 mb-3">Analiză Comparativă AI</h3>
-                      <div className="text-sm text-blue-900 whitespace-pre-wrap">{compareResult.analysis}</div>
+                      <div className="text-sm text-blue-900 prose prose-sm prose-blue max-w-none" dangerouslySetInnerHTML={{ __html: formatMarkdown(compareResult.analysis) }} />
                     </div>
                   )}
                 </div>
@@ -5520,7 +5523,6 @@ const App = () => {
                 <button onClick={saveConversation} className="text-xs bg-blue-50 text-blue-600 px-2.5 py-1 rounded-lg font-medium hover:bg-blue-100 transition flex items-center gap-1" title="Salvează conversația"><Save size={12} /> Salvează</button>
               )}
               <button onClick={() => loadHistory('conversations')} className="text-xs bg-slate-50 text-slate-500 px-2.5 py-1 rounded-lg font-medium hover:bg-slate-100 transition flex items-center gap-1" title="Istoric conversații"><Bookmark size={12} /> Istoric</button>
-              <span className="text-xs text-slate-500 bg-slate-100 px-2 py-1 rounded">Conectat la baza de date CNSC</span>
            </div>
         </div>
         {activeScopeId && (
@@ -5862,9 +5864,12 @@ const App = () => {
           <div className="h-full flex flex-col md:flex-row bg-white">
             {/* Left panel — input */}
             <div className="w-full md:w-1/3 border-r border-slate-200 p-6 overflow-y-auto bg-slate-50/50">
-              <h2 className="text-lg font-bold text-slate-800 mb-2 flex gap-2 items-center">
-                <AlertTriangle className="text-red-500" size={20}/> Red Flags Detector
-              </h2>
+              <div className="flex items-center justify-between mb-2">
+                <h2 className="text-lg font-bold text-slate-800 flex gap-2 items-center">
+                  <AlertTriangle className="text-red-500" size={20}/> Red Flags Detector
+                </h2>
+                <button onClick={() => loadHistory('redflags')} className="text-xs bg-slate-50 text-slate-500 px-2.5 py-1 rounded-lg font-medium hover:bg-slate-100 transition flex items-center gap-1" title="Istoric"><Bookmark size={12} /> Istoric</button>
+              </div>
               <p className="text-xs text-slate-500 mb-6">Identifică clauze restrictive în documentația de achiziții publice.</p>
 
               {/* Tabs */}
@@ -6209,9 +6214,12 @@ const App = () => {
           <div className="h-full flex flex-col md:flex-row bg-white">
             {/* Left panel — input */}
             <div className="w-full md:w-1/3 border-r border-slate-200 p-6 overflow-y-auto bg-slate-50/50">
-              <h2 className="text-lg font-bold text-slate-800 mb-6 flex gap-2 items-center">
-                <Search className="text-purple-600" size={20}/> Asistent Clarificări
-              </h2>
+              <div className="flex items-center justify-between mb-6">
+                <h2 className="text-lg font-bold text-slate-800 flex gap-2 items-center">
+                  <Search className="text-purple-600" size={20}/> Asistent Clarificări
+                </h2>
+                <button onClick={() => loadHistory('clarificare')} className="text-xs bg-slate-50 text-slate-500 px-2.5 py-1 rounded-lg font-medium hover:bg-slate-100 transition flex items-center gap-1" title="Istoric"><Bookmark size={12} /> Istoric</button>
+              </div>
               <div className="space-y-4">
                 <div className="bg-slate-50 p-4 rounded-lg border border-dashed border-slate-300">
                   <label className="text-xs font-bold text-slate-500 uppercase mb-2 block">
@@ -6293,8 +6301,9 @@ const App = () => {
         )}
         {mode === 'rag' && handleRAGMemo && (
            <div className="h-full flex flex-col p-6">
-              <header className="mb-4">
+              <header className="mb-4 flex items-center justify-between">
                  <h2 className="text-2xl font-bold text-slate-800 flex items-center gap-2"><BookOpen className="text-teal-600"/> Jurisprudență RAG</h2>
+                 <button onClick={() => loadHistory('rag_memo')} className="text-xs bg-slate-50 text-slate-500 px-2.5 py-1 rounded-lg font-medium hover:bg-slate-100 transition flex items-center gap-1" title="Istoric"><Bookmark size={12} /> Istoric</button>
               </header>
               <ActiveScopeIndicator />
               <div className="flex flex-col md:flex-row gap-4 md:gap-6 flex-1 overflow-hidden">
