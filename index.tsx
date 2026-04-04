@@ -615,7 +615,10 @@ const App = () => {
   const [selectedPanel, setSelectedPanel] = useState<string | null>(null);
   const [panelProfile, setPanelProfile] = useState<any>(null);
   const [panelsLoading, setPanelsLoading] = useState(false);
-  const [predictorInput, setPredictorInput] = useState({ coduri_critici: '' as string, cod_cpv: '', complet: '', tip_procedura: '', tip_contestatie: '' });
+  const [predictorInput, setPredictorInput] = useState({ coduri_critici: [] as string[], cod_cpv: '', complet: '', tip_procedura: '', tip_contestatie: '' });
+  const [analyticsFilterOptions, setAnalyticsFilterOptions] = useState<{critici: any[], complete: any[], proceduri: any[]}>({critici: [], complete: [], proceduri: []});
+  const [cpvPredictorSearch, setCpvPredictorSearch] = useState('');
+  const [cpvPredictorResults, setCpvPredictorResults] = useState<any[]>([]);
   const [predictorResult, setPredictorResult] = useState<any>(null);
   const [predictorLoading, setPredictorLoading] = useState(false);
   const [compareIds, setCompareIds] = useState<string[]>(['', '']);
@@ -3942,8 +3945,25 @@ const App = () => {
     } catch (e) { console.error(e); }
     setPanelsLoading(false);
   };
+  const loadAnalyticsFilters = async () => {
+    try {
+      const [critRes, compRes, procRes] = await Promise.all([
+        authFetch('/api/v1/decisions/filters/critici-codes'),
+        authFetch('/api/v1/decisions/filters/complete'),
+        authFetch('/api/v1/decisions/filters/tipuri-procedura'),
+      ]);
+      const critici = critRes.ok ? await critRes.json() : [];
+      const complete = compRes.ok ? await compRes.json() : [];
+      const proceduri = procRes.ok ? await procRes.json() : [];
+      setAnalyticsFilterOptions({
+        critici: critici.filter((c: any) => (CRITIQUE_LEGEND as any)[c.code]),
+        complete: complete.filter((c: any) => /^C\d{1,2}$/.test(c.name)).sort((a: any, b: any) => parseInt(a.name.slice(1)) - parseInt(b.name.slice(1))),
+        proceduri,
+      });
+    } catch (e) { console.error(e); }
+  };
   const runPrediction = async () => {
-    const codes = predictorInput.coduri_critici.split(',').map(s => s.trim()).filter(Boolean);
+    const codes = predictorInput.coduri_critici;
     if (codes.length === 0) return;
     setPredictorLoading(true);
     setPredictorResult(null);
@@ -4034,10 +4054,17 @@ const App = () => {
                       <h2 className="text-xl font-bold text-slate-800 mb-4">Completul {panelProfile.complet}</h2>
 
                       {/* Summary cards */}
-                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+                      <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
                         <div className="bg-blue-50 p-4 rounded-xl">
                           <div className="text-xs text-blue-600 font-medium">Total Decizii</div>
                           <div className="text-2xl font-black text-blue-800">{panelProfile.total_decisions}</div>
+                        </div>
+                        <div className="bg-slate-50 p-4 rounded-xl">
+                          <div className="text-xs text-slate-500 font-medium">Judecate pe fond</div>
+                          <div className="text-2xl font-black text-slate-700">{panelProfile.total_pe_fond || panelProfile.total_decisions}</div>
+                          {panelProfile.procedural_exclusions > 0 && (
+                            <div className="text-xs text-slate-400 mt-1">{panelProfile.procedural_exclusions} excluse (procedurale)</div>
+                          )}
                         </div>
                         <div className="bg-green-50 p-4 rounded-xl">
                           <div className="text-xs text-green-600 font-medium">Rată Admitere</div>
@@ -4045,10 +4072,10 @@ const App = () => {
                         </div>
                         <div className="bg-emerald-50 p-4 rounded-xl">
                           <div className="text-xs text-emerald-600 font-medium">ADMIS</div>
-                          <div className="text-2xl font-black text-emerald-800">{panelProfile.rulings?.ADMIS || 0}</div>
+                          <div className="text-2xl font-black text-emerald-800">{(panelProfile.rulings?.ADMIS || 0) + (panelProfile.rulings?.ADMIS_PARTIAL || 0)}</div>
                         </div>
                         <div className="bg-red-50 p-4 rounded-xl">
-                          <div className="text-xs text-red-600 font-medium">RESPINS</div>
+                          <div className="text-xs text-red-600 font-medium">RESPINS (pe fond)</div>
                           <div className="text-2xl font-black text-red-800">{panelProfile.rulings?.RESPINS || 0}</div>
                         </div>
                       </div>
@@ -4134,39 +4161,112 @@ const App = () => {
           )}
 
           {/* PREDICTOR TAB */}
-          {analyticsTab === 'predictor' && (
+          {analyticsTab === 'predictor' && (() => {
+            // Load filter options on first render
+            if (analyticsFilterOptions.critici.length === 0) loadAnalyticsFilters();
+            return (
             <div className="max-w-2xl">
               <h2 className="text-lg font-semibold text-slate-700 mb-4">Predictor Rezultat Contestație</h2>
-              <p className="text-sm text-slate-500 mb-6">Introdu parametrii cazului pentru a estima probabilitatea de admitere pe baza statisticilor istorice CNSC.</p>
+              <p className="text-sm text-slate-500 mb-6">Selectează parametrii cazului pentru a estima probabilitatea de admitere pe baza statisticilor istorice CNSC (excluse respingerile procedurale).</p>
               <div className="space-y-4 bg-white border border-slate-200 rounded-xl p-5 mb-6">
+                {/* Criticism codes multi-select */}
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">Coduri critică *</label>
-                  <input type="text" value={predictorInput.coduri_critici}
-                    onChange={e => setPredictorInput(p => ({ ...p, coduri_critici: e.target.value }))}
-                    placeholder="ex: D3, R2, R4" className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm" />
-                  <p className="text-xs text-slate-400 mt-1">Separă cu virgulă (D1-D8, R1-R8, DAL, RAL)</p>
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-1">Cod CPV</label>
-                    <input type="text" value={predictorInput.cod_cpv}
-                      onChange={e => setPredictorInput(p => ({ ...p, cod_cpv: e.target.value }))}
-                      placeholder="ex: 45310000-3" className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm" />
+                  <label className="block text-sm font-medium text-slate-700 mb-2">Coduri critică *</label>
+                  {predictorInput.coduri_critici.length > 0 && (
+                    <div className="flex flex-wrap gap-1 mb-2">
+                      {predictorInput.coduri_critici.map(code => (
+                        <span key={code} className="inline-flex items-center gap-1 px-2 py-0.5 bg-blue-100 text-blue-800 rounded-full text-xs font-medium">
+                          {code}
+                          <button onClick={() => setPredictorInput(p => ({ ...p, coduri_critici: p.coduri_critici.filter(c => c !== code) }))} className="hover:text-red-600">×</button>
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                  <div className="grid grid-cols-1 gap-1 max-h-48 overflow-y-auto border border-slate-200 rounded-lg p-2">
+                    {analyticsFilterOptions.critici.map((c: any) => {
+                      const selected = predictorInput.coduri_critici.includes(c.code);
+                      const legend = (CRITIQUE_LEGEND as any)[c.code] || c.code;
+                      // Strip redundant prefix from legend (D/R already indicates type)
+                      const shortLegend = legend.split('—')[0]?.trim() || legend.split(' - ')[0]?.trim() || legend;
+                      return (
+                        <label key={c.code} className={`flex items-center gap-2 px-2 py-1.5 rounded cursor-pointer hover:bg-slate-50 text-sm ${selected ? 'bg-blue-50' : ''}`}>
+                          <input type="checkbox" checked={selected} onChange={() => {
+                            setPredictorInput(p => ({
+                              ...p,
+                              coduri_critici: selected ? p.coduri_critici.filter(x => x !== c.code) : [...p.coduri_critici, c.code],
+                            }));
+                          }} className="rounded border-slate-300" />
+                          <span className="font-mono font-bold text-slate-700 w-8">{c.code}</span>
+                          <span className="text-slate-600 flex-1 truncate">{shortLegend}</span>
+                          <span className="text-xs text-slate-400">({c.count})</span>
+                        </label>
+                      );
+                    })}
                   </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  {/* CPV searchable */}
+                  <div className="relative">
+                    <label className="block text-sm font-medium text-slate-700 mb-1">Cod CPV</label>
+                    <input type="text" value={predictorInput.cod_cpv || cpvPredictorSearch}
+                      onChange={async (e) => {
+                        const val = e.target.value;
+                        setCpvPredictorSearch(val);
+                        setPredictorInput(p => ({ ...p, cod_cpv: val }));
+                        if (val.length >= 2) {
+                          try {
+                            const res = await authFetch(`/api/v1/decisions/filters/cpv-codes?search=${encodeURIComponent(val)}`);
+                            if (res.ok) setCpvPredictorResults(await res.json());
+                          } catch {}
+                        } else {
+                          setCpvPredictorResults([]);
+                        }
+                      }}
+                      placeholder="Caută CPV..." className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm" />
+                    {cpvPredictorResults.length > 0 && cpvPredictorSearch.length >= 2 && (
+                      <div className="absolute z-10 w-full mt-1 bg-white border border-slate-200 rounded-lg shadow-lg max-h-40 overflow-y-auto">
+                        {cpvPredictorResults.slice(0, 10).map((c: any) => (
+                          <button key={c.code || c.cod_cpv} onClick={() => {
+                            setPredictorInput(p => ({ ...p, cod_cpv: c.code || c.cod_cpv }));
+                            setCpvPredictorSearch('');
+                            setCpvPredictorResults([]);
+                          }} className="w-full text-left px-3 py-1.5 text-xs hover:bg-blue-50 border-b border-slate-50">
+                            <span className="font-mono font-bold">{c.code || c.cod_cpv}</span> {c.description || c.descriere || ''}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Complet dropdown */}
                   <div>
                     <label className="block text-sm font-medium text-slate-700 mb-1">Complet CNSC</label>
-                    <input type="text" value={predictorInput.complet}
+                    <select value={predictorInput.complet}
                       onChange={e => setPredictorInput(p => ({ ...p, complet: e.target.value }))}
-                      placeholder="ex: C5" className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm" />
+                      className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm bg-white">
+                      <option value="">— Toate —</option>
+                      {analyticsFilterOptions.complete.map((c: any) => (
+                        <option key={c.name} value={c.name}>{c.name} ({c.count} dec.)</option>
+                      ))}
+                    </select>
                   </div>
                 </div>
+
+                {/* Tip procedura dropdown */}
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-1">Tip procedură</label>
-                  <input type="text" value={predictorInput.tip_procedura}
+                  <select value={predictorInput.tip_procedura}
                     onChange={e => setPredictorInput(p => ({ ...p, tip_procedura: e.target.value }))}
-                    placeholder="ex: licitație deschisă" className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm" />
+                    className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm bg-white">
+                    <option value="">— Toate —</option>
+                    {analyticsFilterOptions.proceduri.map((p: any) => (
+                      <option key={p.name} value={p.name}>{p.name} ({p.count})</option>
+                    ))}
+                  </select>
                 </div>
-                <button onClick={runPrediction} disabled={predictorLoading || !predictorInput.coduri_critici.trim()}
+
+                <button onClick={runPrediction} disabled={predictorLoading || predictorInput.coduri_critici.length === 0}
                   className="w-full bg-blue-600 text-white py-2.5 rounded-lg font-medium hover:bg-blue-700 disabled:opacity-50 flex items-center justify-center gap-2">
                   {predictorLoading ? <><Loader2 className="w-4 h-4 animate-spin" /> Se calculează...</> : 'Generează Predicție'}
                 </button>
@@ -4212,13 +4312,13 @@ const App = () => {
                 </div>
               )}
             </div>
-          )}
+          ); })()}
 
           {/* COMPARE TAB */}
           {analyticsTab === 'compare' && (
             <div>
               <h2 className="text-lg font-semibold text-slate-700 mb-4">Comparare Decizii</h2>
-              <p className="text-sm text-slate-500 mb-6">Introdu ID-urile a 2-3 decizii pentru o comparație detaliată cu analiză AI.</p>
+              <p className="text-sm text-slate-500 mb-6">Introdu referințele BO ale a 2-3 decizii pentru o comparație detaliată cu analiză AI.</p>
               <div className="bg-white border border-slate-200 rounded-xl p-5 mb-6">
                 <div className="space-y-3">
                   {compareIds.map((id, i) => (
@@ -4226,7 +4326,7 @@ const App = () => {
                       <span className="text-sm font-medium text-slate-600 w-20">Decizia {i + 1}{i < 2 ? ' *' : ''}</span>
                       <input type="text" value={id}
                         onChange={e => { const n = [...compareIds]; n[i] = e.target.value; setCompareIds(n); }}
-                        placeholder="ID decizie (UUID)" className="flex-1 border border-slate-300 rounded-lg px-3 py-2 text-sm font-mono" />
+                        placeholder="ex: BO2025_1011" className="flex-1 border border-slate-300 rounded-lg px-3 py-2 text-sm font-mono" />
                     </div>
                   ))}
                   {compareIds.length < 3 && (
@@ -6528,7 +6628,9 @@ const App = () => {
             <div className="space-y-3 max-h-[60vh] overflow-y-auto">
               {[
                 { key: 'solutie_contestatie', label: 'Soluție', placeholder: 'ADMIS / ADMIS_PARTIAL / RESPINS' },
+                { key: 'motiv_respingere', label: 'Motiv respingere', placeholder: 'nefondată / tardivă / inadmisibilă / lipsită de interes / rămasă fără obiect' },
                 { key: 'tip_contestatie', label: 'Tip contestație', placeholder: 'documentatie / rezultat' },
+                { key: 'complet', label: 'Complet CNSC', placeholder: 'C1, C2, ... C11' },
                 { key: 'contestator', label: 'Contestator', placeholder: 'Numele contestatorului' },
                 { key: 'autoritate_contractanta', label: 'Autoritate contractantă', placeholder: 'Numele AC' },
                 { key: 'cod_cpv', label: 'Cod CPV', placeholder: '45310000-3' },

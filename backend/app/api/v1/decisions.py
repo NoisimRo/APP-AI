@@ -8,7 +8,7 @@ from uuid import uuid4
 
 from fastapi import APIRouter, HTTPException, UploadFile, File, Query, Depends
 from pydantic import BaseModel, Field
-from sqlalchemy import select, func, or_, and_, cast, case, String
+from sqlalchemy import select, func, or_, and_, not_, cast, case, String
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.logging import get_logger
@@ -805,9 +805,15 @@ async def get_stats(
 async def get_win_rate_by_category(
     session: AsyncSession = Depends(get_session),
 ):
-    """Win rates broken down by CPV category (Furnizare/Servicii/Lucrari) and tip_contestatie."""
+    """Win rates broken down by CPV category (Furnizare/Servicii/Lucrari) and tip_contestatie.
+
+    Excludes procedural rejections (tardivă, inadmisibilă, etc.) — only counts
+    decisions judged on merits.
+    """
     if not is_db_available():
         return []
+
+    PROCEDURAL_REJECTIONS = ["tardivă", "inadmisibilă", "lipsită de interes", "rămasă fără obiect"]
 
     query = (
         select(
@@ -816,7 +822,14 @@ async def get_win_rate_by_category(
             DecizieCNSC.solutie_contestatie,
             func.count().label("count"),
         )
-        .where(DecizieCNSC.cpv_categorie.isnot(None))
+        .where(and_(
+            DecizieCNSC.cpv_categorie.isnot(None),
+            # Exclude procedural rejections
+            ~and_(
+                DecizieCNSC.solutie_contestatie == "RESPINS",
+                DecizieCNSC.motiv_respingere.in_(PROCEDURAL_REJECTIONS),
+            ),
+        ))
         .group_by(DecizieCNSC.cpv_categorie, DecizieCNSC.tip_contestatie, DecizieCNSC.solutie_contestatie)
         .order_by(DecizieCNSC.cpv_categorie)
     )
@@ -893,15 +906,22 @@ async def get_win_rate_by_critici(
         "R1", "R2", "R3", "R4", "R5", "R6", "R7", "R8", "RAL",
     }
 
+    # Exclude procedural rejections from win rate calculation
+    PROCEDURAL_REJECTIONS = ["tardivă", "inadmisibilă", "lipsită de interes", "rămasă fără obiect"]
     query = (
         select(
             ArgumentareCritica.cod_critica,
             ArgumentareCritica.castigator_critica,
             func.count().label("count"),
         )
+        .join(DecizieCNSC, ArgumentareCritica.decizie_id == DecizieCNSC.id)
         .where(
             ArgumentareCritica.cod_critica.isnot(None),
             ArgumentareCritica.cod_critica.in_(CANONICAL_CODES),
+            ~and_(
+                DecizieCNSC.solutie_contestatie == "RESPINS",
+                DecizieCNSC.motiv_respingere.in_(PROCEDURAL_REJECTIONS),
+            ),
         )
         .group_by(ArgumentareCritica.cod_critica, ArgumentareCritica.castigator_critica)
         .order_by(ArgumentareCritica.cod_critica)
@@ -956,6 +976,8 @@ async def get_cpv_top_grouped(
         return []
 
     # Step 1: Get all decisions with CPV codes and their rulings
+    # Exclude procedural rejections from win rate calculation
+    PROCEDURAL_REJECTIONS = ["tardivă", "inadmisibilă", "lipsită de interes", "rămasă fără obiect"]
     query = (
         select(
             DecizieCNSC.cod_cpv,
@@ -963,7 +985,13 @@ async def get_cpv_top_grouped(
             DecizieCNSC.solutie_contestatie,
             func.count().label("count"),
         )
-        .where(DecizieCNSC.cod_cpv.isnot(None))
+        .where(and_(
+            DecizieCNSC.cod_cpv.isnot(None),
+            ~and_(
+                DecizieCNSC.solutie_contestatie == "RESPINS",
+                DecizieCNSC.motiv_respingere.in_(PROCEDURAL_REJECTIONS),
+            ),
+        ))
         .group_by(
             DecizieCNSC.cod_cpv,
             DecizieCNSC.cpv_categorie,
