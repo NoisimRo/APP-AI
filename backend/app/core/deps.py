@@ -106,6 +106,9 @@ FEATURE_ROLES = {
     "clarification": ["paid_basic", "paid_pro", "paid_enterprise", "admin"],
     "training": ["paid_pro", "paid_enterprise", "admin"],
     "export": ["paid_pro", "paid_enterprise", "admin"],
+    "strategy": ["paid_basic", "paid_pro", "paid_enterprise", "admin"],
+    "compliance": ["paid_basic", "paid_pro", "paid_enterprise", "admin"],
+    "multi_document": ["paid_pro", "paid_enterprise", "admin"],
 }
 
 

@@ -2,7 +2,7 @@
 
 from fastapi import APIRouter
 
-from app.api.v1 import auth, chat, search, decisions, documents, redflags, ragmemo, drafter, clarification, training, settings, scopes, saved, users, spete_anap, analytics
+from app.api.v1 import auth, chat, search, decisions, documents, redflags, ragmemo, drafter, clarification, training, settings, scopes, saved, users, spete_anap, analytics, strategy
 
 api_router = APIRouter()
 
@@ -22,3 +22,4 @@ api_router.include_router(scopes.router, prefix="/scopes", tags=["scopes"])
 api_router.include_router(saved.router, prefix="/saved", tags=["saved"])
 api_router.include_router(spete_anap.router, prefix="/spete", tags=["spete"])
 api_router.include_router(analytics.router, prefix="/analytics", tags=["analytics"])
+api_router.include_router(strategy.router, prefix="/strategy", tags=["strategy"])

@@ -49,11 +49,14 @@ import {
   LogOut,
   Lock,
   UserCircle,
+  Target,
+  ClipboardCheck,
+  Files,
 } from "lucide-react";
 
 // --- Types ---
 
-type AppMode = 'dashboard' | 'datalake' | 'spete' | 'drafter' | 'redflags' | 'chat' | 'clarification' | 'rag' | 'training' | 'analytics' | 'settings' | 'profile' | 'pricing';
+type AppMode = 'dashboard' | 'datalake' | 'spete' | 'drafter' | 'redflags' | 'chat' | 'clarification' | 'rag' | 'training' | 'analytics' | 'strategy' | 'compliance' | 'settings' | 'profile' | 'pricing';
 
 interface AuthUser {
   id: string;
@@ -312,10 +315,10 @@ const authFetchStream = async (
 // Feature access rules per role
 const ROLE_FEATURES: Record<string, string[]> = {
   registered: ['chat', 'dashboard', 'datalake', 'spete', 'rag', 'analytics', 'profile', 'pricing'],
-  paid_basic: ['chat', 'dashboard', 'datalake', 'spete', 'rag', 'analytics', 'drafter', 'redflags', 'clarification', 'profile', 'pricing'],
-  paid_pro: ['chat', 'dashboard', 'datalake', 'spete', 'rag', 'analytics', 'drafter', 'redflags', 'clarification', 'training', 'export', 'profile', 'pricing'],
-  paid_enterprise: ['chat', 'dashboard', 'datalake', 'spete', 'rag', 'analytics', 'drafter', 'redflags', 'clarification', 'training', 'export', 'profile', 'pricing'],
-  admin: ['chat', 'dashboard', 'datalake', 'spete', 'rag', 'analytics', 'drafter', 'redflags', 'clarification', 'training', 'export', 'settings', 'profile', 'pricing'],
+  paid_basic: ['chat', 'dashboard', 'datalake', 'spete', 'rag', 'analytics', 'strategy', 'compliance', 'drafter', 'redflags', 'clarification', 'profile', 'pricing'],
+  paid_pro: ['chat', 'dashboard', 'datalake', 'spete', 'rag', 'analytics', 'strategy', 'compliance', 'multi_document', 'drafter', 'redflags', 'clarification', 'training', 'export', 'profile', 'pricing'],
+  paid_enterprise: ['chat', 'dashboard', 'datalake', 'spete', 'rag', 'analytics', 'strategy', 'compliance', 'multi_document', 'drafter', 'redflags', 'clarification', 'training', 'export', 'profile', 'pricing'],
+  admin: ['chat', 'dashboard', 'datalake', 'spete', 'rag', 'analytics', 'strategy', 'compliance', 'multi_document', 'drafter', 'redflags', 'clarification', 'training', 'export', 'settings', 'profile', 'pricing'],
 };
 
 const PLAN_LABELS: Record<string, string> = {
@@ -624,6 +627,17 @@ const App = () => {
   const [compareIds, setCompareIds] = useState<string[]>(['', '']);
   const [compareResult, setCompareResult] = useState<any>(null);
   const [compareLoading, setCompareLoading] = useState(false);
+
+  // Strategy Generator
+  const [strategyInput, setStrategyInput] = useState({ description: '', coduri_critici: [] as string[], cod_cpv: '', complet: '', tip_procedura: '', tip_contestatie: '', valoare_estimata: '' });
+  const [strategyResult, setStrategyResult] = useState<any>(null);
+  const [strategyLoading, setStrategyLoading] = useState(false);
+
+  // Compliance Checker
+  const [complianceText, setComplianceText] = useState('');
+  const [complianceResult, setComplianceResult] = useState<any>(null);
+  const [complianceLoading, setComplianceLoading] = useState(false);
+  const [complianceProcedura, setComplianceProcedura] = useState('');
 
   // Import States (Data Lake)
   const [showImportModal, setShowImportModal] = useState(false);
@@ -2125,6 +2139,13 @@ const App = () => {
            ) : (
              <div className="opacity-50 cursor-not-allowed" title="Creează un cont gratuit">
                <SidebarItem icon={TrendingUp} label="Analiză CNSC" active={false} onClick={() => setShowAuthModal(true)} />
+             </div>
+           )}
+           {canAccess('strategy') ? (
+             <SidebarItem icon={Target} label="Strategie Contestare" active={mode === 'strategy'} onClick={() => { setMode('strategy'); setSidebarOpen(false); }} />
+           ) : (
+             <div className="opacity-50 cursor-not-allowed" title="Disponibil în planul Basic">
+               <SidebarItem icon={Target} label="Strategie Contestare" active={false} onClick={() => setShowAuthModal(true)} />
              </div>
            )}
         </div>
@@ -3991,6 +4012,294 @@ const App = () => {
       if (res.ok) setCompareResult(await res.json());
     } catch (e) { console.error(e); }
     setCompareLoading(false);
+  };
+
+  // =========================================================================
+  // STRATEGY PAGE
+  // =========================================================================
+  const runStrategy = async () => {
+    if (strategyInput.coduri_critici.length === 0 || !strategyInput.description.trim()) return;
+    setStrategyLoading(true);
+    setStrategyResult(null);
+    try {
+      const body: any = {
+        description: strategyInput.description,
+        coduri_critici: strategyInput.coduri_critici,
+      };
+      if (strategyInput.cod_cpv) body.cod_cpv = strategyInput.cod_cpv;
+      if (strategyInput.complet) body.complet = strategyInput.complet;
+      if (strategyInput.tip_procedura) body.tip_procedura = strategyInput.tip_procedura;
+      if (strategyInput.tip_contestatie) body.tip_contestatie = strategyInput.tip_contestatie;
+      if (strategyInput.valoare_estimata) body.valoare_estimata = parseFloat(strategyInput.valoare_estimata);
+      const res = await authFetch('/api/v1/strategy/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).detail || `Eroare ${res.status}`);
+      setStrategyResult(await res.json());
+    } catch (err: any) {
+      alert(`Eroare: ${err.message}`);
+    } finally {
+      setStrategyLoading(false);
+    }
+  };
+
+  const renderStrategy = () => {
+    if (analyticsFilterOptions.critici.length === 0) loadAnalyticsFilters();
+    return (
+      <div className="h-full flex flex-col md:flex-row bg-white">
+        {/* Left panel — input */}
+        <div className="w-full md:w-1/3 border-r border-slate-200 p-6 overflow-y-auto bg-slate-50/50">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-lg font-bold text-slate-800 flex gap-2 items-center">
+              <Target className="text-indigo-600" size={20}/> Strategie Contestare
+            </h2>
+            <button onClick={() => loadHistory('contestatie')} className="text-xs bg-slate-50 text-slate-500 px-2.5 py-1 rounded-lg font-medium hover:bg-slate-100 transition flex items-center gap-1" title="Istoric"><Bookmark size={12} /> Istoric</button>
+          </div>
+          <p className="text-xs text-slate-500 mb-6">AI generează o strategie completă de contestare cu șanse de succes per critică, temei legal și jurisprudență.</p>
+
+          <div className="space-y-4">
+            {/* Description */}
+            <div>
+              <label className="block text-xs font-bold text-slate-600 uppercase mb-1">Descrierea situației *</label>
+              <textarea rows={4} value={strategyInput.description}
+                onChange={e => setStrategyInput(p => ({ ...p, description: e.target.value }))}
+                placeholder="Descrie situația: ce s-a întâmplat, de ce vrei să contești, ce clauze/decizii sunt problematice..."
+                className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm resize-none focus:ring-2 focus:ring-indigo-500/40 outline-none" />
+            </div>
+
+            {/* Criticism codes multi-select */}
+            <div>
+              <label className="block text-xs font-bold text-slate-600 uppercase mb-1">Coduri critică *</label>
+              {strategyInput.coduri_critici.length > 0 && (
+                <div className="flex flex-wrap gap-1 mb-2">
+                  {strategyInput.coduri_critici.map(code => (
+                    <span key={code} className="inline-flex items-center gap-1 px-2 py-0.5 bg-indigo-100 text-indigo-800 rounded-full text-xs font-medium">
+                      {code}
+                      <button onClick={() => setStrategyInput(p => ({ ...p, coduri_critici: p.coduri_critici.filter(c => c !== code) }))} className="hover:text-red-600">&times;</button>
+                    </span>
+                  ))}
+                </div>
+              )}
+              <div className="grid grid-cols-1 gap-0.5 max-h-36 overflow-y-auto border border-slate-200 rounded-lg p-2 bg-white">
+                {analyticsFilterOptions.critici.map((c: any) => {
+                  const selected = strategyInput.coduri_critici.includes(c.code);
+                  const legend = (CRITIQUE_LEGEND as any)[c.code] || c.code;
+                  return (
+                    <label key={c.code} className={`flex items-center gap-2 px-2 py-1 rounded cursor-pointer hover:bg-slate-50 text-xs ${selected ? 'bg-indigo-50' : ''}`}>
+                      <input type="checkbox" checked={selected} onChange={() => {
+                        setStrategyInput(p => ({
+                          ...p,
+                          coduri_critici: selected ? p.coduri_critici.filter(x => x !== c.code) : [...p.coduri_critici, c.code],
+                        }));
+                      }} className="rounded border-slate-300" />
+                      <span className="font-mono font-bold text-slate-700 w-7">{c.code}</span>
+                      <span className="text-slate-600 flex-1 truncate">{(legend.split('—')[0] || legend).trim()}</span>
+                      <span className="text-slate-400">({c.count})</span>
+                    </label>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Dropdowns row */}
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-bold text-slate-600 uppercase mb-1">Complet CNSC</label>
+                <select value={strategyInput.complet}
+                  onChange={e => setStrategyInput(p => ({ ...p, complet: e.target.value }))}
+                  className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm bg-white">
+                  <option value="">— Necunoscut —</option>
+                  {analyticsFilterOptions.complete.map((c: any) => (
+                    <option key={c.name} value={c.name}>{c.name} ({c.count})</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-600 uppercase mb-1">Tip contestație</label>
+                <select value={strategyInput.tip_contestatie}
+                  onChange={e => setStrategyInput(p => ({ ...p, tip_contestatie: e.target.value }))}
+                  className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm bg-white">
+                  <option value="">— Selectează —</option>
+                  <option value="documentatie">Documentație</option>
+                  <option value="rezultat">Rezultat</option>
+                </select>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-bold text-slate-600 uppercase mb-1">Tip procedură</label>
+                <select value={strategyInput.tip_procedura}
+                  onChange={e => setStrategyInput(p => ({ ...p, tip_procedura: e.target.value }))}
+                  className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm bg-white">
+                  <option value="">— Toate —</option>
+                  {analyticsFilterOptions.proceduri.map((p: any) => (
+                    <option key={p.name} value={p.name}>{p.name}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-600 uppercase mb-1">Cod CPV</label>
+                <input type="text" value={strategyInput.cod_cpv}
+                  onChange={e => setStrategyInput(p => ({ ...p, cod_cpv: e.target.value }))}
+                  placeholder="ex: 45310000-3" className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm" />
+              </div>
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-slate-600 uppercase mb-1">Valoare estimată (RON)</label>
+              <input type="text" value={strategyInput.valoare_estimata}
+                onChange={e => setStrategyInput(p => ({ ...p, valoare_estimata: e.target.value }))}
+                placeholder="ex: 500000" className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm" />
+            </div>
+
+            <button onClick={runStrategy}
+              disabled={strategyLoading || strategyInput.coduri_critici.length === 0 || !strategyInput.description.trim()}
+              className="w-full bg-indigo-600 text-white py-3 rounded-xl font-semibold hover:bg-indigo-700 disabled:opacity-50 transition flex items-center justify-center gap-2 text-sm">
+              {strategyLoading ? <><Loader2 className="w-4 h-4 animate-spin" /> Se generează strategia...</> : <><Target size={16} /> Generează Strategie</>}
+            </button>
+          </div>
+        </div>
+
+        {/* Right panel — results */}
+        <div className="w-full md:w-2/3 p-4 md:p-8 overflow-y-auto bg-white">
+          {!strategyResult && !strategyLoading && (
+            <div className="h-full flex items-center justify-center text-slate-400">
+              <div className="text-center">
+                <Target size={48} className="mx-auto mb-4 opacity-30" />
+                <p className="text-lg font-medium">Generare Strategie Contestare</p>
+                <p className="text-sm mt-1">Completează formularul și apasă Generează</p>
+              </div>
+            </div>
+          )}
+          {strategyLoading && (
+            <div className="h-full flex items-center justify-center">
+              <div className="text-center">
+                <Loader2 size={40} className="animate-spin text-indigo-500 mx-auto mb-4" />
+                <p className="text-slate-600 font-medium">Se analizează statistici, legislație și jurisprudență...</p>
+                <p className="text-xs text-slate-400 mt-1">Poate dura 30-60 secunde</p>
+              </div>
+            </div>
+          )}
+          {strategyResult && (
+            <div className="max-w-3xl mx-auto space-y-6">
+              {/* Overall assessment */}
+              <div className={`rounded-2xl p-6 ${strategyResult.overall_assessment?.recommendation === 'ADMIS' ? 'bg-green-50 border-2 border-green-300' : 'bg-red-50 border-2 border-red-300'}`}>
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="text-lg font-bold text-slate-800">Evaluare Generală</h3>
+                  <div className={`text-2xl font-black ${strategyResult.overall_assessment?.recommendation === 'ADMIS' ? 'text-green-700' : 'text-red-700'}`}>
+                    {strategyResult.overall_assessment?.overall_probability}% {strategyResult.overall_assessment?.recommendation}
+                  </div>
+                </div>
+                <div className="prose prose-sm max-w-none" dangerouslySetInnerHTML={{ __html: formatMarkdown(strategyResult.overall_assessment?.text || '') }} />
+              </div>
+
+              {/* Per-criticism recommendations */}
+              <div>
+                <h3 className="text-lg font-bold text-slate-800 mb-3">Recomandări per Critică</h3>
+                <div className="space-y-4">
+                  {(strategyResult.per_criticism || []).map((rec: any, i: number) => (
+                    <div key={i} className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm">
+                      <div className="flex items-center justify-between mb-3">
+                        <div className="flex items-center gap-2">
+                          <span className="font-mono font-black text-indigo-700 text-lg">{rec.code}</span>
+                          <span className="text-sm text-slate-500">{rec.label}</span>
+                        </div>
+                        {rec.success_probability != null && (
+                          <span className={`px-3 py-1 rounded-full text-sm font-bold ${rec.success_probability >= 60 ? 'bg-green-100 text-green-800' : rec.success_probability >= 40 ? 'bg-amber-100 text-amber-800' : 'bg-red-100 text-red-800'}`}>
+                            {rec.success_probability}%
+                          </span>
+                        )}
+                      </div>
+                      {rec.recommendation && (
+                        <p className="text-sm text-slate-700 mb-3 font-medium">{rec.recommendation}</p>
+                      )}
+                      {rec.arguments?.length > 0 && (
+                        <div className="mb-3">
+                          <p className="text-xs font-bold text-slate-500 uppercase mb-1">Argumente cheie</p>
+                          <ul className="text-sm text-slate-700 space-y-1">
+                            {rec.arguments.map((arg: string, j: number) => (
+                              <li key={j} className="flex gap-2"><span className="text-green-500 mt-0.5">&#10003;</span>{arg}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                      {rec.legal_basis?.length > 0 && (
+                        <div className="mb-3">
+                          <p className="text-xs font-bold text-slate-500 uppercase mb-1">Temei legal</p>
+                          <div className="flex flex-wrap gap-1">
+                            {rec.legal_basis.map((ref: string, j: number) => (
+                              <span key={j} className="text-xs bg-blue-50 text-blue-700 px-2 py-0.5 rounded border border-blue-200">{ref}</span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      {rec.useful_precedents?.length > 0 && (
+                        <div className="mb-3">
+                          <p className="text-xs font-bold text-slate-500 uppercase mb-1">Jurisprudență utilă</p>
+                          <div className="space-y-1">
+                            {rec.useful_precedents.map((prec: string, j: number) => (
+                              <p key={j} className="text-xs text-slate-600">{prec}</p>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      {rec.risks?.length > 0 && (
+                        <div>
+                          <p className="text-xs font-bold text-slate-500 uppercase mb-1">Riscuri</p>
+                          <ul className="text-xs text-red-700 space-y-0.5">
+                            {rec.risks.map((risk: string, j: number) => (
+                              <li key={j} className="flex gap-1"><span>&#9888;</span>{risk}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                      {/* Stats badge */}
+                      {rec.stats?.total > 0 && (
+                        <div className="mt-3 pt-3 border-t border-slate-100 text-xs text-slate-400">
+                          Bazat pe {rec.stats.total} cazuri judecate pe fond | Contestator câștigă {rec.stats.win_rate}%
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Precedents */}
+              {strategyResult.precedents?.length > 0 && (
+                <div className="bg-blue-50 border border-blue-200 rounded-xl p-5">
+                  <h3 className="font-semibold text-blue-800 mb-3">Jurisprudență CNSC Relevantă</h3>
+                  <div className="flex flex-wrap gap-2">
+                    {strategyResult.precedents.map((p: any, i: number) => (
+                      <span key={i} onClick={() => openDecision(p.bo_reference)}
+                        className="text-xs bg-white text-blue-700 px-3 py-1.5 rounded-lg border border-blue-200 font-mono cursor-pointer hover:bg-blue-100 transition">
+                        {p.bo_reference} ({p.solutie}) — {p.cod_critica} ({p.castigator})
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Legal basis */}
+              {strategyResult.legal_basis?.length > 0 && (
+                <div className="bg-amber-50 border border-amber-200 rounded-xl p-5">
+                  <h3 className="font-semibold text-amber-800 mb-3">Temei Legal Utilizat</h3>
+                  <div className="space-y-2">
+                    {strategyResult.legal_basis.map((ref: any, i: number) => (
+                      <div key={i} className="text-sm">
+                        <span className="font-mono font-bold text-amber-800">{ref.citare}</span>
+                        <span className="text-amber-600 ml-1">({ref.act})</span>
+                        <p className="text-xs text-amber-700 mt-0.5">{ref.text?.slice(0, 200)}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+    );
   };
 
   const renderAnalytics = () => {
@@ -6391,6 +6700,7 @@ const App = () => {
               </div>
            </div>
         )}
+        {mode === 'strategy' && renderStrategy()}
         {mode === 'analytics' && renderAnalytics()}
         {mode === 'training' && renderTraining()}
         {mode === 'settings' && renderSettings()}
