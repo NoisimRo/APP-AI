@@ -1816,6 +1816,7 @@ Răspunde în limba română, profesional și precis."""
         scope_decision_ids: list[str] | None = None,
         enable_rerank: bool = False,
         enable_expansion: bool = False,
+        extra_system_context: str | None = None,
     ) -> tuple[str, list[Citation], float, list[str]]:
         """Generate a response to user query using RAG.
 
@@ -1827,6 +1828,7 @@ Răspunde în limba română, profesional și precis."""
             scope_decision_ids: If provided, restrict search to these decision IDs only.
             enable_rerank: If True, use LLM reranking of retrieved chunks.
             enable_expansion: If True, use LLM query expansion for better retrieval.
+            extra_system_context: Optional extra text appended to system prompt (e.g., user memory).
 
         Returns:
             Tuple of (response_text, citations, confidence, suggested_questions).
@@ -1849,6 +1851,10 @@ Răspunde în limba română, profesional și precis."""
                 0.0,
                 suggested_questions,
             )
+
+        # Inject extra context (e.g., persistent user memory)
+        if extra_system_context and system_prompt:
+            system_prompt = system_prompt + extra_system_context
 
         try:
             response_text = await self.llm.complete(

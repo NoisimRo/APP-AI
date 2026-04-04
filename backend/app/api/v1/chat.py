@@ -1,15 +1,17 @@
-"""Chat API endpoints."""
+"""Chat API endpoints with persistent memory."""
 
 from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Depends, Request
 from pydantic import BaseModel, Field
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.logging import get_logger
 from app.core.rate_limiter import require_rate_limit, increment_usage
 from app.db.session import get_session
-from app.models.decision import User
+from app.models.decision import User, UserContext
+from app.core.deps import get_optional_user
 from app.services.rag import RAGService
 from app.services.llm.factory import get_active_llm_provider
 from app.services.llm.streaming import create_sse_response
@@ -17,6 +19,9 @@ from app.api.v1.scopes import get_scope_decision_ids
 
 router = APIRouter()
 logger = get_logger(__name__)
+
+# Max context entries to load per user
+MAX_CONTEXT_ENTRIES = 20
 
 
 class ChatMessage(BaseModel):
@@ -55,6 +60,84 @@ class ChatResponse(BaseModel):
     suggested_questions: list[str] = Field(default_factory=list)
 
 
+async def _load_user_context(session: AsyncSession, user_id: str) -> str:
+    """Load persistent user context as text for system prompt injection."""
+    result = await session.execute(
+        select(UserContext)
+        .where(UserContext.user_id == user_id, UserContext.active == True)
+        .order_by(UserContext.importance.desc(), UserContext.updated_at.desc())
+        .limit(MAX_CONTEXT_ENTRIES)
+    )
+    entries = list(result.scalars().all())
+
+    if not entries:
+        return ""
+
+    context_lines = []
+    for entry in entries:
+        prefix = {
+            "preference": "Preferință utilizator",
+            "case_detail": "Detaliu caz",
+            "expertise": "Expertiză",
+            "frequent_topic": "Temă frecventă",
+        }.get(entry.fact_type, "Informație")
+        context_lines.append(f"- {prefix}: {entry.content}")
+
+    return "\n\nCONTEXT PERSISTENT UTILIZATOR:\n" + "\n".join(context_lines)
+
+
+async def _extract_and_save_facts(
+    session: AsyncSession, user_id: str, message: str, response: str, llm
+):
+    """Extract notable facts from the conversation and save to user context.
+
+    Only saves genuinely useful facts (not greetings, generic questions, etc.).
+    Runs in background — failures don't affect the chat response.
+    """
+    try:
+        prompt = f"""Analizează următorul schimb de mesaje și extrage DOAR fapte noi despre utilizator care merită reținute pentru conversații viitoare.
+
+Mesaj utilizator: {message[:500]}
+Răspuns asistent: {response[:500]}
+
+Extrage fapte precum: domeniu de activitate, tip de achiziții cu care lucrează, preferințe de comunicare, cazuri în curs, expertiză specifică.
+
+NU extrage: salutări, întrebări generice, fapte deja evidente.
+
+Răspunde în JSON:
+[
+  {{"content": "fapt concis", "type": "preference|case_detail|expertise|frequent_topic|general", "importance": 5}}
+]
+
+Dacă nu sunt fapte noi de reținut, returnează [] (array gol)."""
+
+        import asyncio, json, re
+        result = await asyncio.wait_for(
+            llm.complete(prompt, temperature=0.0, max_tokens=500),
+            timeout=30,
+        )
+        match = re.search(r'\[.*\]', result, re.DOTALL)
+        if not match:
+            return
+
+        facts = json.loads(match.group(0))
+        for fact in facts[:3]:  # Max 3 facts per message
+            content = fact.get("content", "").strip()
+            if not content or len(content) < 5:
+                continue
+            new_context = UserContext(
+                user_id=user_id,
+                content=content,
+                fact_type=fact.get("type", "general"),
+                importance=min(max(fact.get("importance", 5), 1), 10),
+                source="conversation",
+            )
+            session.add(new_context)
+        await session.commit()
+    except Exception as e:
+        logger.debug("context_extraction_failed", error=str(e))
+
+
 @router.post("/", response_model=ChatResponse)
 async def chat(
     request: ChatRequest,
@@ -62,12 +145,7 @@ async def chat(
     session: AsyncSession = Depends(get_session),
     rate_user: Optional[User] = Depends(require_rate_limit),
 ) -> ChatResponse:
-    """
-    Chat with ExpertAP.
-
-    Send a message and receive an AI-generated response grounded in CNSC decisions.
-    All citations are verified against the database.
-    """
+    """Chat with ExpertAP. Includes persistent memory for logged-in users."""
     logger.info(
         "chat_request",
         message_length=len(request.message),
@@ -75,26 +153,32 @@ async def chat(
     )
 
     try:
-        # Initialize RAG service with active provider
         llm = await get_active_llm_provider(session)
         rag = RAGService(llm_provider=llm)
 
-        # Convert chat history to format expected by RAG
         history = [
             {"role": msg.role, "content": msg.content}
             for msg in request.history
         ] if request.history else None
 
-        # Resolve scope to decision IDs if provided
         scope_ids = None
         if request.scope_id:
             scope_ids = await get_scope_decision_ids(request.scope_id, session)
             if scope_ids is None:
                 raise HTTPException(status_code=404, detail="Scope not found")
-            logger.info("chat_scope_applied", scope_id=request.scope_id,
-                        decision_count=len(scope_ids))
 
-        # Generate response using RAG pipeline
+        # Load persistent user context
+        user_context = ""
+        current_user = None
+        try:
+            from app.core.deps import get_optional_user
+            # Get user from rate_user (already resolved)
+            if rate_user and hasattr(rate_user, 'id'):
+                current_user = rate_user
+                user_context = await _load_user_context(session, str(rate_user.id))
+        except Exception:
+            pass
+
         response_text, citations, confidence, suggested = await rag.generate_response(
             query=request.message,
             session=session,
@@ -103,21 +187,18 @@ async def chat(
             scope_decision_ids=scope_ids,
             enable_rerank=request.rerank,
             enable_expansion=request.expansion,
+            extra_system_context=user_context if user_context else None,
         )
 
-        # Generate or reuse conversation ID
         conversation_id = request.conversation_id or f"conv-{hash(request.message)}"
 
-        logger.info(
-            "chat_response_generated",
-            conversation_id=conversation_id,
-            citations_count=len(citations),
-            confidence=confidence
-        )
+        # Extract facts in background (non-blocking)
+        if current_user:
+            import asyncio
+            asyncio.create_task(
+                _extract_and_save_facts(session, str(current_user.id), request.message, response_text, llm)
+            )
 
-        # Convert Citation objects to dicts for Pydantic validation
-        # RAG service returns Citation objects from rag.py, but ChatResponse
-        # expects Citation objects from chat.py (different classes)
         citations_dicts = [
             {"decision_id": c.decision_id, "text": c.text, "verified": c.verified}
             for c in citations
@@ -148,7 +229,7 @@ async def chat_stream(
     session: AsyncSession = Depends(get_session),
     rate_user: Optional[User] = Depends(require_rate_limit),
 ):
-    """Stream chat response via SSE."""
+    """Stream chat response via SSE. Includes persistent memory for logged-in users."""
     logger.info("chat_stream_request", message_length=len(request.message))
 
     try:
@@ -160,14 +241,20 @@ async def chat_stream(
             for msg in request.history
         ] if request.history else None
 
-        # Resolve scope to decision IDs if provided
         scope_ids = None
         if request.scope_id:
             scope_ids = await get_scope_decision_ids(request.scope_id, session)
             if scope_ids is None:
                 raise HTTPException(status_code=404, detail="Scope not found")
 
-        # Run RAG search to get context and citations
+        # Load persistent user context
+        user_context = ""
+        try:
+            if rate_user and hasattr(rate_user, 'id'):
+                user_context = await _load_user_context(session, str(rate_user.id))
+        except Exception:
+            pass
+
         import time
         t_start = time.monotonic()
 
@@ -179,17 +266,19 @@ async def chat_stream(
             enable_expansion=request.expansion,
         )
 
+        # Inject user context into system prompt
+        if user_context and system_prompt:
+            system_prompt = system_prompt + user_context
+
         search_duration_s = round(time.monotonic() - t_start, 2)
         logger.info("chat_stream_search_completed", duration_s=search_duration_s)
 
         if contexts is None:
-            # No relevant results — return a non-streaming error message
             raise HTTPException(
                 status_code=404,
                 detail="Nu am găsit informații relevante. Reformulează întrebarea.",
             )
 
-        # Build status messages for user feedback
         status_msgs = []
         n_sources = len(citations)
         if n_sources:
@@ -197,7 +286,6 @@ async def chat_stream(
 
         await increment_usage(rate_user, http_request)
 
-        # Stream the LLM response
         return await create_sse_response(
             llm=rag.llm,
             prompt=query,
@@ -220,8 +308,83 @@ async def chat_stream(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+# ---------------------------------------------------------------------------
+# User Context Management
+# ---------------------------------------------------------------------------
+
+@router.get("/memory")
+async def get_user_memory(
+    session: AsyncSession = Depends(get_session),
+    user: Optional[User] = Depends(get_optional_user),
+):
+    """Get the current user's persistent memory entries."""
+    if not user:
+        return []
+
+    result = await session.execute(
+        select(UserContext)
+        .where(UserContext.user_id == str(user.id), UserContext.active == True)
+        .order_by(UserContext.importance.desc(), UserContext.updated_at.desc())
+    )
+    entries = result.scalars().all()
+    return [
+        {
+            "id": str(e.id),
+            "content": e.content,
+            "fact_type": e.fact_type,
+            "importance": e.importance,
+            "source": e.source,
+            "created_at": e.created_at.isoformat() if e.created_at else None,
+        }
+        for e in entries
+    ]
+
+
+@router.delete("/memory/{entry_id}")
+async def delete_memory_entry(
+    entry_id: str,
+    session: AsyncSession = Depends(get_session),
+    user: Optional[User] = Depends(get_optional_user),
+):
+    """Delete a persistent memory entry."""
+    if not user:
+        raise HTTPException(status_code=401, detail="Autentificare necesară")
+
+    result = await session.execute(
+        select(UserContext).where(
+            UserContext.id == entry_id,
+            UserContext.user_id == str(user.id),
+        )
+    )
+    entry = result.scalar_one_or_none()
+    if not entry:
+        raise HTTPException(status_code=404, detail="Intrare negăsită")
+
+    entry.active = False
+    await session.commit()
+    return {"status": "deleted"}
+
+
+@router.delete("/memory")
+async def clear_all_memory(
+    session: AsyncSession = Depends(get_session),
+    user: Optional[User] = Depends(get_optional_user),
+):
+    """Clear all persistent memory for the current user."""
+    if not user:
+        raise HTTPException(status_code=401, detail="Autentificare necesară")
+
+    await session.execute(
+        update(UserContext)
+        .where(UserContext.user_id == str(user.id))
+        .values(active=False)
+    )
+    await session.commit()
+    return {"status": "cleared"}
+
+
 @router.get("/conversations/{conversation_id}")
 async def get_conversation(conversation_id: str):
     """Get conversation history by ID."""
-    # TODO: Implement conversation retrieval
+    # TODO: Implement full conversation retrieval from mesaje_conversatie
     raise HTTPException(status_code=501, detail="Not implemented yet")

@@ -49,11 +49,14 @@ import {
   LogOut,
   Lock,
   UserCircle,
+  Target,
+  ClipboardCheck,
+  Files,
 } from "lucide-react";
 
 // --- Types ---
 
-type AppMode = 'dashboard' | 'datalake' | 'spete' | 'drafter' | 'redflags' | 'chat' | 'clarification' | 'rag' | 'training' | 'analytics' | 'settings' | 'profile' | 'pricing';
+type AppMode = 'dashboard' | 'datalake' | 'spete' | 'drafter' | 'redflags' | 'chat' | 'clarification' | 'rag' | 'training' | 'analytics' | 'strategy' | 'compliance' | 'multi_document' | 'settings' | 'profile' | 'pricing';
 
 interface AuthUser {
   id: string;
@@ -312,10 +315,10 @@ const authFetchStream = async (
 // Feature access rules per role
 const ROLE_FEATURES: Record<string, string[]> = {
   registered: ['chat', 'dashboard', 'datalake', 'spete', 'rag', 'analytics', 'profile', 'pricing'],
-  paid_basic: ['chat', 'dashboard', 'datalake', 'spete', 'rag', 'analytics', 'drafter', 'redflags', 'clarification', 'profile', 'pricing'],
-  paid_pro: ['chat', 'dashboard', 'datalake', 'spete', 'rag', 'analytics', 'drafter', 'redflags', 'clarification', 'training', 'export', 'profile', 'pricing'],
-  paid_enterprise: ['chat', 'dashboard', 'datalake', 'spete', 'rag', 'analytics', 'drafter', 'redflags', 'clarification', 'training', 'export', 'profile', 'pricing'],
-  admin: ['chat', 'dashboard', 'datalake', 'spete', 'rag', 'analytics', 'drafter', 'redflags', 'clarification', 'training', 'export', 'settings', 'profile', 'pricing'],
+  paid_basic: ['chat', 'dashboard', 'datalake', 'spete', 'rag', 'analytics', 'strategy', 'compliance', 'drafter', 'redflags', 'clarification', 'profile', 'pricing'],
+  paid_pro: ['chat', 'dashboard', 'datalake', 'spete', 'rag', 'analytics', 'strategy', 'compliance', 'multi_document', 'drafter', 'redflags', 'clarification', 'training', 'export', 'profile', 'pricing'],
+  paid_enterprise: ['chat', 'dashboard', 'datalake', 'spete', 'rag', 'analytics', 'strategy', 'compliance', 'multi_document', 'drafter', 'redflags', 'clarification', 'training', 'export', 'profile', 'pricing'],
+  admin: ['chat', 'dashboard', 'datalake', 'spete', 'rag', 'analytics', 'strategy', 'compliance', 'multi_document', 'drafter', 'redflags', 'clarification', 'training', 'export', 'settings', 'profile', 'pricing'],
 };
 
 const PLAN_LABELS: Record<string, string> = {
@@ -624,6 +627,22 @@ const App = () => {
   const [compareIds, setCompareIds] = useState<string[]>(['', '']);
   const [compareResult, setCompareResult] = useState<any>(null);
   const [compareLoading, setCompareLoading] = useState(false);
+
+  // Strategy Generator
+  const [strategyInput, setStrategyInput] = useState({ description: '', coduri_critici: [] as string[], cod_cpv: '', complet: '', tip_procedura: '', tip_contestatie: '', valoare_estimata: '' });
+  const [strategyResult, setStrategyResult] = useState<any>(null);
+  const [strategyLoading, setStrategyLoading] = useState(false);
+
+  // Compliance Checker
+  const [complianceText, setComplianceText] = useState('');
+  const [complianceResult, setComplianceResult] = useState<any>(null);
+  const [complianceLoading, setComplianceLoading] = useState(false);
+  const [complianceProcedura, setComplianceProcedura] = useState('');
+
+  // Multi-Document Analysis
+  const [multiDocFiles, setMultiDocFiles] = useState<File[]>([]);
+  const [multiDocResult, setMultiDocResult] = useState<any>(null);
+  const [multiDocLoading, setMultiDocLoading] = useState(false);
 
   // Import States (Data Lake)
   const [showImportModal, setShowImportModal] = useState(false);
@@ -2127,10 +2146,31 @@ const App = () => {
                <SidebarItem icon={TrendingUp} label="Analiză CNSC" active={false} onClick={() => setShowAuthModal(true)} />
              </div>
            )}
+           {canAccess('strategy') ? (
+             <SidebarItem icon={Target} label="Strategie Contestare" active={mode === 'strategy'} onClick={() => { setMode('strategy'); setSidebarOpen(false); }} />
+           ) : (
+             <div className="opacity-50 cursor-not-allowed" title="Disponibil în planul Basic">
+               <SidebarItem icon={Target} label="Strategie Contestare" active={false} onClick={() => setShowAuthModal(true)} />
+             </div>
+           )}
         </div>
 
         <div>
            <div className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3 px-2">Instrumente Juridice</div>
+           {canAccess('multi_document') ? (
+             <SidebarItem icon={Files} label="Analiză Multi-Document" active={mode === 'multi_document' as any} onClick={() => { setMode('multi_document' as any); setSidebarOpen(false); }} />
+           ) : (
+             <div className="opacity-50 cursor-not-allowed" title="Disponibil în planul Pro">
+               <SidebarItem icon={Files} label="Analiză Multi-Document" active={false} onClick={() => setShowAuthModal(true)} />
+             </div>
+           )}
+           {canAccess('compliance') ? (
+             <SidebarItem icon={ClipboardCheck} label="Verificator Conformitate" active={mode === 'compliance'} onClick={() => { setMode('compliance'); setSidebarOpen(false); }} />
+           ) : (
+             <div className="opacity-50 cursor-not-allowed" title="Disponibil în planul Basic">
+               <SidebarItem icon={ClipboardCheck} label="Verificator Conformitate" active={false} onClick={() => setShowAuthModal(true)} />
+             </div>
+           )}
            {canAccess('drafter') ? (
              <SidebarItem icon={Scale} label="Drafter Contestații" active={mode === 'drafter'} onClick={() => { setMode('drafter'); setSidebarOpen(false); }} />
            ) : (
@@ -3993,6 +4033,633 @@ const App = () => {
     setCompareLoading(false);
   };
 
+  // =========================================================================
+  // MULTI-DOCUMENT ANALYSIS PAGE
+  // =========================================================================
+  const runMultiDocAnalysis = async () => {
+    if (multiDocFiles.length < 2) return;
+    setMultiDocLoading(true);
+    setMultiDocResult(null);
+    try {
+      const formData = new FormData();
+      multiDocFiles.forEach(f => formData.append('files', f));
+      formData.append('use_jurisprudence', 'true');
+      const res = await authFetch('/api/v1/multi-document/analyze', { method: 'POST', body: formData });
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).detail || `Eroare ${res.status}`);
+      setMultiDocResult(await res.json());
+    } catch (err: any) {
+      alert(`Eroare: ${err.message}`);
+    } finally {
+      setMultiDocLoading(false);
+    }
+  };
+
+  const renderMultiDocument = () => (
+    <div className="h-full flex flex-col md:flex-row bg-white">
+      <div className="w-full md:w-1/3 border-r border-slate-200 p-6 overflow-y-auto bg-slate-50/50">
+        <h2 className="text-lg font-bold text-slate-800 mb-2 flex gap-2 items-center">
+          <Files className="text-violet-600" size={20}/> Analiză Multi-Document
+        </h2>
+        <p className="text-xs text-slate-500 mb-6">Încarcă 2-5 documente din dosarul de achiziție pentru analiză unificată: red flags per document + inconsistențe între documente.</p>
+
+        <div className="space-y-4">
+          <div className="bg-slate-50 p-4 rounded-lg border border-dashed border-violet-300">
+            <label className="text-xs font-bold text-slate-500 uppercase mb-2 block">Documente dosar (2-5 fișiere)</label>
+            <input type="file" multiple accept=".pdf,.docx,.doc,.txt,.md"
+              onChange={(e) => setMultiDocFiles(Array.from(e.target.files || []))}
+              className="w-full text-xs text-slate-500 file:mr-2 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-violet-50 file:text-violet-600 hover:file:bg-violet-100" />
+          </div>
+          {multiDocFiles.length > 0 && (
+            <div className="bg-white border border-slate-200 rounded-lg p-3">
+              <p className="text-xs font-bold text-slate-500 uppercase mb-2">{multiDocFiles.length} fișiere selectate</p>
+              {multiDocFiles.map((f, i) => (
+                <div key={i} className="flex items-center justify-between py-1 text-xs text-slate-600">
+                  <span className="truncate flex-1">{f.name}</span>
+                  <span className="text-slate-400 ml-2">{(f.size / 1024).toFixed(0)} KB</span>
+                </div>
+              ))}
+            </div>
+          )}
+          <button onClick={runMultiDocAnalysis}
+            disabled={multiDocLoading || multiDocFiles.length < 2}
+            className="w-full bg-violet-600 text-white py-3 rounded-xl font-semibold hover:bg-violet-700 disabled:opacity-50 transition flex items-center justify-center gap-2 text-sm">
+            {multiDocLoading ? <><Loader2 className="w-4 h-4 animate-spin" /> Se analizează dosarul...</> : <><Files size={16} /> Analizează Dosarul</>}
+          </button>
+          {multiDocLoading && (
+            <p className="text-xs text-slate-400 text-center">Analiza poate dura 2-5 minute pentru documente mari.</p>
+          )}
+        </div>
+      </div>
+
+      <div className="w-full md:w-2/3 p-4 md:p-8 overflow-y-auto bg-white">
+        {!multiDocResult && !multiDocLoading && (
+          <div className="h-full flex items-center justify-center text-slate-400">
+            <div className="text-center">
+              <Files size={48} className="mx-auto mb-4 opacity-30" />
+              <p className="text-lg font-medium">Analiză Multi-Document</p>
+              <p className="text-sm mt-1">Încarcă minim 2 documente pentru analiză</p>
+            </div>
+          </div>
+        )}
+        {multiDocLoading && (
+          <div className="h-full flex items-center justify-center">
+            <div className="text-center">
+              <Loader2 size={40} className="animate-spin text-violet-500 mx-auto mb-4" />
+              <p className="text-slate-600 font-medium">Se analizează {multiDocFiles.length} documente...</p>
+            </div>
+          </div>
+        )}
+        {multiDocResult && (
+          <div className="max-w-3xl mx-auto space-y-6">
+            {/* Unified assessment */}
+            <div className={`rounded-2xl p-6 ${multiDocResult.unified_assessment?.risk_level === 'LOW' ? 'bg-green-50 border-2 border-green-300' : multiDocResult.unified_assessment?.risk_level === 'CRITICAL' ? 'bg-red-50 border-2 border-red-300' : 'bg-amber-50 border-2 border-amber-300'}`}>
+              <div className="flex items-center justify-between mb-2">
+                <h3 className="text-lg font-bold text-slate-800">Evaluare Unificată</h3>
+                <span className={`px-3 py-1 rounded-full text-sm font-bold ${multiDocResult.unified_assessment?.risk_level === 'LOW' ? 'bg-green-200 text-green-800' : multiDocResult.unified_assessment?.risk_level === 'CRITICAL' ? 'bg-red-200 text-red-800' : 'bg-amber-200 text-amber-800'}`}>
+                  {multiDocResult.unified_assessment?.risk_level}
+                </span>
+              </div>
+              <p className="text-sm text-slate-700">{multiDocResult.unified_assessment?.text}</p>
+              <div className="flex gap-6 mt-3 text-xs text-slate-500">
+                <span>{multiDocResult.total_flags} red flags total</span>
+                <span>{multiDocResult.critical_flags} critice</span>
+                <span>{multiDocResult.cross_issues_count} inconsistențe</span>
+              </div>
+            </div>
+
+            {/* Cross-document issues */}
+            {multiDocResult.cross_document_issues?.length > 0 && (
+              <div>
+                <h3 className="text-lg font-bold text-slate-800 mb-3">Inconsistențe între Documente</h3>
+                <div className="space-y-3">
+                  {multiDocResult.cross_document_issues.map((issue: any, i: number) => (
+                    <div key={i} className={`border rounded-xl p-4 ${issue.severitate === 'CRITICAL' ? 'border-red-200 bg-red-50/50' : issue.severitate === 'MEDIUM' ? 'border-amber-200 bg-amber-50/50' : 'border-slate-200'}`}>
+                      <div className="flex items-center gap-2 mb-2">
+                        <span className={`px-2 py-0.5 rounded text-xs font-bold ${issue.severitate === 'CRITICAL' ? 'bg-red-200 text-red-800' : 'bg-amber-200 text-amber-800'}`}>{issue.severitate}</span>
+                        <span className="text-xs text-slate-500">{issue.tip}</span>
+                      </div>
+                      <p className="text-sm text-slate-700 mb-1">{issue.descriere}</p>
+                      {issue.documente_implicate?.length > 0 && (
+                        <p className="text-xs text-slate-400">Documente: {issue.documente_implicate.join(', ')}</p>
+                      )}
+                      {issue.recomandare && (
+                        <p className="text-xs text-amber-700 mt-1 font-medium">{issue.recomandare}</p>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Per-document results */}
+            <div>
+              <h3 className="text-lg font-bold text-slate-800 mb-3">Red Flags per Document</h3>
+              <div className="space-y-4">
+                {(multiDocResult.per_document || []).map((doc: any, i: number) => (
+                  <div key={i} className="border border-slate-200 rounded-xl overflow-hidden">
+                    <div className="bg-slate-50 px-4 py-3 flex items-center justify-between">
+                      <span className="font-medium text-slate-800 text-sm">{doc.filename}</span>
+                      <div className="flex items-center gap-3 text-xs">
+                        <span className="text-slate-400">{doc.word_count} cuvinte</span>
+                        <span className={`font-bold ${doc.flag_count > 0 ? 'text-red-600' : 'text-green-600'}`}>
+                          {doc.flag_count} flags
+                        </span>
+                      </div>
+                    </div>
+                    {doc.flags?.length > 0 && (
+                      <div className="p-4 space-y-2">
+                        {doc.flags.slice(0, 5).map((flag: any, j: number) => (
+                          <div key={j} className="text-sm text-slate-700 flex items-start gap-2">
+                            <span className={`mt-0.5 w-2 h-2 rounded-full flex-shrink-0 ${flag.severity === 'CRITICAL' ? 'bg-red-500' : flag.severity === 'MEDIUM' ? 'bg-amber-500' : 'bg-slate-400'}`} />
+                            <span>{flag.issue || flag.clause?.slice(0, 200)}</span>
+                          </div>
+                        ))}
+                        {doc.flags.length > 5 && (
+                          <p className="text-xs text-slate-400">... și încă {doc.flags.length - 5} alte probleme</p>
+                        )}
+                      </div>
+                    )}
+                    {doc.error && (
+                      <p className="px-4 py-2 text-xs text-red-600">{doc.error}</p>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+
+  // =========================================================================
+  // COMPLIANCE PAGE
+  // =========================================================================
+  const runComplianceCheck = async () => {
+    if (!complianceText.trim() && !(document.getElementById('compliance-file') as HTMLInputElement)?.files?.length) return;
+    setComplianceLoading(true);
+    setComplianceResult(null);
+    try {
+      const formData = new FormData();
+      const fileInput = document.getElementById('compliance-file') as HTMLInputElement;
+      if (fileInput?.files?.length) {
+        formData.append('file', fileInput.files[0]);
+      } else {
+        formData.append('text', complianceText);
+      }
+      if (complianceProcedura) formData.append('tip_procedura', complianceProcedura);
+      formData.append('tip_document', 'documentație achiziție');
+
+      const res = await authFetch('/api/v1/compliance/check', { method: 'POST', body: formData });
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).detail || `Eroare ${res.status}`);
+      setComplianceResult(await res.json());
+    } catch (err: any) {
+      alert(`Eroare: ${err.message}`);
+    } finally {
+      setComplianceLoading(false);
+    }
+  };
+
+  const renderCompliance = () => {
+    if (analyticsFilterOptions.proceduri.length === 0) loadAnalyticsFilters();
+    return (
+      <div className="h-full flex flex-col md:flex-row bg-white">
+        {/* Left panel */}
+        <div className="w-full md:w-1/3 border-r border-slate-200 p-6 overflow-y-auto bg-slate-50/50">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-lg font-bold text-slate-800 flex gap-2 items-center">
+              <ClipboardCheck className="text-emerald-600" size={20}/> Verificator Conformitate
+            </h2>
+          </div>
+          <p className="text-xs text-slate-500 mb-6">Încarcă documentația de achiziție și AI verifică conformitatea cu legislația aplicabilă.</p>
+
+          <div className="space-y-4">
+            <div className="bg-slate-50 p-4 rounded-lg border border-dashed border-slate-300">
+              <label className="text-xs font-bold text-slate-500 uppercase mb-2 block">Încarcă document (.pdf, .docx, .txt)</label>
+              <input id="compliance-file" type="file" accept=".pdf,.docx,.doc,.txt,.md"
+                onChange={() => setComplianceText('')}
+                className="w-full text-xs text-slate-500 file:mr-2 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-emerald-50 file:text-emerald-600 hover:file:bg-emerald-100" />
+            </div>
+            <div className="text-center text-xs text-slate-400">— sau —</div>
+            <div>
+              <label className="block text-xs font-bold text-slate-600 uppercase mb-1">Textul documentului</label>
+              <textarea rows={8} value={complianceText}
+                onChange={e => setComplianceText(e.target.value)}
+                placeholder="Lipește textul documentației de achiziție aici..."
+                className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm resize-none focus:ring-2 focus:ring-emerald-500/40 outline-none" />
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-slate-600 uppercase mb-1">Tip procedură</label>
+              <select value={complianceProcedura}
+                onChange={e => setComplianceProcedura(e.target.value)}
+                className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm bg-white">
+                <option value="">— Autodetect —</option>
+                {analyticsFilterOptions.proceduri.map((p: any) => (
+                  <option key={p.name} value={p.name}>{p.name}</option>
+                ))}
+              </select>
+            </div>
+
+            <button onClick={runComplianceCheck}
+              disabled={complianceLoading || (!complianceText.trim() && !(document.getElementById('compliance-file') as HTMLInputElement)?.files?.length)}
+              className="w-full bg-emerald-600 text-white py-3 rounded-xl font-semibold hover:bg-emerald-700 disabled:opacity-50 transition flex items-center justify-center gap-2 text-sm">
+              {complianceLoading ? <><Loader2 className="w-4 h-4 animate-spin" /> Se verifică conformitatea...</> : <><ClipboardCheck size={16} /> Verifică Conformitate</>}
+            </button>
+          </div>
+        </div>
+
+        {/* Right panel — results */}
+        <div className="w-full md:w-2/3 p-4 md:p-8 overflow-y-auto bg-white">
+          {!complianceResult && !complianceLoading && (
+            <div className="h-full flex items-center justify-center text-slate-400">
+              <div className="text-center">
+                <ClipboardCheck size={48} className="mx-auto mb-4 opacity-30" />
+                <p className="text-lg font-medium">Verificator Conformitate</p>
+                <p className="text-sm mt-1">Încarcă un document pentru verificare</p>
+              </div>
+            </div>
+          )}
+          {complianceLoading && (
+            <div className="h-full flex items-center justify-center">
+              <div className="text-center">
+                <Loader2 size={40} className="animate-spin text-emerald-500 mx-auto mb-4" />
+                <p className="text-slate-600 font-medium">Se verifică conformitatea cu legislația...</p>
+                <p className="text-xs text-slate-400 mt-1">Poate dura 30-90 secunde</p>
+              </div>
+            </div>
+          )}
+          {complianceResult && (
+            <div className="max-w-3xl mx-auto space-y-6">
+              {/* Score header */}
+              <div className={`rounded-2xl p-6 text-center ${(complianceResult.score ?? 0) >= 80 ? 'bg-green-50 border-2 border-green-300' : (complianceResult.score ?? 0) >= 50 ? 'bg-amber-50 border-2 border-amber-300' : 'bg-red-50 border-2 border-red-300'}`}>
+                <div className={`text-4xl font-black mb-2 ${(complianceResult.score ?? 0) >= 80 ? 'text-green-700' : (complianceResult.score ?? 0) >= 50 ? 'text-amber-700' : 'text-red-700'}`}>
+                  {complianceResult.score}%
+                </div>
+                <p className="text-sm text-slate-600">Scor conformitate</p>
+                <div className="flex justify-center gap-6 mt-3 text-sm">
+                  <span className="text-green-700 font-semibold">{complianceResult.conform} conforme</span>
+                  <span className="text-red-700 font-semibold">{complianceResult.neconform} neconforme</span>
+                  <span className="text-slate-500">{complianceResult.neclar} neclar</span>
+                </div>
+              </div>
+
+              {/* Summary */}
+              {complianceResult.summary && (
+                <div className="bg-slate-50 border border-slate-200 rounded-xl p-4">
+                  <div className="prose prose-sm max-w-none text-slate-700" dangerouslySetInnerHTML={{ __html: formatMarkdown(complianceResult.summary) }} />
+                </div>
+              )}
+
+              {/* Compliance items */}
+              <div>
+                <h3 className="text-lg font-bold text-slate-800 mb-3">Matrice Conformitate</h3>
+                <div className="space-y-3">
+                  {(complianceResult.compliance_items || []).map((item: any, i: number) => (
+                    <div key={i} className={`border rounded-xl p-4 ${item.verdict === 'CONFORM' ? 'border-green-200 bg-green-50/50' : item.verdict === 'NECONFORM' ? 'border-red-200 bg-red-50/50' : 'border-slate-200 bg-slate-50/50'}`}>
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="font-mono text-sm font-bold text-slate-800">{item.citare}</span>
+                        <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold ${item.verdict === 'CONFORM' ? 'bg-green-200 text-green-800' : item.verdict === 'NECONFORM' ? 'bg-red-200 text-red-800' : 'bg-slate-200 text-slate-600'}`}>
+                          {item.verdict}
+                        </span>
+                      </div>
+                      <p className="text-xs text-slate-500 mb-1">{item.act}</p>
+                      <p className="text-sm text-slate-700">{item.explicatie}</p>
+                      {item.recomandare && (
+                        <div className="mt-2 p-2 bg-amber-50 rounded-lg border border-amber-200">
+                          <p className="text-xs font-bold text-amber-700">Recomandare:</p>
+                          <p className="text-xs text-amber-800">{item.recomandare}</p>
+                        </div>
+                      )}
+                      {item.citat_document && (
+                        <div className="mt-2 text-xs text-slate-500 italic border-l-2 border-slate-300 pl-2">
+                          &ldquo;{item.citat_document}&rdquo;
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  };
+
+  // =========================================================================
+  // STRATEGY PAGE
+  // =========================================================================
+  const extractEntitiesFromFile = async (file: File, target: 'strategy' | 'compliance') => {
+    const formData = new FormData();
+    formData.append('file', file);
+    try {
+      const res = await authFetch('/api/v1/documents/extract-entities', { method: 'POST', body: formData });
+      if (!res.ok) return;
+      const entities = await res.json();
+      if (target === 'strategy') {
+        setStrategyInput(p => ({
+          ...p,
+          cod_cpv: entities.cod_cpv || p.cod_cpv,
+          tip_procedura: entities.tip_procedura || p.tip_procedura,
+          tip_contestatie: entities.tip_contract === 'lucrări' || entities.tip_contract === 'servicii' || entities.tip_contract === 'furnizare' ? p.tip_contestatie : p.tip_contestatie,
+          valoare_estimata: entities.valoare_estimata ? String(entities.valoare_estimata) : p.valoare_estimata,
+          description: entities.obiect_contract ? (p.description ? p.description + '\n\nObiect contract: ' + entities.obiect_contract : 'Obiect contract: ' + entities.obiect_contract) : p.description,
+        }));
+      }
+    } catch { /* silent */ }
+  };
+
+  const runStrategy = async () => {
+    if (strategyInput.coduri_critici.length === 0 || !strategyInput.description.trim()) return;
+    setStrategyLoading(true);
+    setStrategyResult(null);
+    try {
+      const body: any = {
+        description: strategyInput.description,
+        coduri_critici: strategyInput.coduri_critici,
+      };
+      if (strategyInput.cod_cpv) body.cod_cpv = strategyInput.cod_cpv;
+      if (strategyInput.complet) body.complet = strategyInput.complet;
+      if (strategyInput.tip_procedura) body.tip_procedura = strategyInput.tip_procedura;
+      if (strategyInput.tip_contestatie) body.tip_contestatie = strategyInput.tip_contestatie;
+      if (strategyInput.valoare_estimata) body.valoare_estimata = parseFloat(strategyInput.valoare_estimata);
+      const res = await authFetch('/api/v1/strategy/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).detail || `Eroare ${res.status}`);
+      setStrategyResult(await res.json());
+    } catch (err: any) {
+      alert(`Eroare: ${err.message}`);
+    } finally {
+      setStrategyLoading(false);
+    }
+  };
+
+  const renderStrategy = () => {
+    if (analyticsFilterOptions.critici.length === 0) loadAnalyticsFilters();
+    return (
+      <div className="h-full flex flex-col md:flex-row bg-white">
+        {/* Left panel — input */}
+        <div className="w-full md:w-1/3 border-r border-slate-200 p-6 overflow-y-auto bg-slate-50/50">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-lg font-bold text-slate-800 flex gap-2 items-center">
+              <Target className="text-indigo-600" size={20}/> Strategie Contestare
+            </h2>
+            <button onClick={() => loadHistory('contestatie')} className="text-xs bg-slate-50 text-slate-500 px-2.5 py-1 rounded-lg font-medium hover:bg-slate-100 transition flex items-center gap-1" title="Istoric"><Bookmark size={12} /> Istoric</button>
+          </div>
+          <p className="text-xs text-slate-500 mb-6">AI generează o strategie completă de contestare cu șanse de succes per critică, temei legal și jurisprudență.</p>
+
+          <div className="space-y-4">
+            {/* Description */}
+            <div>
+              <label className="block text-xs font-bold text-slate-600 uppercase mb-1">Descrierea situației *</label>
+              <textarea rows={4} value={strategyInput.description}
+                onChange={e => setStrategyInput(p => ({ ...p, description: e.target.value }))}
+                placeholder="Descrie situația: ce s-a întâmplat, de ce vrei să contești, ce clauze/decizii sunt problematice..."
+                className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm resize-none focus:ring-2 focus:ring-indigo-500/40 outline-none" />
+              <label className="mt-1 inline-flex items-center gap-1 text-xs text-indigo-600 hover:text-indigo-800 cursor-pointer font-medium">
+                <FolderInput size={12} />
+                <span>Auto-completează din document</span>
+                <input type="file" accept=".pdf,.docx,.txt,.md" className="hidden"
+                  onChange={e => { if (e.target.files?.[0]) extractEntitiesFromFile(e.target.files[0], 'strategy'); }} />
+              </label>
+            </div>
+
+            {/* Criticism codes multi-select */}
+            <div>
+              <label className="block text-xs font-bold text-slate-600 uppercase mb-1">Coduri critică *</label>
+              {strategyInput.coduri_critici.length > 0 && (
+                <div className="flex flex-wrap gap-1 mb-2">
+                  {strategyInput.coduri_critici.map(code => (
+                    <span key={code} className="inline-flex items-center gap-1 px-2 py-0.5 bg-indigo-100 text-indigo-800 rounded-full text-xs font-medium">
+                      {code}
+                      <button onClick={() => setStrategyInput(p => ({ ...p, coduri_critici: p.coduri_critici.filter(c => c !== code) }))} className="hover:text-red-600">&times;</button>
+                    </span>
+                  ))}
+                </div>
+              )}
+              <div className="grid grid-cols-1 gap-0.5 max-h-36 overflow-y-auto border border-slate-200 rounded-lg p-2 bg-white">
+                {analyticsFilterOptions.critici.map((c: any) => {
+                  const selected = strategyInput.coduri_critici.includes(c.code);
+                  const legend = (CRITIQUE_LEGEND as any)[c.code] || c.code;
+                  return (
+                    <label key={c.code} className={`flex items-center gap-2 px-2 py-1 rounded cursor-pointer hover:bg-slate-50 text-xs ${selected ? 'bg-indigo-50' : ''}`}>
+                      <input type="checkbox" checked={selected} onChange={() => {
+                        setStrategyInput(p => ({
+                          ...p,
+                          coduri_critici: selected ? p.coduri_critici.filter(x => x !== c.code) : [...p.coduri_critici, c.code],
+                        }));
+                      }} className="rounded border-slate-300" />
+                      <span className="font-mono font-bold text-slate-700 w-7">{c.code}</span>
+                      <span className="text-slate-600 flex-1 truncate">{(legend.split('—')[0] || legend).trim()}</span>
+                      <span className="text-slate-400">({c.count})</span>
+                    </label>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Dropdowns row */}
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-bold text-slate-600 uppercase mb-1">Complet CNSC</label>
+                <select value={strategyInput.complet}
+                  onChange={e => setStrategyInput(p => ({ ...p, complet: e.target.value }))}
+                  className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm bg-white">
+                  <option value="">— Necunoscut —</option>
+                  {analyticsFilterOptions.complete.map((c: any) => (
+                    <option key={c.name} value={c.name}>{c.name} ({c.count})</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-600 uppercase mb-1">Tip contestație</label>
+                <select value={strategyInput.tip_contestatie}
+                  onChange={e => setStrategyInput(p => ({ ...p, tip_contestatie: e.target.value }))}
+                  className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm bg-white">
+                  <option value="">— Selectează —</option>
+                  <option value="documentatie">Documentație</option>
+                  <option value="rezultat">Rezultat</option>
+                </select>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-bold text-slate-600 uppercase mb-1">Tip procedură</label>
+                <select value={strategyInput.tip_procedura}
+                  onChange={e => setStrategyInput(p => ({ ...p, tip_procedura: e.target.value }))}
+                  className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm bg-white">
+                  <option value="">— Toate —</option>
+                  {analyticsFilterOptions.proceduri.map((p: any) => (
+                    <option key={p.name} value={p.name}>{p.name}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-600 uppercase mb-1">Cod CPV</label>
+                <input type="text" value={strategyInput.cod_cpv}
+                  onChange={e => setStrategyInput(p => ({ ...p, cod_cpv: e.target.value }))}
+                  placeholder="ex: 45310000-3" className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm" />
+              </div>
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-slate-600 uppercase mb-1">Valoare estimată (RON)</label>
+              <input type="text" value={strategyInput.valoare_estimata}
+                onChange={e => setStrategyInput(p => ({ ...p, valoare_estimata: e.target.value }))}
+                placeholder="ex: 500000" className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm" />
+            </div>
+
+            <button onClick={runStrategy}
+              disabled={strategyLoading || strategyInput.coduri_critici.length === 0 || !strategyInput.description.trim()}
+              className="w-full bg-indigo-600 text-white py-3 rounded-xl font-semibold hover:bg-indigo-700 disabled:opacity-50 transition flex items-center justify-center gap-2 text-sm">
+              {strategyLoading ? <><Loader2 className="w-4 h-4 animate-spin" /> Se generează strategia...</> : <><Target size={16} /> Generează Strategie</>}
+            </button>
+          </div>
+        </div>
+
+        {/* Right panel — results */}
+        <div className="w-full md:w-2/3 p-4 md:p-8 overflow-y-auto bg-white">
+          {!strategyResult && !strategyLoading && (
+            <div className="h-full flex items-center justify-center text-slate-400">
+              <div className="text-center">
+                <Target size={48} className="mx-auto mb-4 opacity-30" />
+                <p className="text-lg font-medium">Generare Strategie Contestare</p>
+                <p className="text-sm mt-1">Completează formularul și apasă Generează</p>
+              </div>
+            </div>
+          )}
+          {strategyLoading && (
+            <div className="h-full flex items-center justify-center">
+              <div className="text-center">
+                <Loader2 size={40} className="animate-spin text-indigo-500 mx-auto mb-4" />
+                <p className="text-slate-600 font-medium">Se analizează statistici, legislație și jurisprudență...</p>
+                <p className="text-xs text-slate-400 mt-1">Poate dura 30-60 secunde</p>
+              </div>
+            </div>
+          )}
+          {strategyResult && (
+            <div className="max-w-3xl mx-auto space-y-6">
+              {/* Overall assessment */}
+              <div className={`rounded-2xl p-6 ${strategyResult.overall_assessment?.recommendation === 'ADMIS' ? 'bg-green-50 border-2 border-green-300' : 'bg-red-50 border-2 border-red-300'}`}>
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="text-lg font-bold text-slate-800">Evaluare Generală</h3>
+                  <div className={`text-2xl font-black ${strategyResult.overall_assessment?.recommendation === 'ADMIS' ? 'text-green-700' : 'text-red-700'}`}>
+                    {strategyResult.overall_assessment?.overall_probability}% {strategyResult.overall_assessment?.recommendation}
+                  </div>
+                </div>
+                <div className="prose prose-sm max-w-none" dangerouslySetInnerHTML={{ __html: formatMarkdown(strategyResult.overall_assessment?.text || '') }} />
+              </div>
+
+              {/* Per-criticism recommendations */}
+              <div>
+                <h3 className="text-lg font-bold text-slate-800 mb-3">Recomandări per Critică</h3>
+                <div className="space-y-4">
+                  {(strategyResult.per_criticism || []).map((rec: any, i: number) => (
+                    <div key={i} className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm">
+                      <div className="flex items-center justify-between mb-3">
+                        <div className="flex items-center gap-2">
+                          <span className="font-mono font-black text-indigo-700 text-lg">{rec.code}</span>
+                          <span className="text-sm text-slate-500">{rec.label}</span>
+                        </div>
+                        {rec.success_probability != null && (
+                          <span className={`px-3 py-1 rounded-full text-sm font-bold ${rec.success_probability >= 60 ? 'bg-green-100 text-green-800' : rec.success_probability >= 40 ? 'bg-amber-100 text-amber-800' : 'bg-red-100 text-red-800'}`}>
+                            {rec.success_probability}%
+                          </span>
+                        )}
+                      </div>
+                      {rec.recommendation && (
+                        <p className="text-sm text-slate-700 mb-3 font-medium">{rec.recommendation}</p>
+                      )}
+                      {rec.arguments?.length > 0 && (
+                        <div className="mb-3">
+                          <p className="text-xs font-bold text-slate-500 uppercase mb-1">Argumente cheie</p>
+                          <ul className="text-sm text-slate-700 space-y-1">
+                            {rec.arguments.map((arg: string, j: number) => (
+                              <li key={j} className="flex gap-2"><span className="text-green-500 mt-0.5">&#10003;</span>{arg}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                      {rec.legal_basis?.length > 0 && (
+                        <div className="mb-3">
+                          <p className="text-xs font-bold text-slate-500 uppercase mb-1">Temei legal</p>
+                          <div className="flex flex-wrap gap-1">
+                            {rec.legal_basis.map((ref: string, j: number) => (
+                              <span key={j} className="text-xs bg-blue-50 text-blue-700 px-2 py-0.5 rounded border border-blue-200">{ref}</span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      {rec.useful_precedents?.length > 0 && (
+                        <div className="mb-3">
+                          <p className="text-xs font-bold text-slate-500 uppercase mb-1">Jurisprudență utilă</p>
+                          <div className="space-y-1">
+                            {rec.useful_precedents.map((prec: string, j: number) => (
+                              <p key={j} className="text-xs text-slate-600">{prec}</p>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      {rec.risks?.length > 0 && (
+                        <div>
+                          <p className="text-xs font-bold text-slate-500 uppercase mb-1">Riscuri</p>
+                          <ul className="text-xs text-red-700 space-y-0.5">
+                            {rec.risks.map((risk: string, j: number) => (
+                              <li key={j} className="flex gap-1"><span>&#9888;</span>{risk}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                      {/* Stats badge */}
+                      {rec.stats?.total > 0 && (
+                        <div className="mt-3 pt-3 border-t border-slate-100 text-xs text-slate-400">
+                          Bazat pe {rec.stats.total} cazuri judecate pe fond | Contestator câștigă {rec.stats.win_rate}%
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Precedents */}
+              {strategyResult.precedents?.length > 0 && (
+                <div className="bg-blue-50 border border-blue-200 rounded-xl p-5">
+                  <h3 className="font-semibold text-blue-800 mb-3">Jurisprudență CNSC Relevantă</h3>
+                  <div className="flex flex-wrap gap-2">
+                    {strategyResult.precedents.map((p: any, i: number) => (
+                      <span key={i} onClick={() => openDecision(p.bo_reference)}
+                        className="text-xs bg-white text-blue-700 px-3 py-1.5 rounded-lg border border-blue-200 font-mono cursor-pointer hover:bg-blue-100 transition">
+                        {p.bo_reference} ({p.solutie}) — {p.cod_critica} ({p.castigator})
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Legal basis */}
+              {strategyResult.legal_basis?.length > 0 && (
+                <div className="bg-amber-50 border border-amber-200 rounded-xl p-5">
+                  <h3 className="font-semibold text-amber-800 mb-3">Temei Legal Utilizat</h3>
+                  <div className="space-y-2">
+                    {strategyResult.legal_basis.map((ref: any, i: number) => (
+                      <div key={i} className="text-sm">
+                        <span className="font-mono font-bold text-amber-800">{ref.citare}</span>
+                        <span className="text-amber-600 ml-1">({ref.act})</span>
+                        <p className="text-xs text-amber-700 mt-0.5">{ref.text?.slice(0, 200)}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  };
+
   const renderAnalytics = () => {
     // Load panels on first visit
     if (panelsList.length === 0 && !panelsLoading) loadPanelsList();
@@ -4865,6 +5532,35 @@ const App = () => {
     );
   };
 
+  const MemoryList = () => {
+    const [items, setItems] = useState<any[]>([]);
+    const [loaded, setLoaded] = useState(false);
+    useEffect(() => {
+      if (loaded) return;
+      authFetch('/api/v1/chat/memory').then(r => r.ok ? r.json() : []).then(data => { setItems(data); setLoaded(true); }).catch(() => setLoaded(true));
+    }, [loaded]);
+    if (!loaded) return <p className="text-xs text-slate-400">Se încarcă...</p>;
+    if (items.length === 0) return <p className="text-xs text-slate-400 italic">Nicio informație memorată încă. AI-ul va învăța din conversațiile tale.</p>;
+    return (
+      <div className="space-y-1.5 max-h-40 overflow-y-auto">
+        {items.map((item: any) => (
+          <div key={item.id} className="flex items-center justify-between bg-slate-50 rounded-lg px-3 py-1.5 text-xs">
+            <div className="flex items-center gap-2 flex-1 min-w-0">
+              <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${item.fact_type === 'preference' ? 'bg-blue-100 text-blue-700' : item.fact_type === 'expertise' ? 'bg-green-100 text-green-700' : item.fact_type === 'case_detail' ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-600'}`}>
+                {item.fact_type}
+              </span>
+              <span className="text-slate-700 truncate">{item.content}</span>
+            </div>
+            <button onClick={async () => {
+              await authFetch(`/api/v1/chat/memory/${item.id}`, { method: 'DELETE' });
+              setItems(prev => prev.filter(i => i.id !== item.id));
+            }} className="text-slate-400 hover:text-red-600 ml-2 flex-shrink-0">&times;</button>
+          </div>
+        ))}
+      </div>
+    );
+  };
+
   const renderProfile = () => {
     const user = authState.user;
     if (!user) return null;
@@ -5087,6 +5783,22 @@ const App = () => {
             <button onClick={handleChangePassword} disabled={profileLoading || !profileCurrentPassword || !profileNewPassword} className="w-full mt-4 py-2.5 rounded-lg bg-slate-800 text-white font-medium text-sm hover:bg-slate-900 disabled:opacity-50 transition-colors">
               {profileLoading ? 'Se schimbă...' : 'Schimbă parola'}
             </button>
+          </div>
+
+          {/* Persistent Memory Section */}
+          <div className="bg-white border border-slate-200 rounded-xl p-6 mb-6">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-sm font-bold text-slate-700 flex items-center gap-2">
+                <Database size={16} className="text-blue-500" /> Memorie Persistentă AI
+              </h3>
+              <button onClick={async () => {
+                if (!confirm('Ștergi toată memoria? AI-ul nu va mai reține informațiile despre tine.')) return;
+                await authFetch('/api/v1/chat/memory', { method: 'DELETE' });
+                setProfileMessage({ type: 'success', text: 'Memoria a fost ștearsă' });
+              }} className="text-xs text-red-600 hover:text-red-800 font-medium">Șterge tot</button>
+            </div>
+            <p className="text-xs text-slate-500 mb-3">AI-ul reține automat informații utile din conversațiile tale (domeniu activitate, cazuri în curs, preferințe).</p>
+            <MemoryList />
           </div>
 
           {/* Messages */}
@@ -6391,6 +7103,9 @@ const App = () => {
               </div>
            </div>
         )}
+        {mode === 'strategy' && renderStrategy()}
+        {mode === 'compliance' && renderCompliance()}
+        {mode === 'multi_document' && renderMultiDocument()}
         {mode === 'analytics' && renderAnalytics()}
         {mode === 'training' && renderTraining()}
         {mode === 'settings' && renderSettings()}
