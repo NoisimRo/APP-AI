@@ -84,11 +84,13 @@ class MultiDocumentAnalyzer:
                     self._analyze_single_doc(analyzer, session, doc, use_jurisprudence)
                 )
             else:
-                per_doc_tasks.append(asyncio.coroutine(lambda d=doc: {
-                    "filename": d["filename"],
-                    "flags": [],
-                    "error": d.get("error", "Document gol"),
-                })())
+                async def _empty_result(d=doc):
+                    return {
+                        "filename": d["filename"],
+                        "flags": [],
+                        "error": d.get("error", "Document gol"),
+                    }
+                per_doc_tasks.append(_empty_result())
 
         per_doc_results = await asyncio.gather(*per_doc_tasks, return_exceptions=True)
 

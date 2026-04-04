@@ -635,6 +635,7 @@ const App = () => {
 
   // Compliance Checker
   const [complianceText, setComplianceText] = useState('');
+  const [complianceFile, setComplianceFile] = useState<File | null>(null);
   const [complianceResult, setComplianceResult] = useState<any>(null);
   const [complianceLoading, setComplianceLoading] = useState(false);
   const [complianceProcedura, setComplianceProcedura] = useState('');
@@ -4196,14 +4197,13 @@ const App = () => {
   // COMPLIANCE PAGE
   // =========================================================================
   const runComplianceCheck = async () => {
-    if (!complianceText.trim() && !(document.getElementById('compliance-file') as HTMLInputElement)?.files?.length) return;
+    if (!complianceText.trim() && !complianceFile) return;
     setComplianceLoading(true);
     setComplianceResult(null);
     try {
       const formData = new FormData();
-      const fileInput = document.getElementById('compliance-file') as HTMLInputElement;
-      if (fileInput?.files?.length) {
-        formData.append('file', fileInput.files[0]);
+      if (complianceFile) {
+        formData.append('file', complianceFile);
       } else {
         formData.append('text', complianceText);
       }
@@ -4236,8 +4236,8 @@ const App = () => {
           <div className="space-y-4">
             <div className="bg-slate-50 p-4 rounded-lg border border-dashed border-slate-300">
               <label className="text-xs font-bold text-slate-500 uppercase mb-2 block">Încarcă document (.pdf, .docx, .txt)</label>
-              <input id="compliance-file" type="file" accept=".pdf,.docx,.doc,.txt,.md"
-                onChange={() => setComplianceText('')}
+              <input type="file" accept=".pdf,.docx,.doc,.txt,.md"
+                onChange={(e) => { setComplianceFile(e.target.files?.[0] || null); setComplianceText(''); }}
                 className="w-full text-xs text-slate-500 file:mr-2 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-emerald-50 file:text-emerald-600 hover:file:bg-emerald-100" />
             </div>
             <div className="text-center text-xs text-slate-400">— sau —</div>
@@ -4261,7 +4261,7 @@ const App = () => {
             </div>
 
             <button onClick={runComplianceCheck}
-              disabled={complianceLoading || (!complianceText.trim() && !(document.getElementById('compliance-file') as HTMLInputElement)?.files?.length)}
+              disabled={complianceLoading || (!complianceText.trim() && !complianceFile)}
               className="w-full bg-emerald-600 text-white py-3 rounded-xl font-semibold hover:bg-emerald-700 disabled:opacity-50 transition flex items-center justify-center gap-2 text-sm">
               {complianceLoading ? <><Loader2 className="w-4 h-4 animate-spin" /> Se verifică conformitatea...</> : <><ClipboardCheck size={16} /> Verifică Conformitate</>}
             </button>
@@ -4541,6 +4541,22 @@ const App = () => {
           )}
           {strategyResult && (
             <div className="max-w-3xl mx-auto space-y-6">
+              {/* Toolbar */}
+              <div className="flex justify-end gap-3">
+                <button onClick={() => {
+                  const fullText = (strategyResult.overall_assessment?.text || '') + '\n\n' +
+                    (strategyResult.per_criticism || []).map((r: any) =>
+                      `## ${r.code} — ${r.label}\n${r.recommendation || ''}\n\nArgumente: ${(r.arguments || []).join('; ')}\nTemei legal: ${(r.legal_basis || []).join('; ')}\nProbabilitate: ${r.success_probability}%`
+                    ).join('\n\n');
+                  const refs = (strategyResult.precedents || []).map((p: any) => p.bo_reference);
+                  saveDocument('strategie', strategyInput.description.slice(0, 200) || 'Strategie contestare', fullText, refs, {
+                    coduri_critici: strategyInput.coduri_critici,
+                    cod_cpv: strategyInput.cod_cpv,
+                    complet: strategyInput.complet,
+                    probability: strategyResult.overall_assessment?.overall_probability,
+                  });
+                }} className="text-sm text-green-600 font-medium hover:underline flex items-center gap-1"><Save size={12} /> Salvează</button>
+              </div>
               {/* Overall assessment */}
               <div className={`rounded-2xl p-6 ${strategyResult.overall_assessment?.recommendation === 'ADMIS' ? 'bg-green-50 border-2 border-green-300' : 'bg-red-50 border-2 border-red-300'}`}>
                 <div className="flex items-center justify-between mb-3">
