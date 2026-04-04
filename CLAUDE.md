@@ -106,6 +106,14 @@ DATABASE_URL="postgresql+asyncpg://..." python scripts/generate_embeddings.py
 | `backend/app/api/v1/auth.py` | Auth API (register, login, refresh, me, change-password) |
 | `backend/app/api/v1/users.py` | Admin user management CRUD |
 | `scripts/create_admin.py` | Bootstrap admin user script |
+| `backend/app/services/strategy_generator.py` | Strategy Generator: statistici + RAG + LLM → strategie contestare |
+| `backend/app/api/v1/strategy.py` | Strategy API endpoint (POST /generate) |
+| `backend/app/services/compliance_checker.py` | Compliance Checker: verificare doc vs legislație (two-pass) |
+| `backend/app/api/v1/compliance.py` | Compliance API endpoint (POST /check, accepts file/text) |
+| `backend/app/services/multi_document_analyzer.py` | Multi-Document Analyzer: red flags + cross-doc consistency |
+| `backend/app/api/v1/multi_document.py` | Multi-Document API endpoint (POST /analyze, 2-5 files) |
+| `backend/app/services/entity_extractor.py` | NER: extragere CPV, procedură, valoare din documente |
+| `backend/app/api/v1/analytics.py` | Analytics API (panel profiles, predictor, compare) |
 
 ## Code Conventions
 
@@ -147,7 +155,7 @@ DATABASE_URL="postgresql+asyncpg://..." python scripts/generate_embeddings.py
 - **History:** Started at 768 (text-embedding-004 convention) → tried 3072 (native) but hit pgvector HNSW limit → settled on 2000.
 - After dimension changes, regenerate embeddings: `python scripts/generate_embeddings.py --force`
 
-### Key Tables (14 în producție)
+### Key Tables (15 în producție)
 
 | Table | Purpose | RAG? |
 |-------|---------|------|
@@ -160,6 +168,7 @@ DATABASE_URL="postgresql+asyncpg://..." python scripts/generate_embeddings.py
 | `llm_settings` | LLM provider config (single-row: active provider, model, encrypted API keys for Gemini/Anthropic/OpenAI/Groq/OpenRouter) | No |
 | `search_scopes` | Saved filter presets for RAG pre-filtering (name, JSONB filters, cached decision_count) | No (pre-filter) |
 | `users` | Conturi utilizatori cu JWT auth (password_hash, roluri: admin, registered, paid_basic/pro/enterprise) | No |
+| `user_context` | Memorie persistentă AI per utilizator (fapte, preferințe, expertiză — extrase din conversații) | No |
 | `conversatii` | Conversații chat salvate (titlu, nr mesaje, scope_id, user_id FK) | No |
 | `mesaje_conversatie` | Mesajele individuale din conversații (rol, conținut, citations, ordine) | No |
 | `documente_generate` | Documente generate salvate: contestații, clarificări, RAG memo (tip_document, conținut, referințe) | No |
@@ -467,14 +476,14 @@ Toate deciziile CNSC au datele părților anonimizate (`autoritate_contractanta`
 
 ### Funcționalități Aprobate (19) — 6 Sprinturi
 
-| Sprint | Funcționalități | Temă |
-|--------|----------------|------|
-| **1 — Foundation** | Redis Rate Limiting (6.2), Redis Cache (6.1), Deep Health Check (6.5), DB Pool Tuning (6.6) | Infrastructură |
-| **2 — Intelligence** | Profil Complet CNSC (1.2), Predictor Rezultat (1.1), Analiză Comparativă (1.4) | Analytics |
-| **3 — AI** | Strategie Contestare (4.2), Verificator Conformitate (4.5), Multi-Document (4.1), NER Entități (4.3), Memorie Persistentă (4.4) | AI Avansat |
-| **4 — Workflow** | Dosar Digital (2.2), Alerte Decizii (2.3), Comentarii Documente (3.3) | Flux de lucru |
-| **5 — Data Moat** | Import Curtea de Apel (5.1), Hartă Jurisprudențială (1.5) | Date |
-| **6 — UX** | Frontend Modular (8.1), Dark Mode (8.4) | Experiență |
+| Sprint | Funcționalități | Temă | Status |
+|--------|----------------|------|--------|
+| **1 — Foundation** | Redis Rate Limiting (6.2), Redis Cache (6.1), Deep Health Check (6.5), DB Pool Tuning (6.6) | Infrastructură | ✅ DONE |
+| **2 — Intelligence** | Profil Complet CNSC (1.2), Predictor Rezultat (1.1), Analiză Comparativă (1.4) | Analytics | ✅ DONE |
+| **3 — AI** | Strategie Contestare (4.2), Verificator Conformitate (4.5), Multi-Document (4.1), NER Entități (4.3), Memorie Persistentă (4.4) | AI Avansat | ✅ DONE |
+| **4 — Workflow** | Dosar Digital (2.2), Alerte Decizii (2.3), Comentarii Documente (3.3) | Flux de lucru | |
+| **5 — Data Moat** | Import Curtea de Apel (5.1), Hartă Jurisprudențială (1.5) | Date | |
+| **6 — UX** | Frontend Modular (8.1), Dark Mode (8.4) | Experiență | |
 
 ### Funcționalități Amânate (15)
 

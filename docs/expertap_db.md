@@ -16,8 +16,9 @@
  public | search_scopes            | table | expertap | permanent   | heap          | 8192 bytes |
  public | spete_anap               | table | expertap | permanent   | heap          | 8192 bytes |
  public | training_materials       | table | expertap | permanent   | heap          | 8192 bytes |
+ public | user_context             | table | expertap | permanent   | heap          | 8192 bytes |
  public | users                    | table | expertap | permanent   | heap          | 8192 bytes |
-(14 rows)
+(15 rows)
 
 
 # \d decizii_cnsc
@@ -251,6 +252,27 @@ Referenced by:
     TABLE "documente_generate" CONSTRAINT "documente_generate_user_id_fkey" FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
     TABLE "red_flags_salvate" CONSTRAINT "red_flags_salvate_user_id_fkey" FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
     TABLE "training_materials" CONSTRAINT "training_materials_user_id_fkey" FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    TABLE "user_context" CONSTRAINT "user_context_user_id_fkey" FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+
+
+# \d user_context
+                            Table "public.user_context"
+     Column     |            Type             | Collation | Nullable |       Default
+----------------+-----------------------------+-----------+----------+--------------------
+ id             | uuid                        |           | not null | gen_random_uuid()
+ user_id        | uuid                        |           | not null |
+ fact_type      | character varying(50)       |           | not null | 'general'::character varying
+ content        | text                        |           | not null |
+ source         | character varying(50)       |           |          |
+ importance     | integer                     |           | not null | 5
+ active         | boolean                     |           | not null | true
+ created_at     | timestamp without time zone |           | not null | now()
+ updated_at     | timestamp without time zone |           | not null | now()
+Indexes:
+    "user_context_pkey" PRIMARY KEY, btree (id)
+    "idx_user_context_user_id" btree (user_id)
+Foreign-key constraints:
+    "user_context_user_id_fkey" FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 
 
 # \d conversatii
@@ -393,7 +415,7 @@ Indexes:
 
 ---
 
-# Ultima sincronizare cu producția: 2026-04-02
+# Ultima sincronizare cu producția: 2026-04-04
 
 # Changelog Schema Producție
 
@@ -435,3 +457,4 @@ Indexes:
 | 2026-03-21 | `CREATE INDEX ix_decizii_domeniu ON decizii_cnsc (domeniu_legislativ);` | Utilizator | DA |
 | 2026-03-21 | `CREATE INDEX ix_decizii_procedura ON decizii_cnsc (tip_procedura);` | Utilizator | DA |
 | 2026-04-02 | `CREATE TABLE spete_anap (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), numar_speta INTEGER NOT NULL UNIQUE, versiune INTEGER NOT NULL DEFAULT 1, data_publicarii TIMESTAMP NOT NULL, categorie VARCHAR(200) NOT NULL, intrebare TEXT NOT NULL, raspuns TEXT NOT NULL, taguri TEXT[], embedding vector(2000), created_at TIMESTAMP NOT NULL DEFAULT now());` + 3 indexuri (categorie, taguri GIN, embedding HNSW) | Utilizator | DA |
+| 2026-04-04 | `CREATE TABLE user_context (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE, fact_type VARCHAR(50) NOT NULL DEFAULT 'general', content TEXT NOT NULL, source VARCHAR(50), importance INTEGER NOT NULL DEFAULT 5, active BOOLEAN NOT NULL DEFAULT true, created_at TIMESTAMP NOT NULL DEFAULT now(), updated_at TIMESTAMP NOT NULL DEFAULT now()); CREATE INDEX idx_user_context_user_id ON user_context(user_id);` — Sprint 3: Memorie persistentă AI (4.4) | Utilizator | DA |
