@@ -42,10 +42,15 @@ async def check_compliance(
     # Extract text from file or use provided text
     doc_text = text
     if file and not doc_text:
-        processor = DocumentProcessor()
-        content = await file.read()
-        filename = file.filename or "document.txt"
-        doc_text = processor.extract_text_from_file(content, filename)
+        try:
+            processor = DocumentProcessor()
+            content = await file.read()
+            filename = file.filename or "document.txt"
+            doc_text = processor.extract_text_from_file(content, filename)
+            logger.info("compliance_file_extracted", filename=filename, text_length=len(doc_text or ""))
+        except Exception as e:
+            logger.error("compliance_file_extraction_failed", error=str(e), exc_info=True)
+            raise HTTPException(status_code=400, detail=f"Nu s-a putut extrage textul din fișier: {str(e)}")
 
     if not doc_text or len(doc_text.strip()) < 50:
         raise HTTPException(
@@ -77,6 +82,10 @@ async def check_compliance(
             status_code=504,
             detail="Timeout la verificarea conformității. Reîncearcă cu un document mai scurt.",
         )
+    except HTTPException:
+        raise
     except Exception as e:
-        logger.error("compliance_error", error=str(e), exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Eroare: {str(e)}")
+        import traceback
+        tb = traceback.format_exc()
+        logger.error("compliance_error", error=str(e), traceback=tb)
+        raise HTTPException(status_code=500, detail=f"Eroare: {type(e).__name__}: {str(e)}")

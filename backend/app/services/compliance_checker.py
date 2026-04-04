@@ -67,9 +67,13 @@ class ComplianceChecker:
         )
 
         # --- Pass 1: Identify applicable requirements ---
-        requirements = await self._identify_requirements(
-            session, document_text, tip_procedura, tip_document,
-        )
+        try:
+            requirements = await self._identify_requirements(
+                session, document_text, tip_procedura, tip_document,
+            )
+        except Exception as e:
+            logger.error("compliance_requirements_identification_failed", error=str(e), exc_info=True)
+            raise RuntimeError(f"Eroare la identificarea cerințelor legale: {str(e)}")
 
         if not requirements:
             return {
