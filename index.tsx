@@ -699,6 +699,7 @@ const App = () => {
   // Dosare Digitale States
   const [dosare, setDosare] = useState<any[]>([]);
   const [dosareLoading, setDosareLoading] = useState(false);
+  const [dosareLoaded, setDosareLoaded] = useState(false);
   const [dosarForm, setDosarForm] = useState({ titlu: '', descriere: '', client: '', autoritate_contractanta: '', numar_dosar: '', numar_procedura: '', cod_cpv: '', valoare_estimata: '', tip_procedura: '', termen_depunere: '', termen_solutionare: '', note: '' });
   const [dosarEditing, setDosarEditing] = useState<string | null>(null);
   const [dosarViewing, setDosarViewing] = useState<any>(null);
@@ -709,6 +710,7 @@ const App = () => {
   // Alert Rules States
   const [alertRules, setAlertRules] = useState<any[]>([]);
   const [alertsLoading, setAlertsLoading] = useState(false);
+  const [alertsLoaded, setAlertsLoaded] = useState(false);
   const [alertForm, setAlertForm] = useState({ nume: '', descriere: '', cod_cpv: '', coduri_critici: '', complet: '', tip_procedura: '', solutie: '', keywords: '', frecventa: 'zilnic' });
   const [alertShowForm, setAlertShowForm] = useState(false);
   const [alertEditing, setAlertEditing] = useState<string | null>(null);
@@ -5624,6 +5626,7 @@ const App = () => {
       if (res.ok) setDosare(await res.json());
     } catch { /* ignore */ }
     setDosareLoading(false);
+    setDosareLoaded(true);
   };
 
   const loadDosarStats = async () => {
@@ -5704,8 +5707,8 @@ const App = () => {
   };
 
   const renderDosare = () => {
-    // Auto-load
-    if (dosare.length === 0 && !dosareLoading && authState.user) {
+    // Auto-load (only once)
+    if (!dosareLoaded && !dosareLoading && authState.user) {
       loadDosare();
       loadDosarStats();
     }
@@ -5715,6 +5718,7 @@ const App = () => {
       const ARTIFACT_LABELS: Record<string, string> = { conversatie: 'Conversație', document: 'Document', red_flags: 'Red Flags', training: 'Material Training' };
       const ARTIFACT_ICONS: Record<string, any> = { conversatie: MessageSquare, document: FileText, red_flags: AlertTriangle, training: GraduationCap };
       return (
+        <div className="h-full overflow-y-auto p-6">
         <div className="max-w-5xl mx-auto">
           <button onClick={() => setDosarViewing(null)} className="text-sm text-blue-600 hover:underline mb-4 flex items-center gap-1"><ChevronRight size={14} className="rotate-180" /> Înapoi la dosare</button>
           <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
@@ -5768,10 +5772,12 @@ const App = () => {
             </div>
           </div>
         </div>
+        </div>
       );
     }
 
     return (
+      <div className="h-full overflow-y-auto p-6">
       <div className="max-w-5xl mx-auto">
         <div className="flex items-center justify-between mb-6">
           <div>
@@ -5913,6 +5919,7 @@ const App = () => {
           </div>
         )}
       </div>
+      </div>
     );
   };
 
@@ -5924,6 +5931,7 @@ const App = () => {
       if (res.ok) setAlertRules(await res.json());
     } catch { /* ignore */ }
     setAlertsLoading(false);
+    setAlertsLoaded(true);
   };
 
   const saveAlertForm = async () => {
@@ -5975,11 +5983,13 @@ const App = () => {
   };
 
   const renderAlerts = () => {
-    if (alertRules.length === 0 && !alertsLoading && authState.user) {
+    // Auto-load (only once)
+    if (!alertsLoaded && !alertsLoading && authState.user) {
       loadAlertRules();
     }
 
     return (
+      <div className="h-full overflow-y-auto p-6">
       <div className="max-w-4xl mx-auto">
         <div className="flex items-center justify-between mb-6">
           <div>
@@ -6094,6 +6104,7 @@ const App = () => {
           <p className="font-medium mb-1">Cum funcționează alertele?</p>
           <p className="text-xs text-amber-600">Când pipeline-ul zilnic de import aduce decizii noi, acestea sunt verificate automat contra regulilor active. Dacă o decizie se potrivește, veți primi un email cu detaliile deciziei. Verificați că adresa de email este confirmată în Profil.</p>
         </div>
+      </div>
       </div>
     );
   };
