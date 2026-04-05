@@ -52,11 +52,17 @@ import {
   Target,
   ClipboardCheck,
   Files,
+  FolderOpen,
+  Bell,
+  MessageCircle,
+  Clock,
+  Archive,
+  Briefcase,
 } from "lucide-react";
 
 // --- Types ---
 
-type AppMode = 'dashboard' | 'datalake' | 'spete' | 'drafter' | 'redflags' | 'chat' | 'clarification' | 'rag' | 'training' | 'analytics' | 'strategy' | 'compliance' | 'multi_document' | 'settings' | 'profile' | 'pricing';
+type AppMode = 'dashboard' | 'datalake' | 'spete' | 'drafter' | 'redflags' | 'chat' | 'clarification' | 'rag' | 'training' | 'analytics' | 'strategy' | 'compliance' | 'multi_document' | 'dosare' | 'alerts' | 'settings' | 'profile' | 'pricing';
 
 interface AuthUser {
   id: string;
@@ -315,10 +321,10 @@ const authFetchStream = async (
 // Feature access rules per role
 const ROLE_FEATURES: Record<string, string[]> = {
   registered: ['chat', 'dashboard', 'datalake', 'spete', 'rag', 'analytics', 'profile', 'pricing'],
-  paid_basic: ['chat', 'dashboard', 'datalake', 'spete', 'rag', 'analytics', 'strategy', 'compliance', 'drafter', 'redflags', 'clarification', 'profile', 'pricing'],
-  paid_pro: ['chat', 'dashboard', 'datalake', 'spete', 'rag', 'analytics', 'strategy', 'compliance', 'multi_document', 'drafter', 'redflags', 'clarification', 'training', 'export', 'profile', 'pricing'],
-  paid_enterprise: ['chat', 'dashboard', 'datalake', 'spete', 'rag', 'analytics', 'strategy', 'compliance', 'multi_document', 'drafter', 'redflags', 'clarification', 'training', 'export', 'profile', 'pricing'],
-  admin: ['chat', 'dashboard', 'datalake', 'spete', 'rag', 'analytics', 'strategy', 'compliance', 'multi_document', 'drafter', 'redflags', 'clarification', 'training', 'export', 'settings', 'profile', 'pricing'],
+  paid_basic: ['chat', 'dashboard', 'datalake', 'spete', 'rag', 'analytics', 'strategy', 'compliance', 'drafter', 'redflags', 'clarification', 'dosare', 'alerts', 'profile', 'pricing'],
+  paid_pro: ['chat', 'dashboard', 'datalake', 'spete', 'rag', 'analytics', 'strategy', 'compliance', 'multi_document', 'drafter', 'redflags', 'clarification', 'training', 'export', 'dosare', 'alerts', 'profile', 'pricing'],
+  paid_enterprise: ['chat', 'dashboard', 'datalake', 'spete', 'rag', 'analytics', 'strategy', 'compliance', 'multi_document', 'drafter', 'redflags', 'clarification', 'training', 'export', 'dosare', 'alerts', 'profile', 'pricing'],
+  admin: ['chat', 'dashboard', 'datalake', 'spete', 'rag', 'analytics', 'strategy', 'compliance', 'multi_document', 'drafter', 'redflags', 'clarification', 'training', 'export', 'dosare', 'alerts', 'settings', 'profile', 'pricing'],
 };
 
 const PLAN_LABELS: Record<string, string> = {
@@ -689,6 +695,23 @@ const App = () => {
   const [uploadedDocsTrainingContext, setUploadedDocsTrainingContext] = useState<{name: string, text: string}[]>([]);
   const [uploadedDocsTrainingPlan, setUploadedDocsTrainingPlan] = useState<{name: string, text: string}[]>([]);
   const [trainingBatchProgress, setTrainingBatchProgress] = useState<{current: number, total: number, results: string[]} | null>(null);
+
+  // Dosare Digitale States
+  const [dosare, setDosare] = useState<any[]>([]);
+  const [dosareLoading, setDosareLoading] = useState(false);
+  const [dosarForm, setDosarForm] = useState({ titlu: '', descriere: '', client: '', autoritate_contractanta: '', numar_dosar: '', numar_procedura: '', cod_cpv: '', valoare_estimata: '', tip_procedura: '', termen_depunere: '', termen_solutionare: '', note: '' });
+  const [dosarEditing, setDosarEditing] = useState<string | null>(null);
+  const [dosarViewing, setDosarViewing] = useState<any>(null);
+  const [dosarStats, setDosarStats] = useState<any>(null);
+  const [dosarFilter, setDosarFilter] = useState('');
+  const [dosarShowForm, setDosarShowForm] = useState(false);
+
+  // Alert Rules States
+  const [alertRules, setAlertRules] = useState<any[]>([]);
+  const [alertsLoading, setAlertsLoading] = useState(false);
+  const [alertForm, setAlertForm] = useState({ nume: '', descriere: '', cod_cpv: '', coduri_critici: '', complet: '', tip_procedura: '', solutie: '', keywords: '', frecventa: 'zilnic' });
+  const [alertShowForm, setAlertShowForm] = useState(false);
+  const [alertEditing, setAlertEditing] = useState<string | null>(null);
 
   // Save/History States
   const [saveStatus, setSaveStatus] = useState<{type: 'success' | 'error', text: string} | null>(null);
@@ -2065,6 +2088,8 @@ const App = () => {
     clarification: 'Clarificări',
     rag: 'Jurisprudență RAG',
     training: 'TrainingAP',
+    dosare: 'Dosare Digitale',
+    alerts: 'Alerte Decizii',
     settings: 'Setări LLM',
     profile: 'Profil',
     pricing: 'Planuri & Prețuri',
@@ -2152,6 +2177,20 @@ const App = () => {
            ) : (
              <div className="opacity-50 cursor-not-allowed" title="Disponibil în planul Basic">
                <SidebarItem icon={Target} label="Strategie Contestare" active={false} onClick={() => setShowAuthModal(true)} />
+             </div>
+           )}
+           {canAccess('dosare') ? (
+             <SidebarItem icon={Briefcase} label="Dosare Digitale" active={mode === 'dosare'} onClick={() => { setMode('dosare'); setSidebarOpen(false); }} />
+           ) : (
+             <div className="opacity-50 cursor-not-allowed" title="Disponibil în planul Basic">
+               <SidebarItem icon={Briefcase} label="Dosare Digitale" active={false} onClick={() => setShowAuthModal(true)} />
+             </div>
+           )}
+           {canAccess('alerts') ? (
+             <SidebarItem icon={Bell} label="Alerte Decizii" active={mode === 'alerts'} onClick={() => { setMode('alerts'); setSidebarOpen(false); }} />
+           ) : (
+             <div className="opacity-50 cursor-not-allowed" title="Disponibil în planul Basic">
+               <SidebarItem icon={Bell} label="Alerte Decizii" active={false} onClick={() => setShowAuthModal(true)} />
              </div>
            )}
         </div>
@@ -5577,6 +5616,488 @@ const App = () => {
     );
   };
 
+  // --- Dosare Digitale ---
+  const loadDosare = async () => {
+    setDosareLoading(true);
+    try {
+      const res = await authFetch(`/api/v1/dosare/?status=${dosarFilter}`);
+      if (res.ok) setDosare(await res.json());
+    } catch { /* ignore */ }
+    setDosareLoading(false);
+  };
+
+  const loadDosarStats = async () => {
+    try {
+      const res = await authFetch('/api/v1/dosare/stats');
+      if (res.ok) setDosarStats(await res.json());
+    } catch { /* ignore */ }
+  };
+
+  const loadDosarDetail = async (id: string) => {
+    try {
+      const res = await authFetch(`/api/v1/dosare/${id}`);
+      if (res.ok) setDosarViewing(await res.json());
+    } catch { /* ignore */ }
+  };
+
+  const saveDosarForm = async () => {
+    const body: any = { ...dosarForm };
+    if (!body.valoare_estimata) delete body.valoare_estimata;
+    else body.valoare_estimata = parseFloat(body.valoare_estimata);
+    // Remove empty strings
+    Object.keys(body).forEach(k => { if (body[k] === '') delete body[k]; });
+    body.titlu = dosarForm.titlu;
+
+    try {
+      const url = dosarEditing ? `/api/v1/dosare/${dosarEditing}` : '/api/v1/dosare/';
+      const method = dosarEditing ? 'PUT' : 'POST';
+      const res = await authFetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+      if (res.ok) {
+        setDosarShowForm(false);
+        setDosarEditing(null);
+        setDosarForm({ titlu: '', descriere: '', client: '', autoritate_contractanta: '', numar_dosar: '', numar_procedura: '', cod_cpv: '', valoare_estimata: '', tip_procedura: '', termen_depunere: '', termen_solutionare: '', note: '' });
+        loadDosare();
+        loadDosarStats();
+        setSaveStatus({ type: 'success', text: dosarEditing ? 'Dosar actualizat' : 'Dosar creat' });
+      } else {
+        const err = await res.json().catch(() => ({}));
+        setSaveStatus({ type: 'error', text: err.detail || 'Eroare la salvare' });
+      }
+    } catch {
+      setSaveStatus({ type: 'error', text: 'Eroare de rețea' });
+    }
+    setTimeout(() => setSaveStatus(null), 3000);
+  };
+
+  const deleteDosarById = async (id: string) => {
+    if (!confirm('Ștergeți acest dosar? Artefactele linkuite nu vor fi șterse.')) return;
+    try {
+      await authFetch(`/api/v1/dosare/${id}`, { method: 'DELETE' });
+      if (dosarViewing?.id === id) setDosarViewing(null);
+      loadDosare();
+      loadDosarStats();
+      setSaveStatus({ type: 'success', text: 'Dosar șters' });
+    } catch { /* ignore */ }
+    setTimeout(() => setSaveStatus(null), 3000);
+  };
+
+  const unlinkArtifact = async (dosarId: string, type: string, artifactId: string) => {
+    try {
+      await authFetch(`/api/v1/dosare/${dosarId}/unlink`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ artifact_type: type, artifact_id: artifactId }),
+      });
+      loadDosarDetail(dosarId);
+    } catch { /* ignore */ }
+  };
+
+  const DOSAR_STATUS_COLORS: Record<string, string> = {
+    activ: 'bg-green-100 text-green-700 border-green-200',
+    in_lucru: 'bg-blue-100 text-blue-700 border-blue-200',
+    depus: 'bg-purple-100 text-purple-700 border-purple-200',
+    finalizat: 'bg-slate-100 text-slate-700 border-slate-200',
+    arhivat: 'bg-gray-100 text-gray-500 border-gray-200',
+  };
+  const DOSAR_STATUS_LABELS: Record<string, string> = {
+    activ: 'Activ', in_lucru: 'În lucru', depus: 'Depus', finalizat: 'Finalizat', arhivat: 'Arhivat',
+  };
+
+  const renderDosare = () => {
+    // Auto-load
+    if (dosare.length === 0 && !dosareLoading && authState.user) {
+      loadDosare();
+      loadDosarStats();
+    }
+
+    if (dosarViewing) {
+      const d = dosarViewing;
+      const ARTIFACT_LABELS: Record<string, string> = { conversatie: 'Conversație', document: 'Document', red_flags: 'Red Flags', training: 'Material Training' };
+      const ARTIFACT_ICONS: Record<string, any> = { conversatie: MessageSquare, document: FileText, red_flags: AlertTriangle, training: GraduationCap };
+      return (
+        <div className="max-w-5xl mx-auto">
+          <button onClick={() => setDosarViewing(null)} className="text-sm text-blue-600 hover:underline mb-4 flex items-center gap-1"><ChevronRight size={14} className="rotate-180" /> Înapoi la dosare</button>
+          <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+            <div className="p-6 border-b border-slate-100">
+              <div className="flex items-start justify-between">
+                <div>
+                  <h2 className="text-xl font-bold text-slate-800 flex items-center gap-2"><Briefcase size={20} className="text-blue-600" /> {d.titlu}</h2>
+                  {d.descriere && <p className="text-sm text-slate-500 mt-1">{d.descriere}</p>}
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className={`px-3 py-1 rounded-full text-xs font-medium border ${DOSAR_STATUS_COLORS[d.status] || 'bg-slate-100'}`}>{DOSAR_STATUS_LABELS[d.status] || d.status}</span>
+                  <button onClick={() => { setDosarEditing(d.id); setDosarForm({ titlu: d.titlu || '', descriere: d.descriere || '', client: d.client || '', autoritate_contractanta: d.autoritate_contractanta || '', numar_dosar: d.numar_dosar || '', numar_procedura: d.numar_procedura || '', cod_cpv: d.cod_cpv || '', valoare_estimata: d.valoare_estimata?.toString() || '', tip_procedura: d.tip_procedura || '', termen_depunere: d.termen_depunere?.slice(0, 16) || '', termen_solutionare: d.termen_solutionare?.slice(0, 16) || '', note: d.note || '' }); setDosarShowForm(true); setDosarViewing(null); }} className="p-1.5 text-slate-400 hover:text-blue-600"><Pencil size={16} /></button>
+                  <button onClick={() => deleteDosarById(d.id)} className="p-1.5 text-slate-400 hover:text-red-600"><Trash2 size={16} /></button>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-4 text-sm">
+                {d.client && <div><span className="text-slate-400">Client:</span> <span className="font-medium">{d.client}</span></div>}
+                {d.autoritate_contractanta && <div><span className="text-slate-400">AC:</span> <span className="font-medium">{d.autoritate_contractanta}</span></div>}
+                {d.numar_dosar && <div><span className="text-slate-400">Nr. dosar:</span> <span className="font-medium">{d.numar_dosar}</span></div>}
+                {d.cod_cpv && <div><span className="text-slate-400">CPV:</span> <span className="font-medium">{d.cod_cpv}</span></div>}
+                {d.tip_procedura && <div><span className="text-slate-400">Procedură:</span> <span className="font-medium">{d.tip_procedura}</span></div>}
+                {d.valoare_estimata && <div><span className="text-slate-400">Valoare:</span> <span className="font-medium">{Number(d.valoare_estimata).toLocaleString('ro-RO')} RON</span></div>}
+                {d.termen_depunere && <div><span className="text-slate-400">Termen depunere:</span> <span className="font-medium">{new Date(d.termen_depunere).toLocaleDateString('ro-RO')}</span></div>}
+                {d.termen_solutionare && <div><span className="text-slate-400">Termen soluționare:</span> <span className="font-medium">{new Date(d.termen_solutionare).toLocaleDateString('ro-RO')}</span></div>}
+              </div>
+              {d.note && <div className="mt-3 p-3 bg-yellow-50 rounded-lg text-sm text-yellow-800 border border-yellow-100"><strong>Note:</strong> {d.note}</div>}
+            </div>
+            <div className="p-6">
+              <h3 className="font-semibold text-slate-700 mb-3">Artefacte linkuite ({d.artifacts?.length || 0})</h3>
+              {(!d.artifacts || d.artifacts.length === 0) ? (
+                <p className="text-sm text-slate-400">Niciun artefact linkuit. Puteți linki conversații, documente, analize Red Flags și materiale de training din paginile respective.</p>
+              ) : (
+                <div className="space-y-2">
+                  {d.artifacts.map((a: any) => {
+                    const Icon = ARTIFACT_ICONS[a.tip] || FileText;
+                    return (
+                      <div key={a.id} className="flex items-center justify-between p-3 rounded-lg border border-slate-100 hover:border-slate-200 transition">
+                        <div className="flex items-center gap-3">
+                          <Icon size={16} className="text-slate-400" />
+                          <div>
+                            <p className="text-sm font-medium text-slate-700">{a.titlu}</p>
+                            <p className="text-xs text-slate-400">{ARTIFACT_LABELS[a.tip]} · {new Date(a.created_at).toLocaleDateString('ro-RO')}</p>
+                          </div>
+                        </div>
+                        <button onClick={() => unlinkArtifact(d.id, a.tip, a.id)} className="text-xs text-red-500 hover:underline">Delinki</button>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    return (
+      <div className="max-w-5xl mx-auto">
+        <div className="flex items-center justify-between mb-6">
+          <div>
+            <h2 className="text-2xl font-bold text-slate-800 flex items-center gap-2"><Briefcase size={24} className="text-blue-600" /> Dosare Digitale</h2>
+            <p className="text-sm text-slate-500 mt-1">Gestionează dosarele de contestare — grupează conversații, documente și analize într-un singur loc.</p>
+          </div>
+          <button onClick={() => { setDosarShowForm(true); setDosarEditing(null); setDosarForm({ titlu: '', descriere: '', client: '', autoritate_contractanta: '', numar_dosar: '', numar_procedura: '', cod_cpv: '', valoare_estimata: '', tip_procedura: '', termen_depunere: '', termen_solutionare: '', note: '' }); }} className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 transition flex items-center gap-2"><Plus size={16} /> Dosar Nou</button>
+        </div>
+
+        {/* Stats */}
+        {dosarStats && (
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-6">
+            <button onClick={() => { setDosarFilter(''); loadDosare(); }} className={`p-3 rounded-lg border text-center transition ${!dosarFilter ? 'border-blue-300 bg-blue-50' : 'border-slate-200 hover:border-slate-300'}`}>
+              <p className="text-lg font-bold text-slate-800">{dosarStats.total}</p><p className="text-xs text-slate-500">Total</p>
+            </button>
+            {['activ', 'in_lucru', 'depus', 'finalizat', 'arhivat'].map(s => (
+              <button key={s} onClick={() => { setDosarFilter(s); setTimeout(loadDosare, 0); }} className={`p-3 rounded-lg border text-center transition ${dosarFilter === s ? 'border-blue-300 bg-blue-50' : 'border-slate-200 hover:border-slate-300'}`}>
+                <p className="text-lg font-bold text-slate-800">{dosarStats.by_status?.[s] || 0}</p><p className="text-xs text-slate-500">{DOSAR_STATUS_LABELS[s]}</p>
+              </button>
+            ))}
+          </div>
+        )}
+
+        {/* Create/Edit Form Modal */}
+        {dosarShowForm && (
+          <div className="mb-6 bg-white rounded-xl border border-slate-200 shadow-sm p-6">
+            <h3 className="font-semibold text-slate-700 mb-4">{dosarEditing ? 'Editare Dosar' : 'Dosar Nou'}</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="md:col-span-2">
+                <label className="text-xs text-slate-500 font-medium">Titlu *</label>
+                <input value={dosarForm.titlu} onChange={e => setDosarForm(p => ({ ...p, titlu: e.target.value }))} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm mt-1" placeholder="ex: Contestație procedură achiziție echipamente IT" />
+              </div>
+              <div className="md:col-span-2">
+                <label className="text-xs text-slate-500 font-medium">Descriere</label>
+                <textarea value={dosarForm.descriere} onChange={e => setDosarForm(p => ({ ...p, descriere: e.target.value }))} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm mt-1" rows={2} placeholder="Descriere scurtă a dosarului" />
+              </div>
+              <div>
+                <label className="text-xs text-slate-500 font-medium">Client</label>
+                <input value={dosarForm.client} onChange={e => setDosarForm(p => ({ ...p, client: e.target.value }))} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm mt-1" placeholder="Numele clientului" />
+              </div>
+              <div>
+                <label className="text-xs text-slate-500 font-medium">Autoritate Contractantă</label>
+                <input value={dosarForm.autoritate_contractanta} onChange={e => setDosarForm(p => ({ ...p, autoritate_contractanta: e.target.value }))} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm mt-1" placeholder="Autoritatea contractantă" />
+              </div>
+              <div>
+                <label className="text-xs text-slate-500 font-medium">Nr. Dosar</label>
+                <input value={dosarForm.numar_dosar} onChange={e => setDosarForm(p => ({ ...p, numar_dosar: e.target.value }))} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm mt-1" placeholder="Referință internă" />
+              </div>
+              <div>
+                <label className="text-xs text-slate-500 font-medium">Nr. Procedură SEAP</label>
+                <input value={dosarForm.numar_procedura} onChange={e => setDosarForm(p => ({ ...p, numar_procedura: e.target.value }))} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm mt-1" />
+              </div>
+              <div>
+                <label className="text-xs text-slate-500 font-medium">Cod CPV</label>
+                <input value={dosarForm.cod_cpv} onChange={e => setDosarForm(p => ({ ...p, cod_cpv: e.target.value }))} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm mt-1" placeholder="ex: 30213000" />
+              </div>
+              <div>
+                <label className="text-xs text-slate-500 font-medium">Valoare Estimată (RON)</label>
+                <input type="number" value={dosarForm.valoare_estimata} onChange={e => setDosarForm(p => ({ ...p, valoare_estimata: e.target.value }))} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm mt-1" />
+              </div>
+              <div>
+                <label className="text-xs text-slate-500 font-medium">Tip Procedură</label>
+                <select value={dosarForm.tip_procedura} onChange={e => setDosarForm(p => ({ ...p, tip_procedura: e.target.value }))} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm mt-1">
+                  <option value="">—</option>
+                  <option value="licitatie_deschisa">Licitație deschisă</option>
+                  <option value="licitatie_restransa">Licitație restrânsă</option>
+                  <option value="negociere_competitiva">Negociere competitivă</option>
+                  <option value="dialog_competitiv">Dialog competitiv</option>
+                  <option value="procedura_simplificata">Procedură simplificată</option>
+                  <option value="concurs_solutii">Concurs de soluții</option>
+                </select>
+              </div>
+              <div>
+                <label className="text-xs text-slate-500 font-medium">Termen Depunere</label>
+                <input type="datetime-local" value={dosarForm.termen_depunere} onChange={e => setDosarForm(p => ({ ...p, termen_depunere: e.target.value }))} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm mt-1" />
+              </div>
+              <div>
+                <label className="text-xs text-slate-500 font-medium">Termen Soluționare</label>
+                <input type="datetime-local" value={dosarForm.termen_solutionare} onChange={e => setDosarForm(p => ({ ...p, termen_solutionare: e.target.value }))} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm mt-1" />
+              </div>
+              <div className="md:col-span-2">
+                <label className="text-xs text-slate-500 font-medium">Note</label>
+                <textarea value={dosarForm.note} onChange={e => setDosarForm(p => ({ ...p, note: e.target.value }))} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm mt-1" rows={2} />
+              </div>
+            </div>
+            <div className="flex justify-end gap-3 mt-4">
+              <button onClick={() => { setDosarShowForm(false); setDosarEditing(null); }} className="px-4 py-2 text-sm text-slate-600 hover:text-slate-800">Anulează</button>
+              <button onClick={saveDosarForm} disabled={!dosarForm.titlu.trim()} className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 transition disabled:opacity-50">{dosarEditing ? 'Actualizează' : 'Creează Dosar'}</button>
+            </div>
+          </div>
+        )}
+
+        {/* Dosare List */}
+        {dosareLoading ? (
+          <div className="text-center py-12"><Loader2 className="animate-spin mx-auto text-blue-500" size={32} /></div>
+        ) : dosare.length === 0 ? (
+          <div className="text-center py-12 bg-white rounded-xl border border-slate-200">
+            <Briefcase size={48} className="mx-auto text-slate-300 mb-4" />
+            <p className="text-slate-500 text-lg font-medium">Niciun dosar</p>
+            <p className="text-slate-400 text-sm mt-1">Creați primul dosar digital pentru a organiza toate artefactele unei contestări.</p>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {dosare.map((d: any) => {
+              const totalArtifacts = (d.artifact_counts?.conversatii || 0) + (d.artifact_counts?.documente || 0) + (d.artifact_counts?.red_flags || 0) + (d.artifact_counts?.training_materials || 0);
+              const isUrgent = d.termen_depunere && new Date(d.termen_depunere) > new Date() && (new Date(d.termen_depunere).getTime() - Date.now()) < 3 * 24 * 60 * 60 * 1000;
+              return (
+                <div key={d.id} className="bg-white rounded-xl border border-slate-200 shadow-sm hover:shadow-md transition p-4 cursor-pointer" onClick={() => loadDosarDetail(d.id)}>
+                  <div className="flex items-start justify-between">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-1">
+                        <h3 className="font-semibold text-slate-800 truncate">{d.titlu}</h3>
+                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium border ${DOSAR_STATUS_COLORS[d.status] || 'bg-slate-100'}`}>{DOSAR_STATUS_LABELS[d.status] || d.status}</span>
+                        {isUrgent && <span className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-red-100 text-red-700 border border-red-200 animate-pulse">Urgent</span>}
+                      </div>
+                      <div className="flex items-center gap-4 text-xs text-slate-400">
+                        {d.client && <span>{d.client}</span>}
+                        {d.cod_cpv && <span>CPV: {d.cod_cpv}</span>}
+                        {d.numar_dosar && <span>#{d.numar_dosar}</span>}
+                        <span>{new Date(d.created_at).toLocaleDateString('ro-RO')}</span>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-3 ml-4 shrink-0">
+                      <div className="text-center" title={`${d.artifact_counts?.conversatii || 0} conversații, ${d.artifact_counts?.documente || 0} documente, ${d.artifact_counts?.red_flags || 0} red flags, ${d.artifact_counts?.training_materials || 0} training`}>
+                        <p className="text-sm font-bold text-slate-600">{totalArtifacts}</p>
+                        <p className="text-[10px] text-slate-400">artefacte</p>
+                      </div>
+                      <button onClick={e => { e.stopPropagation(); deleteDosarById(d.id); }} className="p-1.5 text-slate-300 hover:text-red-500 transition"><Trash2 size={14} /></button>
+                    </div>
+                  </div>
+                  {d.termen_depunere && (
+                    <div className="mt-2 flex items-center gap-1.5 text-xs text-slate-400">
+                      <Clock size={12} /> Termen: {new Date(d.termen_depunere).toLocaleDateString('ro-RO', { day: '2-digit', month: 'short', year: 'numeric' })}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  // --- Alerte Decizii ---
+  const loadAlertRules = async () => {
+    setAlertsLoading(true);
+    try {
+      const res = await authFetch('/api/v1/alerts/');
+      if (res.ok) setAlertRules(await res.json());
+    } catch { /* ignore */ }
+    setAlertsLoading(false);
+  };
+
+  const saveAlertForm = async () => {
+    const filters: any = {};
+    if (alertForm.cod_cpv.trim()) filters.cod_cpv = alertForm.cod_cpv.split(',').map((s: string) => s.trim()).filter(Boolean);
+    if (alertForm.coduri_critici.trim()) filters.coduri_critici = alertForm.coduri_critici.split(',').map((s: string) => s.trim()).filter(Boolean);
+    if (alertForm.complet.trim()) filters.complet = alertForm.complet.split(',').map((s: string) => s.trim()).filter(Boolean);
+    if (alertForm.tip_procedura.trim()) filters.tip_procedura = alertForm.tip_procedura.split(',').map((s: string) => s.trim()).filter(Boolean);
+    if (alertForm.solutie.trim()) filters.solutie = alertForm.solutie.split(',').map((s: string) => s.trim()).filter(Boolean);
+    if (alertForm.keywords.trim()) filters.keywords = alertForm.keywords.split(',').map((s: string) => s.trim()).filter(Boolean);
+
+    const body: any = { nume: alertForm.nume, descriere: alertForm.descriere || undefined, filters, frecventa: alertForm.frecventa };
+
+    try {
+      const url = alertEditing ? `/api/v1/alerts/${alertEditing}` : '/api/v1/alerts/';
+      const method = alertEditing ? 'PUT' : 'POST';
+      const res = await authFetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+      if (res.ok) {
+        setAlertShowForm(false);
+        setAlertEditing(null);
+        setAlertForm({ nume: '', descriere: '', cod_cpv: '', coduri_critici: '', complet: '', tip_procedura: '', solutie: '', keywords: '', frecventa: 'zilnic' });
+        loadAlertRules();
+        setSaveStatus({ type: 'success', text: alertEditing ? 'Regulă actualizată' : 'Regulă creată' });
+      } else {
+        const err = await res.json().catch(() => ({}));
+        setSaveStatus({ type: 'error', text: err.detail || 'Eroare la salvare' });
+      }
+    } catch {
+      setSaveStatus({ type: 'error', text: 'Eroare de rețea' });
+    }
+    setTimeout(() => setSaveStatus(null), 3000);
+  };
+
+  const toggleAlertRule = async (id: string) => {
+    try {
+      await authFetch(`/api/v1/alerts/${id}/toggle`, { method: 'POST' });
+      loadAlertRules();
+    } catch { /* ignore */ }
+  };
+
+  const deleteAlertRule = async (id: string) => {
+    if (!confirm('Ștergeți această regulă de alertă?')) return;
+    try {
+      await authFetch(`/api/v1/alerts/${id}`, { method: 'DELETE' });
+      loadAlertRules();
+      setSaveStatus({ type: 'success', text: 'Regulă ștearsă' });
+    } catch { /* ignore */ }
+    setTimeout(() => setSaveStatus(null), 3000);
+  };
+
+  const renderAlerts = () => {
+    if (alertRules.length === 0 && !alertsLoading && authState.user) {
+      loadAlertRules();
+    }
+
+    return (
+      <div className="max-w-4xl mx-auto">
+        <div className="flex items-center justify-between mb-6">
+          <div>
+            <h2 className="text-2xl font-bold text-slate-800 flex items-center gap-2"><Bell size={24} className="text-amber-500" /> Alerte Decizii Noi</h2>
+            <p className="text-sm text-slate-500 mt-1">Primește notificări când apar decizii CNSC noi care corespund criteriilor tale.</p>
+          </div>
+          <button onClick={() => { setAlertShowForm(true); setAlertEditing(null); setAlertForm({ nume: '', descriere: '', cod_cpv: '', coduri_critici: '', complet: '', tip_procedura: '', solutie: '', keywords: '', frecventa: 'zilnic' }); }} className="bg-amber-500 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-amber-600 transition flex items-center gap-2"><Plus size={16} /> Regulă Nouă</button>
+        </div>
+
+        {/* Create/Edit Form */}
+        {alertShowForm && (
+          <div className="mb-6 bg-white rounded-xl border border-slate-200 shadow-sm p-6">
+            <h3 className="font-semibold text-slate-700 mb-4">{alertEditing ? 'Editare Regulă' : 'Regulă Nouă de Alertă'}</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="md:col-span-2">
+                <label className="text-xs text-slate-500 font-medium">Numele regulii *</label>
+                <input value={alertForm.nume} onChange={e => setAlertForm(p => ({ ...p, nume: e.target.value }))} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm mt-1" placeholder="ex: Decizii ADMIS pe CPV 30213000" />
+              </div>
+              <div className="md:col-span-2">
+                <label className="text-xs text-slate-500 font-medium">Descriere</label>
+                <input value={alertForm.descriere} onChange={e => setAlertForm(p => ({ ...p, descriere: e.target.value }))} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm mt-1" placeholder="Descriere opțională" />
+              </div>
+              <div>
+                <label className="text-xs text-slate-500 font-medium">Coduri CPV (separate prin virgulă)</label>
+                <input value={alertForm.cod_cpv} onChange={e => setAlertForm(p => ({ ...p, cod_cpv: e.target.value }))} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm mt-1" placeholder="30213000, 48000000" />
+              </div>
+              <div>
+                <label className="text-xs text-slate-500 font-medium">Coduri Critici</label>
+                <input value={alertForm.coduri_critici} onChange={e => setAlertForm(p => ({ ...p, coduri_critici: e.target.value }))} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm mt-1" placeholder="D01, R03" />
+              </div>
+              <div>
+                <label className="text-xs text-slate-500 font-medium">Complet CNSC</label>
+                <input value={alertForm.complet} onChange={e => setAlertForm(p => ({ ...p, complet: e.target.value }))} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm mt-1" placeholder="C1, C5, C10" />
+              </div>
+              <div>
+                <label className="text-xs text-slate-500 font-medium">Soluție</label>
+                <input value={alertForm.solutie} onChange={e => setAlertForm(p => ({ ...p, solutie: e.target.value }))} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm mt-1" placeholder="ADMIS, RESPINS" />
+              </div>
+              <div>
+                <label className="text-xs text-slate-500 font-medium">Cuvinte cheie</label>
+                <input value={alertForm.keywords} onChange={e => setAlertForm(p => ({ ...p, keywords: e.target.value }))} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm mt-1" placeholder="evaluare, preț neobișnuit de scăzut" />
+              </div>
+              <div>
+                <label className="text-xs text-slate-500 font-medium">Frecvență</label>
+                <select value={alertForm.frecventa} onChange={e => setAlertForm(p => ({ ...p, frecventa: e.target.value }))} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm mt-1">
+                  <option value="zilnic">Zilnic</option>
+                  <option value="saptamanal">Săptămânal</option>
+                </select>
+              </div>
+            </div>
+            <div className="flex justify-end gap-3 mt-4">
+              <button onClick={() => { setAlertShowForm(false); setAlertEditing(null); }} className="px-4 py-2 text-sm text-slate-600 hover:text-slate-800">Anulează</button>
+              <button onClick={saveAlertForm} disabled={!alertForm.nume.trim()} className="bg-amber-500 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-amber-600 transition disabled:opacity-50">{alertEditing ? 'Actualizează' : 'Creează Regulă'}</button>
+            </div>
+          </div>
+        )}
+
+        {/* Rules List */}
+        {alertsLoading ? (
+          <div className="text-center py-12"><Loader2 className="animate-spin mx-auto text-amber-500" size={32} /></div>
+        ) : alertRules.length === 0 ? (
+          <div className="text-center py-12 bg-white rounded-xl border border-slate-200">
+            <Bell size={48} className="mx-auto text-slate-300 mb-4" />
+            <p className="text-slate-500 text-lg font-medium">Nicio regulă de alertă</p>
+            <p className="text-slate-400 text-sm mt-1">Creați o regulă pentru a fi notificat când apar decizii CNSC noi relevante.</p>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {alertRules.map((r: any) => {
+              const filterLabels: string[] = [];
+              if (r.filters?.cod_cpv?.length) filterLabels.push(`CPV: ${r.filters.cod_cpv.join(', ')}`);
+              if (r.filters?.coduri_critici?.length) filterLabels.push(`Critici: ${r.filters.coduri_critici.join(', ')}`);
+              if (r.filters?.complet?.length) filterLabels.push(`Complet: ${r.filters.complet.join(', ')}`);
+              if (r.filters?.solutie?.length) filterLabels.push(`Soluție: ${r.filters.solutie.join(', ')}`);
+              if (r.filters?.keywords?.length) filterLabels.push(`Keywords: ${r.filters.keywords.join(', ')}`);
+              if (r.filters?.tip_procedura?.length) filterLabels.push(`Procedură: ${r.filters.tip_procedura.join(', ')}`);
+
+              return (
+                <div key={r.id} className={`bg-white rounded-xl border shadow-sm p-4 transition ${r.activ ? 'border-slate-200' : 'border-slate-100 opacity-60'}`}>
+                  <div className="flex items-start justify-between">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-1">
+                        <h3 className="font-semibold text-slate-800">{r.nume}</h3>
+                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium ${r.activ ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-500'}`}>{r.activ ? 'Activ' : 'Inactiv'}</span>
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-slate-100 text-slate-500">{r.frecventa === 'zilnic' ? 'Zilnic' : 'Săptămânal'}</span>
+                      </div>
+                      {r.descriere && <p className="text-xs text-slate-400 mb-2">{r.descriere}</p>}
+                      <div className="flex flex-wrap gap-1.5">
+                        {filterLabels.map((label, i) => (
+                          <span key={i} className="text-[10px] bg-amber-50 text-amber-700 px-2 py-0.5 rounded-full border border-amber-100">{label}</span>
+                        ))}
+                      </div>
+                      <div className="mt-2 text-xs text-slate-400">
+                        {r.total_notificari} notificări trimise{r.ultima_notificare && ` · Ultima: ${new Date(r.ultima_notificare).toLocaleDateString('ro-RO')}`}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 ml-4 shrink-0">
+                      <button onClick={() => toggleAlertRule(r.id)} className={`p-1.5 rounded-lg transition ${r.activ ? 'text-green-600 hover:bg-green-50' : 'text-slate-400 hover:bg-slate-50'}`} title={r.activ ? 'Dezactivează' : 'Activează'}>
+                        {r.activ ? <CheckCircle size={18} /> : <XCircle size={18} />}
+                      </button>
+                      <button onClick={() => { setAlertEditing(r.id); setAlertForm({ nume: r.nume, descriere: r.descriere || '', cod_cpv: r.filters?.cod_cpv?.join(', ') || '', coduri_critici: r.filters?.coduri_critici?.join(', ') || '', complet: r.filters?.complet?.join(', ') || '', tip_procedura: r.filters?.tip_procedura?.join(', ') || '', solutie: r.filters?.solutie?.join(', ') || '', keywords: r.filters?.keywords?.join(', ') || '', frecventa: r.frecventa }); setAlertShowForm(true); }} className="p-1.5 text-slate-400 hover:text-blue-600 transition"><Pencil size={16} /></button>
+                      <button onClick={() => deleteAlertRule(r.id)} className="p-1.5 text-slate-400 hover:text-red-600 transition"><Trash2 size={16} /></button>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        <div className="mt-8 p-4 bg-amber-50 rounded-xl border border-amber-100 text-sm text-amber-800">
+          <p className="font-medium mb-1">Cum funcționează alertele?</p>
+          <p className="text-xs text-amber-600">Când pipeline-ul zilnic de import aduce decizii noi, acestea sunt verificate automat contra regulilor active. Dacă o decizie se potrivește, veți primi un email cu detaliile deciziei. Verificați că adresa de email este confirmată în Profil.</p>
+        </div>
+      </div>
+    );
+  };
+
   const renderProfile = () => {
     const user = authState.user;
     if (!user) return null;
@@ -7124,6 +7645,8 @@ const App = () => {
         {mode === 'multi_document' && renderMultiDocument()}
         {mode === 'analytics' && renderAnalytics()}
         {mode === 'training' && renderTraining()}
+        {mode === 'dosare' && renderDosare()}
+        {mode === 'alerts' && renderAlerts()}
         {mode === 'settings' && renderSettings()}
         {mode === 'profile' && renderProfile()}
         {mode === 'pricing' && renderPricing()}

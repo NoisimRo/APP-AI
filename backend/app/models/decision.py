@@ -580,6 +580,12 @@ class User(Base):
     training_materials: Mapped[list["TrainingMaterial"]] = relationship(
         "TrainingMaterial", back_populates="user", cascade="all, delete-orphan"
     )
+    dosare: Mapped[list["Dosar"]] = relationship(
+        "Dosar", back_populates="user", cascade="all, delete-orphan"
+    )
+    alert_rules: Mapped[list["AlertRule"]] = relationship(
+        "AlertRule", back_populates="user", cascade="all, delete-orphan"
+    )
 
     __table_args__ = (
         Index("ix_users_email", email),
@@ -615,6 +621,10 @@ class Conversatie(Base):
         UUID(as_uuid=False),
         ForeignKey("search_scopes.id", ondelete="SET NULL"),
     )
+    dosar_id: Mapped[Optional[str]] = mapped_column(
+        UUID(as_uuid=False),
+        ForeignKey("dosare.id", ondelete="SET NULL"),
+    )
 
     # Timestamps
     created_at: Mapped[datetime] = mapped_column(
@@ -627,6 +637,9 @@ class Conversatie(Base):
     # Relationships
     user: Mapped[Optional["User"]] = relationship(
         "User", back_populates="conversatii"
+    )
+    dosar: Mapped[Optional["Dosar"]] = relationship(
+        "Dosar", back_populates="conversatii", foreign_keys=[dosar_id]
     )
     mesaje: Mapped[list["MesajConversatie"]] = relationship(
         "MesajConversatie", back_populates="conversatie",
@@ -710,6 +723,10 @@ class DocumentGenerat(Base):
     metadata_: Mapped[Optional[dict]] = mapped_column(
         "metadata", JSONB, default=dict
     )
+    dosar_id: Mapped[Optional[str]] = mapped_column(
+        UUID(as_uuid=False),
+        ForeignKey("dosare.id", ondelete="SET NULL"),
+    )
 
     # Timestamps
     created_at: Mapped[datetime] = mapped_column(
@@ -722,6 +739,12 @@ class DocumentGenerat(Base):
     # Relationships
     user: Mapped[Optional["User"]] = relationship(
         "User", back_populates="documente"
+    )
+    dosar: Mapped[Optional["Dosar"]] = relationship(
+        "Dosar", back_populates="documente", foreign_keys=[dosar_id]
+    )
+    comments: Mapped[list["DocumentComment"]] = relationship(
+        "DocumentComment", back_populates="document", cascade="all, delete-orphan"
     )
 
     __table_args__ = (
@@ -759,6 +782,10 @@ class RedFlagsSalvate(Base):
     critice: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     medii: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     scazute: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    dosar_id: Mapped[Optional[str]] = mapped_column(
+        UUID(as_uuid=False),
+        ForeignKey("dosare.id", ondelete="SET NULL"),
+    )
 
     # Timestamps
     created_at: Mapped[datetime] = mapped_column(
@@ -771,6 +798,9 @@ class RedFlagsSalvate(Base):
     # Relationships
     user: Mapped[Optional["User"]] = relationship(
         "User", back_populates="red_flags"
+    )
+    dosar: Mapped[Optional["Dosar"]] = relationship(
+        "Dosar", back_populates="red_flags", foreign_keys=[dosar_id]
     )
 
     __table_args__ = (
@@ -818,6 +848,10 @@ class TrainingMaterial(Base):
     metadata_: Mapped[Optional[dict]] = mapped_column(
         "metadata", JSONB, default=dict
     )
+    dosar_id: Mapped[Optional[str]] = mapped_column(
+        UUID(as_uuid=False),
+        ForeignKey("dosare.id", ondelete="SET NULL"),
+    )
 
     # Timestamps
     created_at: Mapped[datetime] = mapped_column(
@@ -830,6 +864,9 @@ class TrainingMaterial(Base):
     # Relationships
     user: Mapped[Optional["User"]] = relationship(
         "User", back_populates="training_materials"
+    )
+    dosar: Mapped[Optional["Dosar"]] = relationship(
+        "Dosar", back_populates="training_materials", foreign_keys=[dosar_id]
     )
 
     __table_args__ = (
@@ -928,6 +965,185 @@ class UserContext(Base):
 
     def __repr__(self) -> str:
         return f"<UserContext user={self.user_id} type={self.fact_type}: '{self.content[:50]}'>"
+
+
+# =============================================================================
+# DOSARE DIGITALE (Case Management)
+# =============================================================================
+
+class Dosar(Base):
+    """Digital case file linking all work artifacts under one case.
+
+    A dosar groups conversations, documents, red flags analyses, and training
+    materials under a single case. Contains metadata about the client,
+    contracting authority, deadlines, and case status.
+    """
+
+    __tablename__ = "dosare"
+
+    id: Mapped[str] = mapped_column(
+        UUID(as_uuid=False), primary_key=True, default=lambda: str(uuid4())
+    )
+    user_id: Mapped[str] = mapped_column(
+        UUID(as_uuid=False), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    titlu: Mapped[str] = mapped_column(String(300), nullable=False)
+    descriere: Mapped[Optional[str]] = mapped_column(Text)
+    numar_dosar: Mapped[Optional[str]] = mapped_column(String(100))  # Reference number
+    client: Mapped[Optional[str]] = mapped_column(String(300))
+    autoritate_contractanta: Mapped[Optional[str]] = mapped_column(String(300))
+    numar_procedura: Mapped[Optional[str]] = mapped_column(String(100))  # SEAP procedure number
+    cod_cpv: Mapped[Optional[str]] = mapped_column(String(20))
+    valoare_estimata: Mapped[Optional[Decimal]] = mapped_column(Numeric(15, 2))
+    tip_procedura: Mapped[Optional[str]] = mapped_column(String(80))
+    status: Mapped[str] = mapped_column(
+        String(30), nullable=False, default="activ"
+    )  # activ, in_lucru, depus, finalizat, arhivat
+    termen_depunere: Mapped[Optional[datetime]] = mapped_column(DateTime)
+    termen_solutionare: Mapped[Optional[datetime]] = mapped_column(DateTime)
+    note: Mapped[Optional[str]] = mapped_column(Text)
+    metadata_: Mapped[Optional[dict]] = mapped_column("metadata", JSONB, default=dict)
+
+    # Timestamps
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+
+    # Relationships
+    user: Mapped["User"] = relationship("User", back_populates="dosare")
+    conversatii: Mapped[list["Conversatie"]] = relationship(
+        "Conversatie", back_populates="dosar",
+        foreign_keys="Conversatie.dosar_id"
+    )
+    documente: Mapped[list["DocumentGenerat"]] = relationship(
+        "DocumentGenerat", back_populates="dosar",
+        foreign_keys="DocumentGenerat.dosar_id"
+    )
+    red_flags: Mapped[list["RedFlagsSalvate"]] = relationship(
+        "RedFlagsSalvate", back_populates="dosar",
+        foreign_keys="RedFlagsSalvate.dosar_id"
+    )
+    training_materials: Mapped[list["TrainingMaterial"]] = relationship(
+        "TrainingMaterial", back_populates="dosar",
+        foreign_keys="TrainingMaterial.dosar_id"
+    )
+
+    __table_args__ = (
+        Index("ix_dosare_user", user_id),
+        Index("ix_dosare_status", status),
+        Index("ix_dosare_created", created_at.desc()),
+    )
+
+    def __repr__(self) -> str:
+        return f"<Dosar '{self.titlu}' status={self.status}>"
+
+
+# =============================================================================
+# ALERTE DECIZII NOI (Decision Alerts)
+# =============================================================================
+
+class AlertRule(Base):
+    """User-defined alert rule for new CNSC decisions.
+
+    When new decisions are imported that match the rule's filters,
+    the user receives an email notification.
+    """
+
+    __tablename__ = "alert_rules"
+
+    id: Mapped[str] = mapped_column(
+        UUID(as_uuid=False), primary_key=True, default=lambda: str(uuid4())
+    )
+    user_id: Mapped[str] = mapped_column(
+        UUID(as_uuid=False), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    nume: Mapped[str] = mapped_column(String(200), nullable=False)
+    descriere: Mapped[Optional[str]] = mapped_column(Text)
+    filters: Mapped[dict] = mapped_column(
+        JSONB, nullable=False, default=dict
+    )  # {cod_cpv: [...], coduri_critici: [...], complet: [...], tip_procedura: [...], solutie: [...], keywords: [...]}
+    activ: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    frecventa: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="zilnic"
+    )  # zilnic, saptamanal
+    ultima_notificare: Mapped[Optional[datetime]] = mapped_column(DateTime)
+    total_notificari: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    metadata_: Mapped[Optional[dict]] = mapped_column("metadata", JSONB, default=dict)
+
+    # Timestamps
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+
+    # Relationships
+    user: Mapped["User"] = relationship("User", back_populates="alert_rules")
+
+    __table_args__ = (
+        Index("ix_alert_user", user_id),
+        Index("ix_alert_activ", activ),
+    )
+
+    def __repr__(self) -> str:
+        return f"<AlertRule '{self.nume}' activ={self.activ}>"
+
+
+# =============================================================================
+# COMENTARII PE DOCUMENTE (Document Comments)
+# =============================================================================
+
+class DocumentComment(Base):
+    """Inline comment on a generated document for collaborative review.
+
+    Supports text anchoring (start/end positions) and resolution tracking.
+    """
+
+    __tablename__ = "document_comments"
+
+    id: Mapped[str] = mapped_column(
+        UUID(as_uuid=False), primary_key=True, default=lambda: str(uuid4())
+    )
+    document_id: Mapped[str] = mapped_column(
+        UUID(as_uuid=False), ForeignKey("documente_generate.id", ondelete="CASCADE"), nullable=False
+    )
+    user_id: Mapped[Optional[str]] = mapped_column(
+        UUID(as_uuid=False), ForeignKey("users.id", ondelete="SET NULL")
+    )
+    anchor_start: Mapped[Optional[int]] = mapped_column(Integer)  # Character offset start
+    anchor_end: Mapped[Optional[int]] = mapped_column(Integer)  # Character offset end
+    anchor_text: Mapped[Optional[str]] = mapped_column(Text)  # Selected text snapshot
+    text: Mapped[str] = mapped_column(Text, nullable=False)
+    resolved: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    resolved_by: Mapped[Optional[str]] = mapped_column(UUID(as_uuid=False))
+    resolved_at: Mapped[Optional[datetime]] = mapped_column(DateTime)
+
+    # Timestamps
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+
+    # Relationships
+    document: Mapped["DocumentGenerat"] = relationship(
+        "DocumentGenerat", back_populates="comments"
+    )
+    user: Mapped[Optional["User"]] = relationship("User")
+
+    __table_args__ = (
+        Index("ix_dc_document", document_id),
+        Index("ix_dc_user", user_id),
+        Index("ix_dc_resolved", resolved),
+    )
+
+    def __repr__(self) -> str:
+        return f"<DocumentComment doc={self.document_id} resolved={self.resolved}>"
 
 
 # =============================================================================

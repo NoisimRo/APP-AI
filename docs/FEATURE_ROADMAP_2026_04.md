@@ -121,7 +121,7 @@ Before proposing features, we verified what data CNSC decisions actually contain
 
 ---
 
-### Sprint 4: Workflow & Case Management
+### Sprint 4: Workflow & Case Management ✅ DONE
 *Sticky workflows that create daily habits*
 
 #### 2.2 Dosar Digital - Case Management (Complexity: L)
@@ -218,10 +218,10 @@ Before proposing features, we verified what data CNSC decisions actually contain
 ## Implementation Order Summary
 
 ```
-Sprint 1 (Foundation):   6.2 -> 6.1 -> 6.5 -> 6.6
-Sprint 2 (Intelligence): 1.2 -> 1.1 -> 1.4
-Sprint 3 (AI):           4.2 -> 4.5 -> 4.1 -> 4.3 -> 4.4
-Sprint 4 (Workflow):      2.2 -> 2.3 -> 3.3
+Sprint 1 (Foundation):   6.2 -> 6.1 -> 6.5 -> 6.6           ✅ DONE
+Sprint 2 (Intelligence): 1.2 -> 1.1 -> 1.4                   ✅ DONE
+Sprint 3 (AI):           4.2 -> 4.5 -> 4.1 -> 4.3 -> 4.4    ✅ DONE
+Sprint 4 (Workflow):      2.2 -> 2.3 -> 3.3                   ✅ DONE
 Sprint 5 (Data Moat):    5.1 -> 1.5
 Sprint 6 (UX):           8.1 -> 8.4
 ```
