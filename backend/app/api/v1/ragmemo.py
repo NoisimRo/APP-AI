@@ -1,5 +1,6 @@
 """RAG Memo generation API endpoints."""
 
+import asyncio
 import time
 from typing import Optional
 
@@ -15,6 +16,9 @@ from app.services.rag import RAGService
 from app.services.llm.streaming import create_sse_response
 from app.api.v1.scopes import get_scope_decision_ids
 
+# Overall endpoint timeout (seconds) — generous for large topics + RAG search
+ENDPOINT_TIMEOUT = 300
+
 router = APIRouter()
 logger = get_logger(__name__)
 
@@ -22,7 +26,7 @@ logger = get_logger(__name__)
 class RAGMemoRequest(BaseModel):
     """Request for RAG memo generation."""
 
-    topic: str = Field(..., min_length=3, description="Topic for the legal memo")
+    topic: str = Field(..., min_length=3, max_length=100000, description="Topic for the legal memo")
     max_decisions: int = Field(
         default=5,
         ge=1,
@@ -76,14 +80,17 @@ async def generate_rag_memo(
         # Build query from topic
         query = f"Generează un memo juridic despre: {request.topic}. Include jurisprudență CNSC relevantă, argumente cheie și recomandări."
 
-        # Generate response using RAG
+        # Generate response using RAG (with timeout guard)
         t0 = time.monotonic()
-        response_text, citations, confidence, _ = await rag.generate_response(
-            query=query,
-            session=session,
-            conversation_history=None,
-            max_decisions=request.max_decisions,
-            scope_decision_ids=scope_ids,
+        response_text, citations, confidence, _ = await asyncio.wait_for(
+            rag.generate_response(
+                query=query,
+                session=session,
+                conversation_history=None,
+                max_decisions=request.max_decisions,
+                scope_decision_ids=scope_ids,
+            ),
+            timeout=ENDPOINT_TIMEOUT,
         )
         logger.info("timing_ragmemo_total", duration_s=round(time.monotonic() - t0, 2))
 
@@ -103,6 +110,19 @@ async def generate_rag_memo(
             confidence=confidence
         )
 
+    except asyncio.TimeoutError:
+        logger.error(
+            "rag_memo_timeout",
+            topic_length=len(request.topic),
+            timeout=ENDPOINT_TIMEOUT,
+        )
+        raise HTTPException(
+            status_code=504,
+            detail=(
+                f"Generarea memo-ului a depășit timpul limită ({ENDPOINT_TIMEOUT}s). "
+                "Subiectul este prea mare sau complex. Încercați cu un subiect mai concis."
+            ),
+        )
     except Exception as e:
         logger.error("rag_memo_error", error=str(e), exc_info=True)
         raise HTTPException(
@@ -133,10 +153,27 @@ async def generate_rag_memo_stream(
     query = f"Generează un memo juridic despre: {request.topic}. Include jurisprudență CNSC relevantă, argumente cheie și recomandări."
 
     t0 = time.monotonic()
-    contexts, system_prompt, citations, confidence, _ = await rag.prepare_context(
-        query=query, session=session, conversation_history=None, max_decisions=request.max_decisions,
-        scope_decision_ids=scope_ids,
-    )
+    try:
+        contexts, system_prompt, citations, confidence, _ = await asyncio.wait_for(
+            rag.prepare_context(
+                query=query, session=session, conversation_history=None, max_decisions=request.max_decisions,
+                scope_decision_ids=scope_ids,
+            ),
+            timeout=ENDPOINT_TIMEOUT,
+        )
+    except asyncio.TimeoutError:
+        logger.error(
+            "rag_memo_stream_timeout",
+            topic_length=len(request.topic),
+            timeout=ENDPOINT_TIMEOUT,
+        )
+        raise HTTPException(
+            status_code=504,
+            detail=(
+                f"Căutarea RAG a depășit timpul limită ({ENDPOINT_TIMEOUT}s). "
+                "Subiectul este prea mare sau complex. Încercați cu un subiect mai concis."
+            ),
+        )
     search_duration_s = round(time.monotonic() - t0, 2)
     logger.info("timing_ragmemo_stream_search", duration_s=search_duration_s)
 

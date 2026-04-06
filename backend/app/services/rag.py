@@ -1671,8 +1671,20 @@ class RAGService:
         import time
         t0 = time.monotonic()
 
+        # Truncate query for embedding: embedding models have token limits and
+        # very long inputs (e.g., 100K-char memo topics) produce poor vectors.
+        # Keep first ~4000 chars (~1000 tokens) which captures the semantic intent.
+        MAX_EMBED_QUERY_CHARS = 4000
+        embed_query = query[:MAX_EMBED_QUERY_CHARS] if len(query) > MAX_EMBED_QUERY_CHARS else query
+        if len(query) > MAX_EMBED_QUERY_CHARS:
+            logger.info(
+                "query_truncated_for_embedding",
+                original_len=len(query),
+                truncated_len=len(embed_query),
+            )
+
         # EMBED QUERY ONCE — reuse the vector in all sub-functions
-        query_vector = await self.embedding_service.embed_query(query)
+        query_vector = await self.embedding_service.embed_query(embed_query)
         t_embed = time.monotonic()
         logger.info("timing_embed_query", duration_s=round(t_embed - t0, 2))
 

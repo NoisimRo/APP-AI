@@ -4195,22 +4195,32 @@ const App = () => {
         </h2>
         <p className="text-xs text-slate-500 mb-4">Încarcă 2-5 documente din dosarul de achiziție pentru analiză unificată: red flags per document + inconsistențe între documente.</p>
 
-        {renderActiveDosarBanner(() => {}, true)}
+        {renderActiveDosarBanner((docs) => {
+          // Convert dosar text documents to File objects for multi-doc analysis
+          const newFiles = docs.map(d => new File([d.text], d.name.replace(/\.[^.]+$/, '.txt'), { type: 'text/plain' }));
+          setMultiDocFiles(prev => [...prev, ...newFiles]);
+        })}
 
         <div className="space-y-4 mt-2">
           <div className="bg-slate-50 p-4 rounded-lg border border-dashed border-violet-300">
             <label className="text-xs font-bold text-slate-500 uppercase mb-2 block">Documente dosar (2-5 fișiere)</label>
             <input type="file" multiple accept=".pdf,.docx,.doc,.txt,.md"
-              onChange={(e) => setMultiDocFiles(Array.from(e.target.files || []))}
+              onChange={(e) => { setMultiDocFiles(prev => [...prev, ...Array.from(e.target.files || [])]); e.target.value = ''; }}
               className="w-full text-xs text-slate-500 file:mr-2 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-violet-50 file:text-violet-600 hover:file:bg-violet-100" />
           </div>
           {multiDocFiles.length > 0 && (
             <div className="bg-white border border-slate-200 rounded-lg p-3">
-              <p className="text-xs font-bold text-slate-500 uppercase mb-2">{multiDocFiles.length} fișiere selectate</p>
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-xs font-bold text-slate-500 uppercase">{multiDocFiles.length} fișiere selectate</p>
+                <button onClick={() => setMultiDocFiles([])} className="text-xs text-red-500 hover:text-red-700 underline">Șterge toate</button>
+              </div>
               {multiDocFiles.map((f, i) => (
                 <div key={i} className="flex items-center justify-between py-1 text-xs text-slate-600">
                   <span className="truncate flex-1">{f.name}</span>
-                  <span className="text-slate-400 ml-2">{(f.size / 1024).toFixed(0)} KB</span>
+                  <div className="flex items-center gap-2 ml-2 shrink-0">
+                    <span className="text-slate-400">{(f.size / 1024).toFixed(0)} KB</span>
+                    <button onClick={() => setMultiDocFiles(prev => prev.filter((_, idx) => idx !== i))} className="text-red-400 hover:text-red-600" title="Elimină">✕</button>
+                  </div>
                 </div>
               ))}
             </div>
@@ -7973,99 +7983,84 @@ const App = () => {
           </div>
         )}
         {mode === 'rag' && handleRAGMemo && (
-           <div className="h-full flex flex-col p-6">
-              <header className="mb-4 flex items-center justify-between">
-                 <h2 className="text-2xl font-bold text-slate-800 flex items-center gap-2"><BookOpen className="text-teal-600"/> Jurisprudență RAG</h2>
-                 <button onClick={() => loadHistory('rag_memo')} className="text-xs bg-slate-50 text-slate-500 px-2.5 py-1 rounded-lg font-medium hover:bg-slate-100 transition flex items-center gap-1" title="Istoric"><Bookmark size={12} /> Istoric</button>
-              </header>
-              <ActiveScopeIndicator />
-              <div className="flex flex-col md:flex-row gap-4 md:gap-6 flex-1 overflow-hidden">
-                 <div className="w-full md:w-80 shrink-0 flex flex-col gap-4">
-                    {renderActiveDosarBanner((docs) => {
-                      setUploadedDocsRag(prev => [...prev, ...docs]);
-                      const combined = docs.map((d, i) => `=== DOCUMENT ${i+1}: ${d.name} ===\n${d.text}`).join('\n\n---\n\n');
-                      setMemoTopic(prev => prev ? prev + '\n\n---\n\n' + combined : combined);
-                    })}
-                    <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
-                       <ScopeSelector compact />
-                       <div className="bg-slate-50 p-3 rounded-lg border border-dashed border-slate-300 mb-3">
-                         <label className="text-xs font-bold text-slate-500 uppercase mb-2 block">
-                           Încarcă document (.txt, .md, .pdf)
-                         </label>
-                         <input
-                           type="file"
-                           accept=".txt,.md,.pdf,.doc,.docx"
-                           onChange={(e) => handleDocumentUpload(e, (text) => setMemoTopic(prev => prev ? prev + '\n\n---\n\n' + text : text), (doc) => setUploadedDocsRag(prev => [...prev, doc]))}
-                           className="block w-full text-sm text-slate-600
-                             file:mr-4 file:py-1.5 file:px-3
-                             file:rounded-lg file:border-0
-                             file:text-xs file:font-semibold
-                             file:bg-teal-50 file:text-teal-700
-                             hover:file:bg-teal-100"
-                         />
-                         {uploadedDocsRag.length > 0 && (
-                           <div className="mt-2 space-y-1">
-                             {uploadedDocsRag.map((doc, idx) => (
-                               <div key={idx} className="flex items-center justify-between text-xs text-green-600 bg-green-50 rounded px-2 py-1">
-                                 <span>✓ {doc.name} ({doc.text.length.toLocaleString()} car.)</span>
-                                 <button onClick={() => setUploadedDocsRag(prev => prev.filter((_, i) => i !== idx))} className="text-red-400 hover:text-red-600 ml-2" title="Șterge">✕</button>
-                               </div>
-                             ))}
-                             {uploadedDocsRag.length > 1 && (
-                               <button onClick={() => { setUploadedDocsRag([]); setMemoTopic(''); }} className="text-xs text-red-500 hover:text-red-700 underline">Șterge toate</button>
-                             )}
-                           </div>
-                         )}
-                       </div>
-                       <label className="text-sm font-bold text-slate-700 block mb-2">Subiect Memo</label>
-                       <textarea
-                          className={`w-full border rounded-lg p-3 text-sm h-24 focus:ring-2 focus:ring-teal-500 outline-none ${memoTopic.length > 100000 ? 'border-red-400 bg-red-50' : 'border-slate-300'}`}
-                          placeholder="Ex: Respingere ofertă sau încarcă document..."
-                          value={memoTopic}
-                          onChange={(e) => setMemoTopic(e.target.value)}
-                       />
-                       <CharCounter value={memoTopic} maxLength={100000} />
-                       <button
-                          onClick={handleRAGMemo}
-                          disabled={isLoading || !memoTopic.trim()}
-                          className="w-full bg-teal-600 text-white py-2.5 rounded-lg text-sm font-medium hover:bg-teal-700 transition disabled:opacity-50"
-                       >
-                          {isLoading ? (streamStatus || "Analiză...") : "Generează Memo"}
-                       </button>
-                       <p className="text-xs text-slate-400 mt-3 text-center">Căutare semantică în {dbStats?.total_decisions || 0} decizii din baza de date.</p>
+           <div className="h-full flex flex-col md:flex-row bg-white panel-resize-container">
+              {/* Left panel */}
+              <div className="w-full md:border-r border-slate-200 p-6 overflow-y-auto bg-slate-50/50 shrink-0 panel-left">
+                <h2 className="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2"><BookOpen className="text-teal-600" size={20}/> Jurisprudență RAG</h2>
+                <ActiveScopeIndicator />
+                {renderActiveDosarBanner((docs) => {
+                  setUploadedDocsRag(prev => [...prev, ...docs]);
+                  const combined = docs.map((d, i) => `=== DOCUMENT ${i+1}: ${d.name} ===\n${d.text}`).join('\n\n---\n\n');
+                  setMemoTopic(prev => prev ? prev + '\n\n---\n\n' + combined : combined);
+                })}
+                <ScopeSelector compact />
+                <div className="bg-slate-50 p-3 rounded-lg border border-dashed border-slate-300 mb-3 mt-3">
+                  <label className="text-xs font-bold text-slate-500 uppercase mb-2 block">
+                    Încarcă document (.txt, .md, .pdf)
+                  </label>
+                  <input
+                    type="file"
+                    accept=".txt,.md,.pdf,.doc,.docx"
+                    onChange={(e) => handleDocumentUpload(e, (text) => setMemoTopic(prev => prev ? prev + '\n\n---\n\n' + text : text), (doc) => setUploadedDocsRag(prev => [...prev, doc]))}
+                    className="block w-full text-sm text-slate-600 file:mr-4 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-teal-50 file:text-teal-700 hover:file:bg-teal-100"
+                  />
+                  {uploadedDocsRag.length > 0 && (
+                    <div className="mt-2 space-y-1">
+                      {uploadedDocsRag.map((doc, idx) => (
+                        <div key={idx} className="flex items-center justify-between text-xs text-green-600 bg-green-50 rounded px-2 py-1">
+                          <span>✓ {doc.name} ({doc.text.length.toLocaleString()} car.)</span>
+                          <button onClick={() => setUploadedDocsRag(prev => prev.filter((_, i) => i !== idx))} className="text-red-400 hover:text-red-600 ml-2" title="Șterge">✕</button>
+                        </div>
+                      ))}
+                      {uploadedDocsRag.length > 1 && (
+                        <button onClick={() => { setUploadedDocsRag([]); setMemoTopic(''); }} className="text-xs text-red-500 hover:text-red-700 underline">Șterge toate</button>
+                      )}
                     </div>
-                 </div>
-                 <div className="flex-1 bg-white border border-slate-200 rounded-xl shadow-sm p-4 md:p-8 overflow-y-auto text-slate-800 leading-relaxed">
-                    {generatedContent ? (
-                       <div>
-                         <div className="flex justify-end gap-2 mb-4 flex-wrap">
-                           <button
-                             onClick={async () => {
-                               if (ragMemoSaved) return;
-                               await saveDocument('rag_memo', memoTopic.slice(0, 200) || 'Memo RAG', generatedContent, generatedDecisionRefs, { topic: memoTopic });
-                               setRagMemoSaved(true);
-                             }}
-                             disabled={ragMemoSaved}
-                             className={`text-xs font-medium flex items-center gap-1 ${ragMemoSaved ? 'text-green-400 cursor-default' : 'text-green-600 hover:underline'}`}
-                           >
-                             <Save size={12} /> {ragMemoSaved ? 'Salvat ✓' : 'Salvează'}
-                           </button>
-                           {(['docx', 'pdf', 'md'] as const).map(fmt => (
-                             <button key={fmt} onClick={() => handleRAGMemoExport(fmt)} className="text-xs text-blue-600 font-medium hover:underline flex items-center gap-1">
-                               <Download size={12} /> {fmt.toUpperCase()}
-                             </button>
-                           ))}
-                           <button onClick={() => loadHistory('rag_memo')} className="text-xs text-slate-500 font-medium hover:underline flex items-center gap-1"><Bookmark size={12} /> Istoric</button>
-                         </div>
-                         <div className="prose prose-slate max-w-none" dangerouslySetInnerHTML={{ __html: formatMarkdown(generatedContent) }} />
-                       </div>
-                    ) : (
-                       <div className="flex flex-col items-center justify-center h-full text-slate-300">
-                          <BookOpen size={48} className="mb-4 opacity-20"/>
-                          <p>Rezultatul RAG va apărea aici.</p>
-                       </div>
-                    )}
-                 </div>
+                  )}
+                </div>
+                <label className="text-sm font-bold text-slate-700 block mb-2">Subiect Memo</label>
+                <textarea
+                  className={`w-full border rounded-lg p-3 text-sm h-24 focus:ring-2 focus:ring-teal-500 outline-none ${memoTopic.length > 100000 ? 'border-red-400 bg-red-50' : 'border-slate-300'}`}
+                  placeholder="Ex: Respingere ofertă sau încarcă document..."
+                  value={memoTopic}
+                  onChange={(e) => setMemoTopic(e.target.value)}
+                />
+                <CharCounter value={memoTopic} maxLength={100000} />
+                <button
+                  onClick={handleRAGMemo}
+                  disabled={isLoading || !memoTopic.trim()}
+                  className="w-full bg-teal-600 text-white py-2.5 rounded-lg text-sm font-medium hover:bg-teal-700 transition disabled:opacity-50"
+                >
+                  {isLoading ? (streamStatus || "Analiză...") : "Generează Memo"}
+                </button>
+                <p className="text-xs text-slate-400 mt-3 text-center">Căutare semantică în {dbStats?.total_decisions || 0} decizii din baza de date.</p>
+              </div>
+              <div className="panel-resize-handle hidden md:block" onMouseDown={handlePanelDragStart} />
+              <div className="w-full md:flex-1 flex flex-col bg-white panel-right">
+                {/* Fixed toolbar */}
+                <div className="shrink-0 p-3 border-b border-slate-100 bg-white flex items-center justify-end gap-1.5 flex-wrap">
+                  {(['docx', 'pdf', 'md'] as const).map(fmt => (
+                    <button key={fmt} onClick={() => handleRAGMemoExport(fmt)} disabled={!generatedContent} className="text-xs bg-purple-600 text-white px-2.5 py-1.5 rounded-lg font-medium hover:bg-purple-700 transition disabled:opacity-40 flex items-center gap-1">
+                      <Download size={11} /> {fmt.toUpperCase()}
+                    </button>
+                  ))}
+                  <button onClick={async () => { if (ragMemoSaved) return; await saveDocument('rag_memo', memoTopic.slice(0, 200) || 'Memo RAG', generatedContent, generatedDecisionRefs, { topic: memoTopic }); setRagMemoSaved(true); }} disabled={!generatedContent || ragMemoSaved}
+                    className={`text-xs px-2.5 py-1.5 rounded-lg font-medium transition flex items-center gap-1 ${ragMemoSaved ? 'bg-green-100 text-green-600' : 'bg-green-600 text-white hover:bg-green-700'} disabled:opacity-40`}>
+                    <Save size={11} /> {ragMemoSaved ? 'Salvat ✓' : 'Salvează'}
+                  </button>
+                  <button onClick={() => loadHistory('rag_memo')} className="text-xs bg-slate-100 text-slate-600 px-2.5 py-1.5 rounded-lg font-medium hover:bg-slate-200 transition flex items-center gap-1"><Bookmark size={11} /> Istoric</button>
+                </div>
+                {/* Scrollable content */}
+                <div className="flex-1 overflow-y-auto p-4 md:p-8">
+                  {generatedContent ? (
+                    <div className="prose prose-slate max-w-none" dangerouslySetInnerHTML={{ __html: formatMarkdown(generatedContent) }} />
+                  ) : (
+                    <div className="flex flex-col items-center justify-center h-full text-slate-300">
+                      <BookOpen size={48} className="mb-4 opacity-20"/>
+                      <p>Rezultatul RAG va apărea aici.</p>
+                    </div>
+                  )}
+                </div>
               </div>
            </div>
         )}
