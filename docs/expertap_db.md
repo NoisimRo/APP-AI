@@ -4,10 +4,13 @@
  Schema |        Name              | Type  |  Owner   | Persistence | Access method |    Size    | Description
 --------+--------------------------+-------+----------+-------------+---------------+------------+-------------
  public | acte_normative           | table | expertap | permanent   | heap          | 8192 bytes |
+ public | alert_rules              | table | expertap | permanent   | heap          | 8192 bytes |
  public | argumentare_critica      | table | expertap | permanent   | heap          | 4320 kB    |
  public | conversatii              | table | expertap | permanent   | heap          | 8192 bytes |
  public | decizii_cnsc             | table | expertap | permanent   | heap          | 78 MB      |
+ public | document_comments        | table | expertap | permanent   | heap          | 8192 bytes |
  public | documente_generate       | table | expertap | permanent   | heap          | 8192 bytes |
+ public | dosare                   | table | expertap | permanent   | heap          | 8192 bytes |
  public | legislatie_fragmente     | table | expertap | permanent   | heap          | 8192 bytes |
  public | llm_settings             | table | expertap | permanent   | heap          | 8192 bytes |
  public | mesaje_conversatie       | table | expertap | permanent   | heap          | 8192 bytes |
@@ -18,7 +21,7 @@
  public | training_materials       | table | expertap | permanent   | heap          | 8192 bytes |
  public | user_context             | table | expertap | permanent   | heap          | 8192 bytes |
  public | users                    | table | expertap | permanent   | heap          | 8192 bytes |
-(15 rows)
+(18 rows)
 
 
 # \d decizii_cnsc
@@ -248,8 +251,10 @@ Indexes:
     "ix_users_email" btree (email)
     "ix_users_rol" btree (rol)
 Referenced by:
+    TABLE "alert_rules" CONSTRAINT "alert_rules_user_id_fkey" FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
     TABLE "conversatii" CONSTRAINT "conversatii_user_id_fkey" FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
     TABLE "documente_generate" CONSTRAINT "documente_generate_user_id_fkey" FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    TABLE "dosare" CONSTRAINT "dosare_user_id_fkey" FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
     TABLE "red_flags_salvate" CONSTRAINT "red_flags_salvate_user_id_fkey" FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
     TABLE "training_materials" CONSTRAINT "training_materials_user_id_fkey" FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
     TABLE "user_context" CONSTRAINT "user_context_user_id_fkey" FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
@@ -287,6 +292,7 @@ Foreign-key constraints:
  scope_id       | uuid                        |           |          |
  created_at     | timestamp without time zone |           | not null | now()
  updated_at     | timestamp without time zone |           | not null | now()
+ dosar_id       | uuid                        |           |          |
 Indexes:
     "conversatii_pkey" PRIMARY KEY, btree (id)
     "ix_conv_created" btree (created_at DESC)
@@ -294,6 +300,7 @@ Indexes:
 Foreign-key constraints:
     "conversatii_user_id_fkey" FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
     "conversatii_scope_id_fkey" FOREIGN KEY (scope_id) REFERENCES search_scopes(id) ON DELETE SET NULL
+    "conversatii_dosar_id_fkey" FOREIGN KEY (dosar_id) REFERENCES dosare(id) ON DELETE SET NULL
 Referenced by:
     TABLE "mesaje_conversatie" CONSTRAINT "mesaje_conversatie_conversatie_id_fkey" FOREIGN KEY (conversatie_id) REFERENCES conversatii(id) ON DELETE CASCADE
 
@@ -330,6 +337,7 @@ Foreign-key constraints:
  metadata           | jsonb                       |           |          | '{}'::jsonb
  created_at         | timestamp without time zone |           | not null | now()
  updated_at         | timestamp without time zone |           | not null | now()
+ dosar_id           | uuid                        |           |          |
 Indexes:
     "documente_generate_pkey" PRIMARY KEY, btree (id)
     "ix_docgen_created" btree (created_at DESC)
@@ -337,6 +345,9 @@ Indexes:
     "ix_docgen_user" btree (user_id)
 Foreign-key constraints:
     "documente_generate_user_id_fkey" FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    "documente_generate_dosar_id_fkey" FOREIGN KEY (dosar_id) REFERENCES dosare(id) ON DELETE SET NULL
+Referenced by:
+    TABLE "document_comments" CONSTRAINT "document_comments_document_id_fkey" FOREIGN KEY (document_id) REFERENCES documente_generate(id) ON DELETE CASCADE
 
 
 # \d red_flags_salvate
@@ -354,12 +365,14 @@ Foreign-key constraints:
  scazute               | integer                     |           | not null | 0
  created_at            | timestamp without time zone |           | not null | now()
  updated_at            | timestamp without time zone |           | not null | now()
+ dosar_id              | uuid                        |           |          |
 Indexes:
     "red_flags_salvate_pkey" PRIMARY KEY, btree (id)
     "ix_rf_created" btree (created_at DESC)
     "ix_rf_user" btree (user_id)
 Foreign-key constraints:
     "red_flags_salvate_user_id_fkey" FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    "red_flags_salvate_dosar_id_fkey" FOREIGN KEY (dosar_id) REFERENCES dosare(id) ON DELETE SET NULL
 
 
 # \d training_materials
@@ -382,6 +395,7 @@ Foreign-key constraints:
  metadata            | jsonb                       |           |          | '{}'::jsonb
  created_at          | timestamp without time zone |           | not null | now()
  updated_at          | timestamp without time zone |           | not null | now()
+ dosar_id            | uuid                        |           |          |
 Indexes:
     "training_materials_pkey" PRIMARY KEY, btree (id)
     "ix_tm_created" btree (created_at DESC)
@@ -389,6 +403,7 @@ Indexes:
     "ix_tm_user" btree (user_id)
 Foreign-key constraints:
     "training_materials_user_id_fkey" FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    "training_materials_dosar_id_fkey" FOREIGN KEY (dosar_id) REFERENCES dosare(id) ON DELETE SET NULL
 
 
 # \d spete_anap
@@ -413,9 +428,95 @@ Indexes:
     "ix_spete_taguri" gin (taguri)
 
 
+# \d dosare
+                               Table "public.dosare"
+         Column          |            Type             | Collation | Nullable |       Default
+-------------------------+-----------------------------+-----------+----------+--------------------
+ id                      | uuid                        |           | not null | gen_random_uuid()
+ user_id                 | uuid                        |           | not null |
+ titlu                   | character varying(300)      |           | not null |
+ descriere               | text                        |           |          |
+ numar_dosar             | character varying(100)      |           |          |
+ client                  | character varying(300)      |           |          |
+ autoritate_contractanta | character varying(300)      |           |          |
+ numar_procedura         | character varying(100)      |           |          |
+ cod_cpv                 | character varying(20)       |           |          |
+ valoare_estimata        | numeric(15,2)               |           |          |
+ tip_procedura           | character varying(80)       |           |          |
+ status                  | character varying(30)       |           | not null | 'activ'::character varying
+ termen_depunere         | timestamp without time zone |           |          |
+ termen_solutionare      | timestamp without time zone |           |          |
+ note                    | text                        |           |          |
+ metadata                | jsonb                       |           |          | '{}'::jsonb
+ created_at              | timestamp without time zone |           | not null | now()
+ updated_at              | timestamp without time zone |           | not null | now()
+Indexes:
+    "dosare_pkey" PRIMARY KEY, btree (id)
+    "ix_dosare_user" btree (user_id)
+    "ix_dosare_status" btree (status)
+    "ix_dosare_created" btree (created_at DESC)
+Foreign-key constraints:
+    "dosare_user_id_fkey" FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+Referenced by:
+    TABLE "conversatii" CONSTRAINT "conversatii_dosar_id_fkey" FOREIGN KEY (dosar_id) REFERENCES dosare(id) ON DELETE SET NULL
+    TABLE "documente_generate" CONSTRAINT "documente_generate_dosar_id_fkey" FOREIGN KEY (dosar_id) REFERENCES dosare(id) ON DELETE SET NULL
+    TABLE "red_flags_salvate" CONSTRAINT "red_flags_salvate_dosar_id_fkey" FOREIGN KEY (dosar_id) REFERENCES dosare(id) ON DELETE SET NULL
+    TABLE "training_materials" CONSTRAINT "training_materials_dosar_id_fkey" FOREIGN KEY (dosar_id) REFERENCES dosare(id) ON DELETE SET NULL
+
+
+# \d alert_rules
+                           Table "public.alert_rules"
+       Column        |            Type             | Collation | Nullable |       Default
+---------------------+-----------------------------+-----------+----------+--------------------
+ id                  | uuid                        |           | not null | gen_random_uuid()
+ user_id             | uuid                        |           | not null |
+ nume                | character varying(200)      |           | not null |
+ descriere           | text                        |           |          |
+ filters             | jsonb                       |           | not null | '{}'::jsonb
+ activ               | boolean                     |           | not null | true
+ frecventa           | character varying(20)       |           | not null | 'zilnic'::character varying
+ ultima_notificare   | timestamp without time zone |           |          |
+ total_notificari    | integer                     |           | not null | 0
+ metadata            | jsonb                       |           |          | '{}'::jsonb
+ created_at          | timestamp without time zone |           | not null | now()
+ updated_at          | timestamp without time zone |           | not null | now()
+Indexes:
+    "alert_rules_pkey" PRIMARY KEY, btree (id)
+    "ix_alert_user" btree (user_id)
+    "ix_alert_activ" btree (activ)
+Foreign-key constraints:
+    "alert_rules_user_id_fkey" FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+
+
+# \d document_comments
+                         Table "public.document_comments"
+     Column     |            Type             | Collation | Nullable |       Default
+----------------+-----------------------------+-----------+----------+--------------------
+ id             | uuid                        |           | not null | gen_random_uuid()
+ document_id    | uuid                        |           | not null |
+ user_id        | uuid                        |           |          |
+ anchor_start   | integer                     |           |          |
+ anchor_end     | integer                     |           |          |
+ anchor_text    | text                        |           |          |
+ text           | text                        |           | not null |
+ resolved       | boolean                     |           | not null | false
+ resolved_by    | uuid                        |           |          |
+ resolved_at    | timestamp without time zone |           |          |
+ created_at     | timestamp without time zone |           | not null | now()
+ updated_at     | timestamp without time zone |           | not null | now()
+Indexes:
+    "document_comments_pkey" PRIMARY KEY, btree (id)
+    "ix_dc_document" btree (document_id)
+    "ix_dc_user" btree (user_id)
+    "ix_dc_resolved" btree (resolved)
+Foreign-key constraints:
+    "document_comments_document_id_fkey" FOREIGN KEY (document_id) REFERENCES documente_generate(id) ON DELETE CASCADE
+    "document_comments_user_id_fkey" FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
+
+
 ---
 
-# Ultima sincronizare cu producția: 2026-04-04
+# Ultima sincronizare cu producția: 2026-04-05
 
 # Changelog Schema Producție
 
@@ -458,3 +559,10 @@ Indexes:
 | 2026-03-21 | `CREATE INDEX ix_decizii_procedura ON decizii_cnsc (tip_procedura);` | Utilizator | DA |
 | 2026-04-02 | `CREATE TABLE spete_anap (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), numar_speta INTEGER NOT NULL UNIQUE, versiune INTEGER NOT NULL DEFAULT 1, data_publicarii TIMESTAMP NOT NULL, categorie VARCHAR(200) NOT NULL, intrebare TEXT NOT NULL, raspuns TEXT NOT NULL, taguri TEXT[], embedding vector(2000), created_at TIMESTAMP NOT NULL DEFAULT now());` + 3 indexuri (categorie, taguri GIN, embedding HNSW) | Utilizator | DA |
 | 2026-04-04 | `CREATE TABLE user_context (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE, fact_type VARCHAR(50) NOT NULL DEFAULT 'general', content TEXT NOT NULL, source VARCHAR(50), importance INTEGER NOT NULL DEFAULT 5, active BOOLEAN NOT NULL DEFAULT true, created_at TIMESTAMP NOT NULL DEFAULT now(), updated_at TIMESTAMP NOT NULL DEFAULT now()); CREATE INDEX idx_user_context_user_id ON user_context(user_id);` — Sprint 3: Memorie persistentă AI (4.4) | Utilizator | DA |
+| 2026-04-05 | `CREATE TABLE dosare (...)` + 3 indexuri (user_id, status, created_at DESC) — Sprint 4: Dosar Digital (2.2) | Utilizator | DA |
+| 2026-04-05 | `ALTER TABLE conversatii ADD COLUMN dosar_id UUID REFERENCES dosare(id) ON DELETE SET NULL;` | Utilizator | DA |
+| 2026-04-05 | `ALTER TABLE documente_generate ADD COLUMN dosar_id UUID REFERENCES dosare(id) ON DELETE SET NULL;` | Utilizator | DA |
+| 2026-04-05 | `ALTER TABLE red_flags_salvate ADD COLUMN dosar_id UUID REFERENCES dosare(id) ON DELETE SET NULL;` | Utilizator | DA |
+| 2026-04-05 | `ALTER TABLE training_materials ADD COLUMN dosar_id UUID REFERENCES dosare(id) ON DELETE SET NULL;` | Utilizator | DA |
+| 2026-04-05 | `CREATE TABLE alert_rules (...)` + 2 indexuri (user_id, activ) — Sprint 4: Alerte Decizii (2.3) | Utilizator | DA |
+| 2026-04-05 | `CREATE TABLE document_comments (...)` + 3 indexuri (document_id, user_id, resolved) — Sprint 4: Comentarii Documente (3.3) | Utilizator | DA |

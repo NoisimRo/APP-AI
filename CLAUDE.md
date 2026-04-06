@@ -453,8 +453,10 @@ CREATE INDEX ix_dc_resolved ON document_comments(resolved);
 3. **Generate retroactive summaries**: `python scripts/generate_summaries.py` (lightweight, ~1600 tokens/decision)
 4. **Extract obiect_contract**: `python scripts/extract_obiect_contract.py` (regex, instant, prerequisite for CPV deduction)
 5. **Deduce CPV codes**: `python scripts/deduce_cpv.py` (for decisions without CPV, uses embedding similarity)
-6. **Execute Sprint 4 SQL migration** in production (see above)
-7. **Deploy**: Push to `main` to trigger Cloud Build → Cloud Run
+6. **Deploy**: Push to `main` to trigger Cloud Build → Cloud Run
+
+### What's been done (complete)
+- ✅ Sprint 4 SQL migration executed in production (2026-04-05): dosare, alert_rules, document_comments + dosar_id FK on 4 tables
 
 ### Future: Daily Automation (Cloud Run Job + Cloud Scheduler)
 
@@ -526,47 +528,29 @@ Modul pentru generarea de materiale didactice destinate formării specialiștilo
 - ✅ 4 niveluri dificultate + 4 opțiuni lungime
 - ✅ UI complet cu formular, tabs, export, citations
 
-### Faza 2 — Generare în lot (batch) [DE IMPLEMENTAT]
-- Posibilitate de a genera un pachet de materiale: ex. "5 spețe + 10 quiz-uri pe tema X"
-- UI: selector cantitate per tip material, generare secvențială cu progress bar
-- Export pachet complet într-un singur DOCX/PDF (toate materialele concatenate)
-- Endpoint nou: `POST /api/v1/training/generate/batch`
+### Faza 2 — Generare în lot (batch) [✅ IMPLEMENTAT]
+- ✅ Posibilitate de a genera un pachet de materiale: ex. "5 spețe + 10 quiz-uri pe tema X"
+- ✅ UI: selector cantitate per tip material (1-50), generare secvențială cu progress bar
+- ✅ 3 moduri: Individual, Batch (Lot), Program Formare
+- ⚠️ Fără endpoint dedicat `/batch` — batch-ul se face client-side prin apeluri secvențiale la `/generate/stream`
+- ⚠️ Export pachet complet într-un singur DOCX — neimplementat (se exportă materialele individual)
 
-### Faza 3 — Salvare în baza de date și reutilizare [DE IMPLEMENTAT]
-- **Tabel nou `training_materials`** în PostgreSQL:
-  ```sql
-  CREATE TABLE training_materials (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    tip_material VARCHAR(30) NOT NULL,
-    tema TEXT NOT NULL,
-    nivel_dificultate VARCHAR(20) NOT NULL,
-    lungime VARCHAR(20) NOT NULL,
-    full_content TEXT NOT NULL,
-    material TEXT,
-    cerinte TEXT,
-    rezolvare TEXT,
-    note_trainer TEXT,
-    legislatie_citata TEXT[],
-    jurisprudenta_citata TEXT[],
-    metadata JSONB DEFAULT '{}',
-    created_at TIMESTAMP NOT NULL DEFAULT now(),
-    updated_at TIMESTAMP NOT NULL DEFAULT now()
-  );
-  ```
-- **Model SQLAlchemy** nou în `backend/app/models/` (sau extindere `decision.py`)
-- **Istoric materiale**: pagină cu lista materialelor salvate, filtrare pe tip/temă/nivel
-- **Reutilizare**: re-deschidere material salvat, re-generare cu parametri modificați
-- **Organizare pe colecții/dosare** tematice (ex: "Training Evaluare Oferte", "Workshop CNSC")
-- **Căutare** în materialele salvate (full-text pe temă + conținut)
-- **Endpoint-uri noi**: `GET /api/v1/training/materials` (list), `GET /api/v1/training/materials/{id}`, `DELETE /api/v1/training/materials/{id}`
-- **Frontend**: tab "Materialele mele" în pagina TrainingAP, cu grid/list view
+### Faza 3 — Salvare în baza de date și reutilizare [✅ IMPLEMENTAT]
+- ✅ **Tabel `training_materials`** în PostgreSQL (creat în producție, 18 coloane incl. `dosar_id` FK)
+- ✅ **Model SQLAlchemy** în `backend/app/models/decision.py` (`TrainingMaterial`)
+- ✅ **Istoric materiale**: buton Istoric în UI, listare materialelor salvate, filtrare pe tip
+- ✅ **Salvare/Încărcare**: POST/GET/DELETE prin `/api/v1/saved/training`
+- ✅ **Organizare pe dosare**: `dosar_id` FK permite linkuirea materialelor la dosare digitale
+- ⚠️ **Căutare full-text** — neimplementat (doar filtrare pe `tip_material`)
+- ⚠️ **Re-generare cu parametri modificați** — neimplementat (se poate deschide materialul salvat, dar nu re-genera)
+- ⚠️ **Tab "Materialele mele" dedicat** — neimplementat (materialele sunt accesibile prin butonul Istoric global)
 
-### Faza 4 — Îmbunătățiri UX [DE IMPLEMENTAT]
-- **Undo/Regenerare**: buton de regenerare a materialului cu aceiași parametri dar output diferit
-- **Editare manuală**: posibilitatea de a edita materialul generat înainte de export/salvare
-- **Teme predefinite**: dropdown cu teme populare (ex: "Evaluarea ofertelor", "Contestarea procedurii", "Conflictul de interese")
-- **Template-uri personalizate**: trainer-ul poate salva prompt-uri/instrucțiuni custom reutilizabile
-- **Preview print**: vizualizare print-friendly înainte de export
+### Faza 4 — Îmbunătățiri UX [PARȚIAL IMPLEMENTAT]
+- ⚠️ **Undo/Regenerare**: neimplementat (nu există buton de regenerare cu aceiași parametri)
+- ✅ **Editare manuală**: posibilitatea de a edita materialul generat înainte de export/salvare
+- ⚠️ **Teme predefinite**: neimplementat (nu există dropdown cu teme populare)
+- ⚠️ **Template-uri personalizate**: neimplementat
+- ⚠️ **Preview print**: neimplementat (doar export DOCX/PDF/MD)
 
 ## Feature Roadmap (2026-04-04)
 
