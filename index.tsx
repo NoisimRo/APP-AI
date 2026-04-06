@@ -707,6 +707,16 @@ const App = () => {
   const [dosarFilter, setDosarFilter] = useState('');
   const [dosarShowForm, setDosarShowForm] = useState(false);
 
+  // Active Dosar (persistent across pages)
+  const [activeDosarId, setActiveDosarId] = useState<string | null>(() => localStorage.getItem('activeDosarId'));
+  const [activeDosarInfo, setActiveDosarInfo] = useState<{titlu: string; client?: string; status: string} | null>(null);
+  const [activeDosarDocs, setActiveDosarDocs] = useState<{id: string; filename: string; text: string}[]>([]);
+  const [dosarDocsLoading, setDosarDocsLoading] = useState(false);
+
+  // Dosar Documents (for detail view)
+  const [dosarDocuments, setDosarDocuments] = useState<any[]>([]);
+  const [dosarDocUploading, setDosarDocUploading] = useState(false);
+
   // Alert Rules States
   const [alertRules, setAlertRules] = useState<any[]>([]);
   const [alertsLoading, setAlertsLoading] = useState(false);
@@ -1483,6 +1493,7 @@ const App = () => {
           titlu: firstUserMsg.slice(0, 200),
           mesaje: chatMessages.map((m, i) => ({ rol: m.role, continut: m.text, citations: (m as any).citations || [], ordine: i })),
           scope_id: activeScopeId || null,
+          dosar_id: activeDosarId || null,
         }),
       });
       showSaveToast(res.ok);
@@ -1494,7 +1505,7 @@ const App = () => {
       const res = await authFetch('/api/v1/saved/documents', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ tip_document: tipDocument, titlu, continut, referinte_decizii: referinte, metadata: meta }),
+        body: JSON.stringify({ tip_document: tipDocument, titlu, continut, referinte_decizii: referinte, metadata: meta, dosar_id: activeDosarId || null }),
       });
       showSaveToast(res.ok);
     } catch { showSaveToast(false); }
@@ -1515,6 +1526,7 @@ const App = () => {
           rezultate: redFlagsResults.map((rf, i) => ({ ...rf, edited_clarification: editedClarifications[i] || null })),
           total_flags: redFlagsResults.length,
           critice, medii, scazute,
+          dosar_id: activeDosarId || null,
         }),
       });
       showSaveToast(res.ok);
@@ -1541,6 +1553,7 @@ const App = () => {
           legislatie_citata: meta.legislatie_citata || [],
           jurisprudenta_citata: meta.jurisprudenta_citata || [],
           metadata: { tip_name: meta.tip_name || trainingTip },
+          dosar_id: activeDosarId || null,
         }),
       });
       showSaveToast(res.ok);
@@ -3661,8 +3674,12 @@ const App = () => {
           <button onClick={() => loadHistory('contestatie')} className="text-xs bg-slate-50 text-slate-500 px-2.5 py-1 rounded-lg font-medium hover:bg-slate-100 transition flex items-center gap-1" title="Istoric"><Bookmark size={12} /> Istoric</button>
         </div>
 
+        {renderActiveDosarBanner((docs) => {
+          setUploadedDocsDrafter(prev => [...prev, ...docs]);
+        })}
+
         {/* Document Type Selector */}
-        <div className="flex gap-2 mb-4">
+        <div className="flex gap-2 mb-4 mt-2">
           <button
             onClick={() => setDrafterDocType('contestatie')}
             className={`flex-1 text-xs font-semibold py-2.5 rounded-lg border transition ${drafterDocType === 'contestatie' ? 'bg-blue-600 text-white border-blue-600 shadow-sm' : 'bg-white text-slate-600 border-slate-300 hover:bg-slate-50'}`}
@@ -4272,9 +4289,14 @@ const App = () => {
               <ClipboardCheck className="text-emerald-600" size={20}/> Verificator Conformitate
             </h2>
           </div>
-          <p className="text-xs text-slate-500 mb-6">Încarcă documentația de achiziție și AI verifică conformitatea cu legislația aplicabilă.</p>
+          <p className="text-xs text-slate-500 mb-4">Încarcă documentația de achiziție și AI verifică conformitatea cu legislația aplicabilă.</p>
 
-          <div className="space-y-4">
+          {renderActiveDosarBanner((docs) => {
+            const combined = docs.map((d, i) => `=== DOCUMENT ${i+1}: ${d.name} ===\n${d.text}`).join('\n\n---\n\n');
+            setComplianceText(combined);
+          })}
+
+          <div className="space-y-4 mt-2">
             <div className="bg-slate-50 p-4 rounded-lg border border-dashed border-slate-300">
               <label className="text-xs font-bold text-slate-500 uppercase mb-2 block">Încarcă document (.pdf, .docx, .txt)</label>
               <input type="file" accept=".pdf,.docx,.doc,.txt,.md"
@@ -4450,9 +4472,14 @@ const App = () => {
             </h2>
             <button onClick={() => loadHistory('contestatie')} className="text-xs bg-slate-50 text-slate-500 px-2.5 py-1 rounded-lg font-medium hover:bg-slate-100 transition flex items-center gap-1" title="Istoric"><Bookmark size={12} /> Istoric</button>
           </div>
-          <p className="text-xs text-slate-500 mb-6">AI generează o strategie completă de contestare cu șanse de succes per critică, temei legal și jurisprudență.</p>
+          <p className="text-xs text-slate-500 mb-4">AI generează o strategie completă de contestare cu șanse de succes per critică, temei legal și jurisprudență.</p>
 
-          <div className="space-y-4">
+          {renderActiveDosarBanner((docs) => {
+            const combined = docs.map((d, i) => `=== DOCUMENT ${i+1}: ${d.name} ===\n${d.text}`).join('\n\n---\n\n');
+            setStrategyInput(p => ({ ...p, description: p.description ? p.description + '\n\n---\n\n' + combined : combined }));
+          })}
+
+          <div className="space-y-4 mt-2">
             {/* Description */}
             <div>
               <label className="block text-xs font-bold text-slate-600 uppercase mb-1">Descrierea situației *</label>
@@ -5159,7 +5186,11 @@ const App = () => {
           <ScopeSelector compact />
           <ActiveScopeIndicator />
 
-          <div className="space-y-5">
+          {renderActiveDosarBanner((docs) => {
+            setUploadedDocsTrainingContext(prev => [...prev, ...docs]);
+          })}
+
+          <div className="space-y-5 mt-2">
             {/* Mode selector */}
             <div>
               <label className="block text-xs font-bold text-slate-700 uppercase mb-2">Mod Generare</label>
@@ -5639,7 +5670,10 @@ const App = () => {
   const loadDosarDetail = async (id: string) => {
     try {
       const res = await authFetch(`/api/v1/dosare/${id}`);
-      if (res.ok) setDosarViewing(await res.json());
+      if (res.ok) {
+        setDosarViewing(await res.json());
+        loadDosarDocuments(id);
+      }
     } catch { /* ignore */ }
   };
 
@@ -5677,6 +5711,7 @@ const App = () => {
     try {
       await authFetch(`/api/v1/dosare/${id}`, { method: 'DELETE' });
       if (dosarViewing?.id === id) setDosarViewing(null);
+      if (activeDosarId === id) deactivateDosar();
       loadDosare();
       loadDosarStats();
       setSaveStatus({ type: 'success', text: 'Dosar șters' });
@@ -5695,6 +5730,94 @@ const App = () => {
     } catch { /* ignore */ }
   };
 
+  // --- Active Dosar Functions ---
+  const activateDosar = async (dosarId: string) => {
+    try {
+      setDosarDocsLoading(true);
+      const [infoRes, textsRes] = await Promise.all([
+        authFetch(`/api/v1/dosare/${dosarId}`),
+        authFetch(`/api/v1/dosare/${dosarId}/documents/texts`),
+      ]);
+      if (infoRes.ok && textsRes.ok) {
+        const info = await infoRes.json();
+        const texts = await textsRes.json();
+        setActiveDosarId(dosarId);
+        setActiveDosarInfo({ titlu: info.titlu, client: info.client, status: info.status });
+        setActiveDosarDocs(texts.map((t: any) => ({ id: t.id, filename: t.filename, text: t.extracted_text })));
+        localStorage.setItem('activeDosarId', dosarId);
+        setSaveStatus({ type: 'success', text: `Dosar activ: ${info.titlu}` });
+      }
+    } catch { /* ignore */ }
+    setDosarDocsLoading(false);
+    setTimeout(() => setSaveStatus(null), 3000);
+  };
+
+  const deactivateDosar = () => {
+    setActiveDosarId(null);
+    setActiveDosarInfo(null);
+    setActiveDosarDocs([]);
+    localStorage.removeItem('activeDosarId');
+    setSaveStatus({ type: 'success', text: 'Dosar dezactivat' });
+    setTimeout(() => setSaveStatus(null), 3000);
+  };
+
+  // Load active dosar on startup
+  useEffect(() => {
+    const storedId = localStorage.getItem('activeDosarId');
+    if (storedId && authState.user && !activeDosarInfo) {
+      activateDosar(storedId).catch(() => {
+        localStorage.removeItem('activeDosarId');
+        setActiveDosarId(null);
+      });
+    }
+  }, [authState.user]);
+
+  // --- Dosar Document Management ---
+  const loadDosarDocuments = async (dosarId: string) => {
+    try {
+      const res = await authFetch(`/api/v1/dosare/${dosarId}/documents`);
+      if (res.ok) setDosarDocuments(await res.json());
+    } catch { /* ignore */ }
+  };
+
+  const uploadDosarDocument = async (dosarId: string, file: File) => {
+    setDosarDocUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      const res = await authFetch(`/api/v1/dosare/${dosarId}/documents`, { method: 'POST', body: formData });
+      if (res.ok) {
+        loadDosarDocuments(dosarId);
+        if (activeDosarId === dosarId) {
+          // Refresh active dosar docs
+          const textsRes = await authFetch(`/api/v1/dosare/${dosarId}/documents/texts`);
+          if (textsRes.ok) {
+            const texts = await textsRes.json();
+            setActiveDosarDocs(texts.map((t: any) => ({ id: t.id, filename: t.filename, text: t.extracted_text })));
+          }
+        }
+        setSaveStatus({ type: 'success', text: 'Document încărcat' });
+      } else {
+        const err = await res.json().catch(() => ({}));
+        setSaveStatus({ type: 'error', text: err.detail || 'Eroare la încărcare' });
+      }
+    } catch { setSaveStatus({ type: 'error', text: 'Eroare la încărcare' }); }
+    setDosarDocUploading(false);
+    setTimeout(() => setSaveStatus(null), 3000);
+  };
+
+  const deleteDosarDocument = async (dosarId: string, docId: string) => {
+    try {
+      const res = await authFetch(`/api/v1/dosare/${dosarId}/documents/${docId}`, { method: 'DELETE' });
+      if (res.ok) {
+        loadDosarDocuments(dosarId);
+        if (activeDosarId === dosarId) {
+          setActiveDosarDocs(prev => prev.filter(d => d.id !== docId));
+        }
+      }
+    } catch { /* ignore */ }
+  };
+
   const DOSAR_STATUS_COLORS: Record<string, string> = {
     activ: 'bg-green-100 text-green-700 border-green-200',
     in_lucru: 'bg-blue-100 text-blue-700 border-blue-200',
@@ -5704,6 +5827,77 @@ const App = () => {
   };
   const DOSAR_STATUS_LABELS: Record<string, string> = {
     activ: 'Activ', in_lucru: 'În lucru', depus: 'Depus', finalizat: 'Finalizat', arhivat: 'Arhivat',
+  };
+
+  // --- Active Dosar Banner (shown on tool pages) ---
+  const [bannerSelectedDocs, setBannerSelectedDocs] = useState<Set<string>>(new Set());
+
+  // Sync banner selections when active dosar docs change
+  useEffect(() => {
+    setBannerSelectedDocs(new Set(activeDosarDocs.map(d => d.id)));
+  }, [activeDosarDocs]);
+
+  const renderActiveDosarBanner = (onLoadSelected: (docs: {name: string, text: string}[]) => void, multiDocMode?: boolean) => {
+    if (!activeDosarId || !activeDosarInfo) return null;
+
+    const handleLoadSelected = () => {
+      const selected = activeDosarDocs.filter(d => bannerSelectedDocs.has(d.id));
+      if (selected.length === 0) return;
+      onLoadSelected(selected.map(d => ({ name: d.filename, text: d.text })));
+      setSaveStatus({ type: 'success', text: `${selected.length} documente încărcate din dosar` });
+      setTimeout(() => setSaveStatus(null), 3000);
+    };
+
+    const toggleDoc = (id: string) => {
+      setBannerSelectedDocs(prev => {
+        const next = new Set(prev);
+        if (next.has(id)) next.delete(id); else next.add(id);
+        return next;
+      });
+    };
+
+    return (
+      <div className="mx-4 mt-3 mb-1 p-3 rounded-xl border border-blue-200 bg-blue-50/60">
+        <div className="flex items-center justify-between mb-2">
+          <div className="flex items-center gap-2 text-sm font-medium text-blue-800">
+            <Briefcase size={16} className="text-blue-600" />
+            <span>Dosar activ: {activeDosarInfo.titlu}</span>
+            <span className="text-xs text-blue-500">— {activeDosarDocs.length} documente</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <button onClick={() => { setMode('dosare'); if (activeDosarId) loadDosarDetail(activeDosarId); }} className="text-xs text-blue-600 hover:underline">Schimbă dosar</button>
+            <button onClick={deactivateDosar} className="text-xs text-red-500 hover:underline">Dezactivează</button>
+          </div>
+        </div>
+        {activeDosarDocs.length === 0 ? (
+          <p className="text-xs text-blue-400 italic">Niciun document atașat la acest dosar. Adăugați documente din pagina dosarului.</p>
+        ) : multiDocMode ? (
+          <p className="text-xs text-blue-400 italic">Multi-Document acceptă fișiere direct — încărcați-le din zona de upload de mai jos.</p>
+        ) : (
+          <>
+            <div className="space-y-1 mb-2 max-h-32 overflow-y-auto">
+              {activeDosarDocs.map(doc => {
+                const wordCount = doc.text.split(/\s+/).length;
+                return (
+                  <label key={doc.id} className="flex items-center gap-2 text-xs cursor-pointer hover:bg-blue-100/50 rounded px-1 py-0.5">
+                    <input type="checkbox" checked={bannerSelectedDocs.has(doc.id)} onChange={() => toggleDoc(doc.id)} className="rounded border-blue-300 text-blue-600" />
+                    <span className="text-slate-700 truncate flex-1">{doc.filename}</span>
+                    <span className="text-blue-400 shrink-0">({wordCount.toLocaleString('ro-RO')} cuv.)</span>
+                  </label>
+                );
+              })}
+            </div>
+            <button
+              onClick={handleLoadSelected}
+              disabled={bannerSelectedDocs.size === 0}
+              className="text-xs bg-blue-600 text-white px-3 py-1.5 rounded-lg font-medium hover:bg-blue-700 transition disabled:opacity-50 flex items-center gap-1"
+            >
+              <Download size={12} /> Încarcă {bannerSelectedDocs.size} documente selectate
+            </button>
+          </>
+        )}
+      </div>
+    );
   };
 
   const renderDosare = () => {
@@ -5730,6 +5924,11 @@ const App = () => {
                 </div>
                 <div className="flex items-center gap-2">
                   <span className={`px-3 py-1 rounded-full text-xs font-medium border ${DOSAR_STATUS_COLORS[d.status] || 'bg-slate-100'}`}>{DOSAR_STATUS_LABELS[d.status] || d.status}</span>
+                  {activeDosarId === d.id ? (
+                    <button onClick={deactivateDosar} className="px-3 py-1.5 rounded-lg text-xs font-medium bg-green-100 text-green-700 border border-green-200 hover:bg-green-200 transition flex items-center gap-1"><CheckCircle size={14} /> Activ</button>
+                  ) : (
+                    <button onClick={() => activateDosar(d.id)} className="px-3 py-1.5 rounded-lg text-xs font-medium bg-blue-50 text-blue-600 border border-blue-200 hover:bg-blue-100 transition flex items-center gap-1"><Briefcase size={14} /> Setează Activ</button>
+                  )}
                   <button onClick={() => { setDosarEditing(d.id); setDosarForm({ titlu: d.titlu || '', descriere: d.descriere || '', client: d.client || '', autoritate_contractanta: d.autoritate_contractanta || '', numar_dosar: d.numar_dosar || '', numar_procedura: d.numar_procedura || '', cod_cpv: d.cod_cpv || '', valoare_estimata: d.valoare_estimata?.toString() || '', tip_procedura: d.tip_procedura || '', termen_depunere: d.termen_depunere?.slice(0, 16) || '', termen_solutionare: d.termen_solutionare?.slice(0, 16) || '', note: d.note || '' }); setDosarShowForm(true); setDosarViewing(null); }} className="p-1.5 text-slate-400 hover:text-blue-600"><Pencil size={16} /></button>
                   <button onClick={() => deleteDosarById(d.id)} className="p-1.5 text-slate-400 hover:text-red-600"><Trash2 size={16} /></button>
                 </div>
@@ -5768,6 +5967,48 @@ const App = () => {
                     );
                   })}
                 </div>
+              )}
+            </div>
+            {/* Documente Atașate Section */}
+            <div className="p-6 border-t border-slate-100">
+              <h3 className="font-semibold text-slate-700 mb-3 flex items-center gap-2">
+                <Upload size={16} className="text-blue-500" />
+                Documente Atașate ({dosarDocuments.length} / {30})
+              </h3>
+              <p className="text-xs text-slate-400 mb-3">Încărcați documentele sursă (caiet de sarcini, anunț, ofertă) — textul extras va fi disponibil pe toate paginile de instrumente când dosarul este activ.</p>
+              <div className="flex items-center gap-3 mb-3">
+                <input
+                  type="file"
+                  accept=".pdf,.docx,.doc,.txt,.md"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) uploadDosarDocument(d.id, file);
+                    e.target.value = '';
+                  }}
+                  disabled={dosarDocUploading || dosarDocuments.length >= 30}
+                  className="block flex-1 text-sm text-slate-600 file:mr-4 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 disabled:opacity-50"
+                />
+                {dosarDocUploading && <Loader2 className="animate-spin text-blue-500" size={16} />}
+              </div>
+              {dosarDocuments.length > 0 ? (
+                <div className="space-y-2">
+                  {dosarDocuments.map((doc: any) => (
+                    <div key={doc.id} className="flex items-center justify-between p-3 rounded-lg border border-slate-100 hover:border-slate-200 transition bg-slate-50/50">
+                      <div className="flex items-center gap-3 min-w-0">
+                        <FileText size={16} className="text-blue-400 shrink-0" />
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium text-slate-700 truncate">{doc.filename}</p>
+                          <p className="text-xs text-slate-400">
+                            {doc.text_stats?.words?.toLocaleString('ro-RO') || '?'} cuvinte · {doc.file_size ? `${(doc.file_size / 1024).toFixed(0)} KB` : '?'} · {new Date(doc.created_at).toLocaleDateString('ro-RO')}
+                          </p>
+                        </div>
+                      </div>
+                      <button onClick={() => deleteDosarDocument(d.id, doc.id)} className="text-xs text-red-500 hover:underline shrink-0 ml-2">Șterge</button>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-sm text-slate-400 italic">Niciun document atașat.</p>
               )}
             </div>
           </div>
@@ -5891,6 +6132,7 @@ const App = () => {
                       <div className="flex items-center gap-2 mb-1">
                         <h3 className="font-semibold text-slate-800 truncate">{d.titlu}</h3>
                         <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium border ${DOSAR_STATUS_COLORS[d.status] || 'bg-slate-100'}`}>{DOSAR_STATUS_LABELS[d.status] || d.status}</span>
+                        {activeDosarId === d.id && <span className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-green-100 text-green-700 border border-green-200 flex items-center gap-0.5"><CheckCircle size={10} /> Activ</span>}
                         {isUrgent && <span className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-red-100 text-red-700 border border-red-200 animate-pulse">Urgent</span>}
                       </div>
                       <div className="flex items-center gap-4 text-xs text-slate-400">
@@ -7130,10 +7372,15 @@ const App = () => {
                 </h2>
                 <button onClick={() => loadHistory('redflags')} className="text-xs bg-slate-50 text-slate-500 px-2.5 py-1 rounded-lg font-medium hover:bg-slate-100 transition flex items-center gap-1" title="Istoric"><Bookmark size={12} /> Istoric</button>
               </div>
-              <p className="text-xs text-slate-500 mb-6">Identifică clauze restrictive în documentația de achiziții publice.</p>
+              <p className="text-xs text-slate-500 mb-4">Identifică clauze restrictive în documentația de achiziții publice.</p>
+
+              {renderActiveDosarBanner((docs) => {
+                setUploadedDocsRedFlags(prev => [...prev, ...docs]);
+                setRedFlagsTab('upload');
+              })}
 
               {/* Tabs */}
-              <div className="flex gap-1 mb-4 border-b border-slate-200">
+              <div className="flex gap-1 mb-4 border-b border-slate-200 mt-2">
                 <button
                   onClick={() => setRedFlagsTab('manual')}
                   className={`px-3 py-2 text-sm font-medium transition border-b-2 ${
@@ -7480,7 +7727,14 @@ const App = () => {
                 </h2>
                 <button onClick={() => loadHistory('clarificare')} className="text-xs bg-slate-50 text-slate-500 px-2.5 py-1 rounded-lg font-medium hover:bg-slate-100 transition flex items-center gap-1" title="Istoric"><Bookmark size={12} /> Istoric</button>
               </div>
-              <div className="space-y-4">
+
+              {renderActiveDosarBanner((docs) => {
+                setUploadedDocsClarification(prev => [...prev, ...docs]);
+                const combined = docs.map((d, i) => `=== DOCUMENT ${i+1}: ${d.name} ===\n${d.text}`).join('\n\n---\n\n');
+                setClarificationClause(prev => prev ? prev + '\n\n---\n\n' + combined : combined);
+              })}
+
+              <div className="space-y-4 mt-2">
                 <div className="bg-slate-50 p-4 rounded-lg border border-dashed border-slate-300">
                   <label className="text-xs font-bold text-slate-500 uppercase mb-2 block">
                     Încarcă document (.txt, .md, .pdf)

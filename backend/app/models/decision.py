@@ -1037,8 +1037,59 @@ class Dosar(Base):
         Index("ix_dosare_created", created_at.desc()),
     )
 
+    documents: Mapped[list["DosarDocument"]] = relationship(
+        "DosarDocument", back_populates="dosar", cascade="all, delete-orphan",
+        order_by="DosarDocument.ordine"
+    )
+
     def __repr__(self) -> str:
         return f"<Dosar '{self.titlu}' status={self.status}>"
+
+
+# =============================================================================
+# DOCUMENTE DOSAR (Attached Source Documents)
+# =============================================================================
+
+class DosarDocument(Base):
+    """Source document attached to a dosar (stores extracted text, not raw file).
+
+    Used for re-using uploaded documents across tool pages (Red Flags, Drafter,
+    Compliance, etc.) without re-uploading.
+    """
+
+    __tablename__ = "dosar_documents"
+
+    id: Mapped[str] = mapped_column(
+        UUID(as_uuid=False), primary_key=True, default=lambda: str(uuid4())
+    )
+    dosar_id: Mapped[str] = mapped_column(
+        UUID(as_uuid=False), ForeignKey("dosare.id", ondelete="CASCADE"), nullable=False
+    )
+    filename: Mapped[str] = mapped_column(String(500), nullable=False)
+    mime_type: Mapped[Optional[str]] = mapped_column(String(100))
+    file_size: Mapped[Optional[int]] = mapped_column(Integer)  # bytes, original file
+    extracted_text: Mapped[str] = mapped_column(Text, nullable=False)
+    text_preview: Mapped[Optional[str]] = mapped_column(String(500))
+    text_stats: Mapped[Optional[dict]] = mapped_column(JSONB)  # {characters, words, lines, paragraphs}
+    ordine: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+
+    # Timestamps
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+
+    # Relationships
+    dosar: Mapped["Dosar"] = relationship("Dosar", back_populates="documents")
+
+    __table_args__ = (
+        Index("ix_dosardoc_dosar", dosar_id),
+    )
+
+    def __repr__(self) -> str:
+        return f"<DosarDocument '{self.filename}' dosar={self.dosar_id}>"
 
 
 # =============================================================================

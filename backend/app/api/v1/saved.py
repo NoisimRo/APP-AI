@@ -69,6 +69,7 @@ class SaveConversationRequest(BaseModel):
     titlu: str = Field(..., min_length=1, max_length=200)
     mesaje: list[MesajInput] = Field(..., min_length=1)
     scope_id: str | None = None
+    dosar_id: str | None = None
 
 
 class MesajResponse(BaseModel):
@@ -103,6 +104,7 @@ class SaveDocumentRequest(BaseModel):
     continut: str = Field(..., min_length=1)
     referinte_decizii: list[str] = []
     metadata: dict = {}
+    dosar_id: str | None = None
 
 
 class DocumentListItem(BaseModel):
@@ -129,6 +131,7 @@ class SaveRedFlagsRequest(BaseModel):
     critice: int = 0
     medii: int = 0
     scazute: int = 0
+    dosar_id: str | None = None
 
 
 class RedFlagsListItem(BaseModel):
@@ -162,6 +165,7 @@ class SaveTrainingRequest(BaseModel):
     legislatie_citata: list[str] = []
     jurisprudenta_citata: list[str] = []
     metadata: dict = {}
+    dosar_id: str | None = None
 
 
 class TrainingListItem(BaseModel):
@@ -205,6 +209,7 @@ async def save_conversation(
         numar_mesaje=len(request.mesaje),
         scope_id=request.scope_id,
         user_id=user.id if user else None,
+        dosar_id=request.dosar_id,
     )
     session.add(conv)
     await session.flush()  # Get conv.id
@@ -365,6 +370,7 @@ async def save_document(
         referinte_decizii=request.referinte_decizii or [],
         metadata_=request.metadata or {},
         user_id=user.id if user else None,
+        dosar_id=request.dosar_id,
     )
     session.add(doc)
     await session.commit()
@@ -494,6 +500,7 @@ async def save_redflags(
         medii=request.medii,
         scazute=request.scazute,
         user_id=user.id if user else None,
+        dosar_id=request.dosar_id,
     )
     session.add(rf)
     await session.commit()
@@ -627,6 +634,7 @@ async def save_training(
         jurisprudenta_citata=request.jurisprudenta_citata or [],
         metadata_=request.metadata or {},
         user_id=user.id if user else None,
+        dosar_id=request.dosar_id,
     )
     session.add(tm)
     await session.commit()
