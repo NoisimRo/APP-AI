@@ -717,6 +717,37 @@ const App = () => {
   const [dosarDocuments, setDosarDocuments] = useState<any[]>([]);
   const [dosarDocUploading, setDosarDocUploading] = useState(false);
 
+  // Resizable panel width (percentage for left panel, desktop only)
+  const [leftPanelPct, setLeftPanelPct] = useState(() => {
+    const saved = localStorage.getItem('leftPanelPct');
+    return saved ? parseInt(saved) : 33;
+  });
+  const panelDragRef = React.useRef<{ startX: number; startPct: number } | null>(null);
+
+  const handlePanelDragStart = (e: React.MouseEvent) => {
+    e.preventDefault();
+    const container = (e.target as HTMLElement).closest('.panel-resize-container') as HTMLElement;
+    if (!container) return;
+    panelDragRef.current = { startX: e.clientX, startPct: leftPanelPct };
+    let latestPct = leftPanelPct;
+    const onMove = (ev: MouseEvent) => {
+      if (!panelDragRef.current) return;
+      const dx = ev.clientX - panelDragRef.current.startX;
+      const containerW = container.offsetWidth;
+      const newPct = Math.round(panelDragRef.current.startPct + (dx / containerW) * 100);
+      latestPct = Math.max(20, Math.min(50, newPct));
+      setLeftPanelPct(latestPct);
+    };
+    const onUp = () => {
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+      localStorage.setItem('leftPanelPct', String(latestPct));
+      panelDragRef.current = null;
+    };
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+  };
+
   // Alert Rules States
   const [alertRules, setAlertRules] = useState<any[]>([]);
   const [alertsLoading, setAlertsLoading] = useState(false);
@@ -1966,6 +1997,28 @@ const App = () => {
       a.href = url;
       const ext = format === 'docx' ? 'docx' : format === 'pdf' ? 'pdf' : 'md';
       a.download = `Solicitare_Clarificari_RedFlags.${ext}`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error('Export failed:', err);
+      alert('Eroare la export. Verificați consola.');
+    }
+  };
+
+  const handleGenericExport = async (format: 'docx' | 'pdf' | 'md', content: string, filename: string, titlu: string) => {
+    if (!content) return;
+    try {
+      const response = await authFetch('/api/v1/training/export', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content, format, titlu, metadata: {} }),
+      });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${filename}.${format === 'docx' ? 'docx' : format === 'pdf' ? 'pdf' : 'md'}`;
       a.click();
       URL.revokeObjectURL(url);
     } catch (err) {
@@ -3664,8 +3717,8 @@ const App = () => {
   };
 
   const renderDrafter = () => (
-    <div className="h-full flex flex-col md:flex-row bg-white">
-      <div className="w-full md:w-1/3 border-r border-slate-200 p-6 overflow-y-auto bg-slate-50/50">
+    <div className="h-full flex flex-col md:flex-row bg-white panel-resize-container">
+      <div className="w-full md:border-r border-slate-200 p-6 overflow-y-auto bg-slate-50/50 shrink-0 panel-left">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-lg font-bold text-slate-800 flex gap-2 items-center">
             <Scale className="text-blue-600" size={20}/>
@@ -3821,13 +3874,23 @@ const App = () => {
         </div>
       </div>
       
-      <div className="w-full md:w-2/3 p-4 md:p-10 overflow-y-auto bg-white">
+      <div className="panel-resize-handle hidden md:block" onMouseDown={handlePanelDragStart} />
+      <div className="w-full md:flex-1 p-4 md:p-10 overflow-y-auto bg-white panel-right">
         {generatedContent ? (
-          <div className="max-w-3xl mx-auto">
-             <div className="flex justify-end gap-3 mb-4">
-                <button className="text-sm text-blue-600 font-medium hover:underline">Descarcă .DOCX</button>
-                <button onClick={() => saveDocument(drafterDocType === 'plangere' ? 'plangere' : 'contestatie', drafterContext.facts.slice(0, 200) || (drafterDocType === 'plangere' ? 'Plângere' : 'Contestație'), generatedContent, generatedDecisionRefs, { facts: drafterContext.facts, authorityArgs: drafterContext.authorityArgs, legalGrounds: drafterContext.legalGrounds, docType: drafterDocType })} className="text-sm text-green-600 font-medium hover:underline flex items-center gap-1"><Save size={12} /> Salvează</button>
-                <button onClick={() => loadHistory('contestatie')} className="text-sm text-slate-500 font-medium hover:underline flex items-center gap-1"><Bookmark size={12} /> Istoric</button>
+          <div className="max-w-3xl mx-auto space-y-4">
+             <div className="bg-white p-3 rounded-lg border border-slate-200 sticky top-0 z-10">
+               <div className="flex items-center justify-between flex-wrap gap-2">
+                 <h3 className="font-bold text-slate-800 text-sm">{drafterDocType === 'plangere' ? 'Plângere Generată' : 'Contestație Generată'}</h3>
+                 <div className="flex gap-1.5 flex-wrap">
+                   {(['docx', 'pdf', 'md'] as const).map(fmt => (
+                     <button key={fmt} onClick={() => handleGenericExport(fmt, generatedContent, drafterDocType === 'plangere' ? 'Plangere' : 'Contestatie', drafterDocType === 'plangere' ? 'Plângere' : 'Contestație')} className="text-xs bg-purple-600 text-white px-2.5 py-1.5 rounded-lg font-medium hover:bg-purple-700 transition flex items-center gap-1">
+                       <Download size={11} /> {fmt.toUpperCase()}
+                     </button>
+                   ))}
+                   <button onClick={() => saveDocument(drafterDocType === 'plangere' ? 'plangere' : 'contestatie', drafterContext.facts.slice(0, 200) || (drafterDocType === 'plangere' ? 'Plângere' : 'Contestație'), generatedContent, generatedDecisionRefs, { facts: drafterContext.facts, authorityArgs: drafterContext.authorityArgs, legalGrounds: drafterContext.legalGrounds, docType: drafterDocType })} className="text-xs bg-green-600 text-white px-2.5 py-1.5 rounded-lg font-medium hover:bg-green-700 transition flex items-center gap-1"><Save size={11} /> Salvează</button>
+                   <button onClick={() => loadHistory('contestatie')} className="text-xs bg-slate-100 text-slate-600 px-2.5 py-1.5 rounded-lg font-medium hover:bg-slate-200 transition flex items-center gap-1"><Bookmark size={11} /> Istoric</button>
+                 </div>
+               </div>
              </div>
              <div className="prose prose-slate max-w-none font-serif text-slate-800 leading-loose bg-white" dangerouslySetInnerHTML={{ __html: formatMarkdown(generatedContent) }} />
              {generatedDecisionRefs.length > 0 && (
@@ -4114,14 +4177,16 @@ const App = () => {
   };
 
   const renderMultiDocument = () => (
-    <div className="h-full flex flex-col md:flex-row bg-white">
-      <div className="w-full md:w-1/3 border-r border-slate-200 p-6 overflow-y-auto bg-slate-50/50">
+    <div className="h-full flex flex-col md:flex-row bg-white panel-resize-container">
+      <div className="w-full md:border-r border-slate-200 p-6 overflow-y-auto bg-slate-50/50 shrink-0 panel-left">
         <h2 className="text-lg font-bold text-slate-800 mb-2 flex gap-2 items-center">
           <Files className="text-violet-600" size={20}/> Analiză Multi-Document
         </h2>
-        <p className="text-xs text-slate-500 mb-6">Încarcă 2-5 documente din dosarul de achiziție pentru analiză unificată: red flags per document + inconsistențe între documente.</p>
+        <p className="text-xs text-slate-500 mb-4">Încarcă 2-5 documente din dosarul de achiziție pentru analiză unificată: red flags per document + inconsistențe între documente.</p>
 
-        <div className="space-y-4">
+        {renderActiveDosarBanner(() => {}, true)}
+
+        <div className="space-y-4 mt-2">
           <div className="bg-slate-50 p-4 rounded-lg border border-dashed border-violet-300">
             <label className="text-xs font-bold text-slate-500 uppercase mb-2 block">Documente dosar (2-5 fișiere)</label>
             <input type="file" multiple accept=".pdf,.docx,.doc,.txt,.md"
@@ -4150,7 +4215,8 @@ const App = () => {
         </div>
       </div>
 
-      <div className="w-full md:w-2/3 p-4 md:p-8 overflow-y-auto bg-white">
+      <div className="panel-resize-handle hidden md:block" onMouseDown={handlePanelDragStart} />
+      <div className="w-full md:flex-1 p-4 md:p-8 overflow-y-auto bg-white panel-right">
         {!multiDocResult && !multiDocLoading && (
           <div className="h-full flex items-center justify-center text-slate-400">
             <div className="text-center">
@@ -4281,9 +4347,9 @@ const App = () => {
   const renderCompliance = () => {
     if (analyticsFilterOptions.proceduri.length === 0) loadAnalyticsFilters();
     return (
-      <div className="h-full flex flex-col md:flex-row bg-white">
+      <div className="h-full flex flex-col md:flex-row bg-white panel-resize-container">
         {/* Left panel */}
-        <div className="w-full md:w-1/3 border-r border-slate-200 p-6 overflow-y-auto bg-slate-50/50">
+        <div className="w-full md:border-r border-slate-200 p-6 overflow-y-auto bg-slate-50/50 shrink-0 panel-left">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-lg font-bold text-slate-800 flex gap-2 items-center">
               <ClipboardCheck className="text-emerald-600" size={20}/> Verificator Conformitate
@@ -4332,7 +4398,8 @@ const App = () => {
         </div>
 
         {/* Right panel — results */}
-        <div className="w-full md:w-2/3 p-4 md:p-8 overflow-y-auto bg-white">
+        <div className="panel-resize-handle hidden md:block" onMouseDown={handlePanelDragStart} />
+        <div className="w-full md:flex-1 p-4 md:p-8 overflow-y-auto bg-white panel-right">
           {!complianceResult && !complianceLoading && (
             <div className="h-full flex items-center justify-center text-slate-400">
               <div className="text-center">
@@ -4353,6 +4420,41 @@ const App = () => {
           )}
           {complianceResult && (
             <div className="max-w-3xl mx-auto space-y-6">
+              {/* Sticky toolbar */}
+              <div className="bg-white p-3 rounded-lg border border-slate-200 sticky top-0 z-10">
+                <div className="flex items-center justify-between">
+                  <h3 className="font-bold text-slate-800 text-sm">Rezultate Conformitate — {complianceResult.score}%</h3>
+                  <div className="flex gap-1.5 flex-wrap">
+                    {(['docx', 'pdf', 'md'] as const).map(fmt => (
+                      <button key={fmt} onClick={() => {
+                        const items = (complianceResult.compliance_items || []).map((item: any, i: number) =>
+                          `### ${i+1}. ${item.citare} — ${item.verdict}\n**${item.act}**\n\n${item.explicatie}\n${item.recomandare ? `\n**Recomandare:** ${item.recomandare}` : ''}${item.citat_document ? `\n\n> „${item.citat_document}"` : ''}`
+                        ).join('\n\n---\n\n');
+                        const fullContent = `# Verificare Conformitate\n\n**Scor:** ${complianceResult.score}%\n**Conforme:** ${complianceResult.conform} | **Neconforme:** ${complianceResult.neconform} | **Neclar:** ${complianceResult.neclar}\n\n${complianceResult.summary || ''}\n\n---\n\n## Matrice Conformitate\n\n${items}`;
+                        handleGenericExport(fmt, fullContent, 'Verificare_Conformitate', 'Verificare Conformitate');
+                      }} className="text-xs bg-purple-600 text-white px-2.5 py-1.5 rounded-lg font-medium hover:bg-purple-700 transition flex items-center gap-1">
+                        <Download size={11} /> {fmt.toUpperCase()}
+                      </button>
+                    ))}
+                    <button onClick={() => {
+                      const items = (complianceResult.compliance_items || []).map((item: any, i: number) =>
+                        `${i+1}. ${item.citare} — ${item.verdict}: ${item.explicatie}${item.recomandare ? ` (Rec: ${item.recomandare})` : ''}`
+                      ).join('\n');
+                      const fullContent = `Scor: ${complianceResult.score}%\nConforme: ${complianceResult.conform}, Neconforme: ${complianceResult.neconform}, Neclar: ${complianceResult.neclar}\n\n${complianceResult.summary || ''}\n\n${items}`;
+                      saveDocument('conformitate', `Verificare conformitate — ${complianceResult.score}%`, fullContent, [], {
+                        score: complianceResult.score,
+                        conform: complianceResult.conform,
+                        neconform: complianceResult.neconform,
+                      });
+                    }} className="text-xs bg-green-600 text-white px-2.5 py-1.5 rounded-lg font-medium hover:bg-green-700 transition flex items-center gap-1">
+                      <Save size={11} /> Salvează
+                    </button>
+                    <button onClick={() => loadHistory('conformitate')} className="text-xs bg-slate-100 text-slate-600 px-2.5 py-1.5 rounded-lg font-medium hover:bg-slate-200 transition flex items-center gap-1">
+                      <Bookmark size={11} /> Istoric
+                    </button>
+                  </div>
+                </div>
+              </div>
               {/* Score header */}
               <div className={`rounded-2xl p-6 text-center ${(complianceResult.score ?? 0) >= 80 ? 'bg-green-50 border-2 border-green-300' : (complianceResult.score ?? 0) >= 50 ? 'bg-amber-50 border-2 border-amber-300' : 'bg-red-50 border-2 border-red-300'}`}>
                 <div className={`text-4xl font-black mb-2 ${(complianceResult.score ?? 0) >= 80 ? 'text-green-700' : (complianceResult.score ?? 0) >= 50 ? 'text-amber-700' : 'text-red-700'}`}>
@@ -4463,9 +4565,9 @@ const App = () => {
   const renderStrategy = () => {
     if (analyticsFilterOptions.critici.length === 0) loadAnalyticsFilters();
     return (
-      <div className="h-full flex flex-col md:flex-row bg-white">
+      <div className="h-full flex flex-col md:flex-row bg-white panel-resize-container">
         {/* Left panel — input */}
-        <div className="w-full md:w-1/3 border-r border-slate-200 p-6 overflow-y-auto bg-slate-50/50">
+        <div className="w-full md:border-r border-slate-200 p-6 overflow-y-auto bg-slate-50/50 shrink-0 panel-left">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-lg font-bold text-slate-800 flex gap-2 items-center">
               <Target className="text-indigo-600" size={20}/> Strategie Contestare
@@ -4588,7 +4690,8 @@ const App = () => {
         </div>
 
         {/* Right panel — results */}
-        <div className="w-full md:w-2/3 p-4 md:p-8 overflow-y-auto bg-white">
+        <div className="panel-resize-handle hidden md:block" onMouseDown={handlePanelDragStart} />
+        <div className="w-full md:flex-1 p-4 md:p-8 overflow-y-auto bg-white panel-right">
           {!strategyResult && !strategyLoading && (
             <div className="h-full flex items-center justify-center text-slate-400">
               <div className="text-center">
@@ -4609,21 +4712,38 @@ const App = () => {
           )}
           {strategyResult && (
             <div className="max-w-3xl mx-auto space-y-6">
-              {/* Toolbar */}
-              <div className="flex justify-end gap-3">
-                <button onClick={() => {
-                  const fullText = (strategyResult.overall_assessment?.text || '') + '\n\n' +
-                    (strategyResult.per_criticism || []).map((r: any) =>
-                      `## ${r.code} — ${r.label}\n${r.recommendation || ''}\n\nArgumente: ${(r.arguments || []).join('; ')}\nTemei legal: ${(r.legal_basis || []).join('; ')}\nProbabilitate: ${r.success_probability}%`
-                    ).join('\n\n');
-                  const refs = (strategyResult.precedents || []).map((p: any) => p.bo_reference);
-                  saveDocument('strategie', strategyInput.description.slice(0, 200) || 'Strategie contestare', fullText, refs, {
-                    coduri_critici: strategyInput.coduri_critici,
-                    cod_cpv: strategyInput.cod_cpv,
-                    complet: strategyInput.complet,
-                    probability: strategyResult.overall_assessment?.overall_probability,
-                  });
-                }} className="text-sm text-green-600 font-medium hover:underline flex items-center gap-1"><Save size={12} /> Salvează</button>
+              {/* Sticky toolbar */}
+              <div className="bg-white p-3 rounded-lg border border-slate-200 sticky top-0 z-10">
+                <div className="flex items-center justify-between flex-wrap gap-2">
+                  <h3 className="font-bold text-slate-800 text-sm">Strategie Contestare — {strategyResult.overall_assessment?.overall_probability}%</h3>
+                  <div className="flex gap-1.5 flex-wrap">
+                    {(['docx', 'pdf', 'md'] as const).map(fmt => (
+                      <button key={fmt} onClick={() => {
+                        const fullText = `# Strategie Contestare\n\n**Probabilitate:** ${strategyResult.overall_assessment?.overall_probability}% ${strategyResult.overall_assessment?.recommendation}\n\n${strategyResult.overall_assessment?.text || ''}\n\n` +
+                          (strategyResult.per_criticism || []).map((r: any) =>
+                            `## ${r.code} — ${r.label}\n**Probabilitate:** ${r.success_probability}%\n\n${r.recommendation || ''}\n\n**Argumente:** ${(r.arguments || []).join('; ')}\n**Temei legal:** ${(r.legal_basis || []).join('; ')}`
+                          ).join('\n\n---\n\n');
+                        handleGenericExport(fmt, fullText, 'Strategie_Contestare', 'Strategie Contestare');
+                      }} className="text-xs bg-purple-600 text-white px-2.5 py-1.5 rounded-lg font-medium hover:bg-purple-700 transition flex items-center gap-1">
+                        <Download size={11} /> {fmt.toUpperCase()}
+                      </button>
+                    ))}
+                    <button onClick={() => {
+                      const fullText = (strategyResult.overall_assessment?.text || '') + '\n\n' +
+                        (strategyResult.per_criticism || []).map((r: any) =>
+                          `## ${r.code} — ${r.label}\n${r.recommendation || ''}\n\nArgumente: ${(r.arguments || []).join('; ')}\nTemei legal: ${(r.legal_basis || []).join('; ')}\nProbabilitate: ${r.success_probability}%`
+                        ).join('\n\n');
+                      const refs = (strategyResult.precedents || []).map((p: any) => p.bo_reference);
+                      saveDocument('strategie', strategyInput.description.slice(0, 200) || 'Strategie contestare', fullText, refs, {
+                        coduri_critici: strategyInput.coduri_critici,
+                        cod_cpv: strategyInput.cod_cpv,
+                        complet: strategyInput.complet,
+                        probability: strategyResult.overall_assessment?.overall_probability,
+                      });
+                    }} className="text-xs bg-green-600 text-white px-2.5 py-1.5 rounded-lg font-medium hover:bg-green-700 transition flex items-center gap-1"><Save size={11} /> Salvează</button>
+                    <button onClick={() => loadHistory('contestatie')} className="text-xs bg-slate-100 text-slate-600 px-2.5 py-1.5 rounded-lg font-medium hover:bg-slate-200 transition flex items-center gap-1"><Bookmark size={11} /> Istoric</button>
+                  </div>
+                </div>
               </div>
               {/* Overall assessment */}
               <div className={`rounded-2xl p-6 ${strategyResult.overall_assessment?.recommendation === 'ADMIS' ? 'bg-green-50 border-2 border-green-300' : 'bg-red-50 border-2 border-red-300'}`}>
@@ -5176,9 +5296,9 @@ const App = () => {
     const activeContent = sections[trainingActiveTab] || '';
 
     return (
-      <div className="h-full flex flex-col md:flex-row bg-white">
+      <div className="h-full flex flex-col md:flex-row bg-white panel-resize-container">
         {/* Left panel — form */}
-        <div className="w-full md:w-1/3 border-r border-slate-200 p-6 overflow-y-auto bg-slate-50/50">
+        <div className="w-full md:border-r border-slate-200 p-6 overflow-y-auto bg-slate-50/50 shrink-0 panel-left">
           <h2 className="text-lg font-bold text-slate-800 mb-4 flex gap-2 items-center">
             <GraduationCap className="text-amber-600" size={20}/>
             TrainingAP — Materiale Didactice
@@ -5831,6 +5951,7 @@ const App = () => {
 
   // --- Active Dosar Banner (shown on tool pages) ---
   const [bannerSelectedDocs, setBannerSelectedDocs] = useState<Set<string>>(new Set());
+  const [bannerExpanded, setBannerExpanded] = useState(false);
 
   // Sync banner selections when active dosar docs change
   useEffect(() => {
@@ -5857,44 +5978,51 @@ const App = () => {
     };
 
     return (
-      <div className="mx-4 mt-3 mb-1 p-3 rounded-xl border border-blue-200 bg-blue-50/60">
-        <div className="flex items-center justify-between mb-2">
-          <div className="flex items-center gap-2 text-sm font-medium text-blue-800">
-            <Briefcase size={16} className="text-blue-600" />
-            <span>Dosar activ: {activeDosarInfo.titlu}</span>
-            <span className="text-xs text-blue-500">— {activeDosarDocs.length} documente</span>
+      <div className="mt-2 mb-1 p-2.5 rounded-xl border border-blue-200 bg-blue-50/60">
+        {/* Collapsed header — always visible */}
+        <div className="flex items-center justify-between cursor-pointer" onClick={() => setBannerExpanded(!bannerExpanded)}>
+          <div className="flex items-center gap-2 text-xs font-medium text-blue-800 min-w-0">
+            <Briefcase size={14} className="text-blue-600 shrink-0" />
+            <span className="truncate">{activeDosarInfo.titlu}</span>
+            <span className="text-blue-400 shrink-0">({activeDosarDocs.length} doc.)</span>
+            {bannerExpanded ? <ChevronUp size={14} className="text-blue-400 shrink-0" /> : <ChevronDown size={14} className="text-blue-400 shrink-0" />}
           </div>
-          <div className="flex items-center gap-2">
-            <button onClick={() => { setMode('dosare'); if (activeDosarId) loadDosarDetail(activeDosarId); }} className="text-xs text-blue-600 hover:underline">Schimbă dosar</button>
-            <button onClick={deactivateDosar} className="text-xs text-red-500 hover:underline">Dezactivează</button>
+          <div className="flex items-center gap-2 shrink-0" onClick={e => e.stopPropagation()}>
+            <button onClick={() => { setMode('dosare'); if (activeDosarId) loadDosarDetail(activeDosarId); }} className="text-[10px] text-blue-600 hover:underline">Schimbă</button>
+            <button onClick={deactivateDosar} className="text-[10px] text-red-500 hover:underline">✕</button>
           </div>
         </div>
-        {activeDosarDocs.length === 0 ? (
-          <p className="text-xs text-blue-400 italic">Niciun document atașat la acest dosar. Adăugați documente din pagina dosarului.</p>
-        ) : multiDocMode ? (
-          <p className="text-xs text-blue-400 italic">Multi-Document acceptă fișiere direct — încărcați-le din zona de upload de mai jos.</p>
-        ) : (
-          <>
-            <div className="space-y-1 mb-2 max-h-32 overflow-y-auto">
-              {activeDosarDocs.map(doc => {
-                const wordCount = doc.text.split(/\s+/).length;
-                return (
-                  <label key={doc.id} className="flex items-center gap-2 text-xs cursor-pointer hover:bg-blue-100/50 rounded px-1 py-0.5">
-                    <input type="checkbox" checked={bannerSelectedDocs.has(doc.id)} onChange={() => toggleDoc(doc.id)} className="rounded border-blue-300 text-blue-600" />
-                    <span className="text-slate-700 truncate flex-1">{doc.filename}</span>
-                    <span className="text-blue-400 shrink-0">({wordCount.toLocaleString('ro-RO')} cuv.)</span>
-                  </label>
-                );
-              })}
-            </div>
-            <button
-              onClick={handleLoadSelected}
-              disabled={bannerSelectedDocs.size === 0}
-              className="text-xs bg-blue-600 text-white px-3 py-1.5 rounded-lg font-medium hover:bg-blue-700 transition disabled:opacity-50 flex items-center gap-1"
-            >
-              <Download size={12} /> Încarcă {bannerSelectedDocs.size} documente selectate
-            </button>
-          </>
+        {/* Expanded content */}
+        {bannerExpanded && (
+          <div className="mt-2 pt-2 border-t border-blue-200/50">
+            {activeDosarDocs.length === 0 ? (
+              <p className="text-xs text-blue-400 italic">Niciun document atașat. Adăugați documente din pagina dosarului.</p>
+            ) : multiDocMode ? (
+              <p className="text-xs text-blue-400 italic">Multi-Document acceptă fișiere direct — încărcați-le din zona de upload de mai jos.</p>
+            ) : (
+              <>
+                <div className="space-y-1 mb-2 max-h-32 overflow-y-auto">
+                  {activeDosarDocs.map(doc => {
+                    const wordCount = doc.text.split(/\s+/).length;
+                    return (
+                      <label key={doc.id} className="flex items-center gap-2 text-xs cursor-pointer hover:bg-blue-100/50 rounded px-1 py-0.5">
+                        <input type="checkbox" checked={bannerSelectedDocs.has(doc.id)} onChange={() => toggleDoc(doc.id)} className="rounded border-blue-300 text-blue-600" />
+                        <span className="text-slate-700 truncate flex-1">{doc.filename}</span>
+                        <span className="text-blue-400 shrink-0">({wordCount.toLocaleString('ro-RO')} cuv.)</span>
+                      </label>
+                    );
+                  })}
+                </div>
+                <button
+                  onClick={handleLoadSelected}
+                  disabled={bannerSelectedDocs.size === 0}
+                  className="text-xs bg-blue-600 text-white px-3 py-1.5 rounded-lg font-medium hover:bg-blue-700 transition disabled:opacity-50 flex items-center gap-1"
+                >
+                  <Download size={12} /> Încarcă {bannerSelectedDocs.size} documente selectate
+                </button>
+              </>
+            )}
+          </div>
         )}
       </div>
     );
@@ -7030,6 +7158,10 @@ const App = () => {
         {activeScopeId && (
           <div className="mt-2"><ActiveScopeIndicator /></div>
         )}
+        {renderActiveDosarBanner((docs) => {
+          const combined = docs.map((d, i) => `=== DOCUMENT ${i+1}: ${d.name} ===\n${d.text}`).join('\n\n---\n\n');
+          setChatInput(prev => prev ? prev + '\n\n' + combined : combined);
+        })}
       </div>
 
       {/* Messages area - scrollable */}
@@ -7123,6 +7255,28 @@ const App = () => {
 
   return (
     <div className="flex h-screen bg-slate-50 font-sans text-slate-900">
+      <style>{`
+        @media (min-width: 768px) {
+          .panel-left { width: ${leftPanelPct}% !important; }
+          .panel-resize-handle {
+            width: 6px; cursor: col-resize; background: transparent;
+            position: relative; z-index: 20; margin: 0 -3px;
+            transition: background 0.15s;
+          }
+          .panel-resize-handle:hover, .panel-resize-handle:active {
+            background: rgba(59, 130, 246, 0.3);
+          }
+          .panel-resize-handle::after {
+            content: ''; position: absolute; top: 50%; left: 50%;
+            transform: translate(-50%, -50%); width: 2px; height: 32px;
+            background: rgba(148, 163, 184, 0.4); border-radius: 1px;
+          }
+          .panel-resize-handle:hover::after { background: rgba(59, 130, 246, 0.6); }
+        }
+        @media (max-width: 767px) {
+          .panel-resize-handle { display: none; }
+        }
+      `}</style>
       {renderSidebar()}
 
       {/* Auth Modal */}
@@ -7363,9 +7517,9 @@ const App = () => {
         {mode === 'drafter' && renderDrafter()}
         {mode === 'chat' && renderChat()}
         {mode === 'redflags' && (
-          <div className="h-full flex flex-col md:flex-row bg-white">
+          <div className="h-full flex flex-col md:flex-row bg-white panel-resize-container">
             {/* Left panel — input */}
-            <div className="w-full md:w-1/3 border-r border-slate-200 p-6 overflow-y-auto bg-slate-50/50">
+            <div className="w-full md:border-r border-slate-200 p-6 overflow-y-auto bg-slate-50/50 shrink-0 panel-left">
               <div className="flex items-center justify-between mb-2">
                 <h2 className="text-lg font-bold text-slate-800 flex gap-2 items-center">
                   <AlertTriangle className="text-red-500" size={20}/> Red Flags Detector
@@ -7484,7 +7638,8 @@ const App = () => {
             </div>
 
             {/* Right panel — results */}
-            <div className="w-full md:w-2/3 p-4 md:p-8 overflow-y-auto bg-white">
+            <div className="panel-resize-handle hidden md:block" onMouseDown={handlePanelDragStart} />
+            <div className="w-full md:flex-1 p-4 md:p-8 overflow-y-auto bg-white panel-right">
               {redFlagsResults.length > 0 ? (
                 <div className="space-y-4">
                   <div className="bg-white p-4 rounded-lg border border-slate-200 sticky top-0 z-10 space-y-2">
@@ -7718,9 +7873,9 @@ const App = () => {
           </div>
         )}
         {mode === 'clarification' && handleClarification && (
-          <div className="h-full flex flex-col md:flex-row bg-white">
+          <div className="h-full flex flex-col md:flex-row bg-white panel-resize-container">
             {/* Left panel — input */}
-            <div className="w-full md:w-1/3 border-r border-slate-200 p-6 overflow-y-auto bg-slate-50/50">
+            <div className="w-full md:border-r border-slate-200 p-6 overflow-y-auto bg-slate-50/50 shrink-0 panel-left">
               <div className="flex items-center justify-between mb-6">
                 <h2 className="text-lg font-bold text-slate-800 flex gap-2 items-center">
                   <Search className="text-purple-600" size={20}/> Asistent Clarificări
@@ -7784,12 +7939,23 @@ const App = () => {
               </div>
             </div>
             {/* Right panel — output */}
-            <div className="w-full md:w-2/3 p-4 md:p-10 overflow-y-auto bg-white">
+            <div className="panel-resize-handle hidden md:block" onMouseDown={handlePanelDragStart} />
+            <div className="w-full md:flex-1 p-4 md:p-10 overflow-y-auto bg-white panel-right">
               {generatedContent ? (
-                <div>
-                  <div className="flex justify-end gap-2 mb-4">
-                    <button onClick={() => saveDocument('clarificare', clarificationClause.slice(0, 200) || 'Clarificare', generatedContent, generatedDecisionRefs, { clauza_originala: clarificationClause })} className="text-xs text-green-600 font-medium hover:underline flex items-center gap-1"><Save size={12} /> Salvează</button>
-                    <button onClick={() => loadHistory('clarificare')} className="text-xs text-slate-500 font-medium hover:underline flex items-center gap-1"><Bookmark size={12} /> Istoric</button>
+                <div className="space-y-4">
+                  <div className="bg-white p-3 rounded-lg border border-slate-200 sticky top-0 z-10">
+                    <div className="flex items-center justify-between flex-wrap gap-2">
+                      <h3 className="font-bold text-slate-800 text-sm">Răspuns Clarificare</h3>
+                      <div className="flex gap-1.5 flex-wrap">
+                        {(['docx', 'pdf', 'md'] as const).map(fmt => (
+                          <button key={fmt} onClick={() => handleGenericExport(fmt, generatedContent, 'Clarificare', clarificationClause.slice(0, 100) || 'Clarificare')} className="text-xs bg-purple-600 text-white px-2.5 py-1.5 rounded-lg font-medium hover:bg-purple-700 transition flex items-center gap-1">
+                            <Download size={11} /> {fmt.toUpperCase()}
+                          </button>
+                        ))}
+                        <button onClick={() => saveDocument('clarificare', clarificationClause.slice(0, 200) || 'Clarificare', generatedContent, generatedDecisionRefs, { clauza_originala: clarificationClause })} className="text-xs bg-green-600 text-white px-2.5 py-1.5 rounded-lg font-medium hover:bg-green-700 transition flex items-center gap-1"><Save size={11} /> Salvează</button>
+                        <button onClick={() => loadHistory('clarificare')} className="text-xs bg-slate-100 text-slate-600 px-2.5 py-1.5 rounded-lg font-medium hover:bg-slate-200 transition flex items-center gap-1"><Bookmark size={11} /> Istoric</button>
+                      </div>
+                    </div>
                   </div>
                   <div className="prose prose-slate max-w-none" dangerouslySetInnerHTML={{ __html: formatMarkdown(generatedContent) }} />
                   {generatedDecisionRefs.length > 0 && (
@@ -7822,6 +7988,11 @@ const App = () => {
               <ActiveScopeIndicator />
               <div className="flex flex-col md:flex-row gap-4 md:gap-6 flex-1 overflow-hidden">
                  <div className="w-full md:w-80 shrink-0 flex flex-col gap-4">
+                    {renderActiveDosarBanner((docs) => {
+                      setUploadedDocsRag(prev => [...prev, ...docs]);
+                      const combined = docs.map((d, i) => `=== DOCUMENT ${i+1}: ${d.name} ===\n${d.text}`).join('\n\n---\n\n');
+                      setMemoTopic(prev => prev ? prev + '\n\n---\n\n' + combined : combined);
+                    })}
                     <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
                        <ScopeSelector compact />
                        <div className="bg-slate-50 p-3 rounded-lg border border-dashed border-slate-300 mb-3">
