@@ -800,6 +800,13 @@ const App = () => {
   // RAG Memo save state
   const [ragMemoSaved, setRagMemoSaved] = useState(false);
 
+  // Track saved state to prevent duplicate saves
+  const [savedRedFlags, setSavedRedFlags] = useState(false);
+  const [savedCompliance, setSavedCompliance] = useState(false);
+  const [savedStrategy, setSavedStrategy] = useState(false);
+  const [savedDrafter, setSavedDrafter] = useState(false);
+  const [savedClarification, setSavedClarification] = useState(false);
+
   // Search Scopes State
   const [scopes, setScopes] = useState<{id: string, name: string, description: string | null, filters: any, decision_count: number}[]>([]);
   const [activeScopeId, setActiveScopeId] = useState<string | null>(null);
@@ -1764,6 +1771,7 @@ const App = () => {
     setStreamStatus("Se caută jurisprudență relevantă...");
     setGeneratedContent("");
     setGeneratedDecisionRefs([]);
+    setSavedDrafter(false);
 
     try {
       await authFetchStream(
@@ -1869,6 +1877,7 @@ const App = () => {
     setRedFlagsResults([]);
     setSelectedRedFlags([]);
     setEditedClarifications({});
+    setSavedRedFlags(false);
     setRedFlagsProgress("Se trimite documentul pentru analiză...");
 
     // Progress simulation — shows user what's happening during long analysis
@@ -2031,6 +2040,7 @@ const App = () => {
     setIsLoading(true);
     setGeneratedContent("");
     setGeneratedDecisionRefs([]);
+    setSavedClarification(false);
     try {
       const response = await authFetch('/api/v1/clarification/', {
         method: 'POST',
@@ -3719,12 +3729,11 @@ const App = () => {
   const renderDrafter = () => (
     <div className="h-full flex flex-col md:flex-row bg-white panel-resize-container">
       <div className="w-full md:border-r border-slate-200 p-6 overflow-y-auto bg-slate-50/50 shrink-0 panel-left">
-        <div className="flex items-center justify-between mb-4">
+        <div className="mb-4">
           <h2 className="text-lg font-bold text-slate-800 flex gap-2 items-center">
             <Scale className="text-blue-600" size={20}/>
             {drafterDocType === 'contestatie' ? 'Configurare Contestație' : 'Configurare Plângere'}
           </h2>
-          <button onClick={() => loadHistory('contestatie')} className="text-xs bg-slate-50 text-slate-500 px-2.5 py-1 rounded-lg font-medium hover:bg-slate-100 transition flex items-center gap-1" title="Istoric"><Bookmark size={12} /> Istoric</button>
         </div>
 
         {renderActiveDosarBanner((docs) => {
@@ -3875,27 +3884,28 @@ const App = () => {
       </div>
       
       <div className="panel-resize-handle hidden md:block" onMouseDown={handlePanelDragStart} />
-      <div className="w-full md:flex-1 p-4 md:p-10 overflow-y-auto bg-white panel-right">
+      <div className="w-full md:flex-1 flex flex-col bg-white panel-right">
+        {/* Fixed toolbar */}
+        <div className="shrink-0 p-3 border-b border-slate-100 bg-white flex items-center justify-end gap-1.5 flex-wrap">
+          {(['docx', 'pdf', 'md'] as const).map(fmt => (
+            <button key={fmt} onClick={() => handleGenericExport(fmt, generatedContent, drafterDocType === 'plangere' ? 'Plangere' : 'Contestatie', drafterDocType === 'plangere' ? 'Plângere' : 'Contestație')} disabled={!generatedContent} className="text-xs bg-purple-600 text-white px-2.5 py-1.5 rounded-lg font-medium hover:bg-purple-700 transition disabled:opacity-40 flex items-center gap-1">
+              <Download size={11} /> {fmt.toUpperCase()}
+            </button>
+          ))}
+          <button onClick={() => { if (savedDrafter) return; saveDocument(drafterDocType === 'plangere' ? 'plangere' : 'contestatie', drafterContext.facts.slice(0, 200) || (drafterDocType === 'plangere' ? 'Plângere' : 'Contestație'), generatedContent, generatedDecisionRefs, { facts: drafterContext.facts, authorityArgs: drafterContext.authorityArgs, legalGrounds: drafterContext.legalGrounds, docType: drafterDocType }); setSavedDrafter(true); }} disabled={!generatedContent || savedDrafter}
+            className={`text-xs px-2.5 py-1.5 rounded-lg font-medium transition flex items-center gap-1 ${savedDrafter ? 'bg-green-100 text-green-600' : 'bg-green-600 text-white hover:bg-green-700'} disabled:opacity-40`}>
+            <Save size={11} /> {savedDrafter ? 'Salvat ✓' : 'Salvează'}
+          </button>
+          <button onClick={() => loadHistory('contestatie')} className="text-xs bg-slate-100 text-slate-600 px-2.5 py-1.5 rounded-lg font-medium hover:bg-slate-200 transition flex items-center gap-1"><Bookmark size={11} /> Istoric</button>
+        </div>
+        {/* Scrollable content */}
+        <div className="flex-1 overflow-y-auto p-4 md:p-10">
         {generatedContent ? (
           <div className="max-w-3xl mx-auto space-y-4">
-             <div className="bg-white p-3 rounded-lg border border-slate-200 sticky top-0 z-10">
-               <div className="flex items-center justify-between flex-wrap gap-2">
-                 <h3 className="font-bold text-slate-800 text-sm">{drafterDocType === 'plangere' ? 'Plângere Generată' : 'Contestație Generată'}</h3>
-                 <div className="flex gap-1.5 flex-wrap">
-                   {(['docx', 'pdf', 'md'] as const).map(fmt => (
-                     <button key={fmt} onClick={() => handleGenericExport(fmt, generatedContent, drafterDocType === 'plangere' ? 'Plangere' : 'Contestatie', drafterDocType === 'plangere' ? 'Plângere' : 'Contestație')} className="text-xs bg-purple-600 text-white px-2.5 py-1.5 rounded-lg font-medium hover:bg-purple-700 transition flex items-center gap-1">
-                       <Download size={11} /> {fmt.toUpperCase()}
-                     </button>
-                   ))}
-                   <button onClick={() => saveDocument(drafterDocType === 'plangere' ? 'plangere' : 'contestatie', drafterContext.facts.slice(0, 200) || (drafterDocType === 'plangere' ? 'Plângere' : 'Contestație'), generatedContent, generatedDecisionRefs, { facts: drafterContext.facts, authorityArgs: drafterContext.authorityArgs, legalGrounds: drafterContext.legalGrounds, docType: drafterDocType })} className="text-xs bg-green-600 text-white px-2.5 py-1.5 rounded-lg font-medium hover:bg-green-700 transition flex items-center gap-1"><Save size={11} /> Salvează</button>
-                   <button onClick={() => loadHistory('contestatie')} className="text-xs bg-slate-100 text-slate-600 px-2.5 py-1.5 rounded-lg font-medium hover:bg-slate-200 transition flex items-center gap-1"><Bookmark size={11} /> Istoric</button>
-                 </div>
-               </div>
-             </div>
              <div className="prose prose-slate max-w-none font-serif text-slate-800 leading-loose bg-white" dangerouslySetInnerHTML={{ __html: formatMarkdown(generatedContent) }} />
              {generatedDecisionRefs.length > 0 && (
                <div className="mt-6 p-4 bg-blue-50 border border-blue-200 rounded-xl">
-                 <p className="font-semibold text-slate-700 mb-2 text-sm">📚 Jurisprudență CNSC utilizată:</p>
+                 <p className="font-semibold text-slate-700 mb-2 text-sm">Jurisprudență CNSC utilizată:</p>
                  <div className="flex flex-wrap gap-2">
                    {generatedDecisionRefs.map((ref: string) => (
                      <span key={ref} className="text-xs bg-white text-blue-700 px-3 py-1.5 rounded-lg border border-blue-200 font-mono cursor-pointer hover:bg-blue-100 transition" onClick={() => openDecision(ref)}>{ref}</span>
@@ -3911,6 +3921,7 @@ const App = () => {
             <p className="text-sm mt-2">AI-ul va genera structura juridică completă.</p>
           </div>
         )}
+        </div>
       </div>
     </div>
   );
@@ -4324,6 +4335,7 @@ const App = () => {
     if (!complianceText.trim() && !complianceFile) return;
     setComplianceLoading(true);
     setComplianceResult(null);
+    setSavedCompliance(false);
     try {
       const formData = new FormData();
       if (complianceFile) {
@@ -4399,7 +4411,37 @@ const App = () => {
 
         {/* Right panel — results */}
         <div className="panel-resize-handle hidden md:block" onMouseDown={handlePanelDragStart} />
-        <div className="w-full md:flex-1 p-4 md:p-8 overflow-y-auto bg-white panel-right">
+        <div className="w-full md:flex-1 flex flex-col bg-white panel-right">
+          {/* Fixed toolbar */}
+          <div className="shrink-0 p-3 border-b border-slate-100 bg-white flex items-center justify-end gap-1.5 flex-wrap">
+            {(['docx', 'pdf', 'md'] as const).map(fmt => (
+              <button key={fmt} onClick={() => {
+                if (!complianceResult) return;
+                const items = (complianceResult.compliance_items || []).map((item: any, i: number) =>
+                  `### ${i+1}. ${item.citare} — ${item.verdict}\n**${item.act}**\n\n${item.explicatie}\n${item.recomandare ? `\n**Recomandare:** ${item.recomandare}` : ''}${item.citat_document ? `\n\n> „${item.citat_document}"` : ''}`
+                ).join('\n\n---\n\n');
+                const fullContent = `# Verificare Conformitate\n\n**Scor:** ${complianceResult.score}%\n**Conforme:** ${complianceResult.conform} | **Neconforme:** ${complianceResult.neconform} | **Neclar:** ${complianceResult.neclar}\n\n${complianceResult.summary || ''}\n\n---\n\n## Matrice Conformitate\n\n${items}`;
+                handleGenericExport(fmt, fullContent, 'Verificare_Conformitate', 'Verificare Conformitate');
+              }} disabled={!complianceResult} className="text-xs bg-purple-600 text-white px-2.5 py-1.5 rounded-lg font-medium hover:bg-purple-700 transition disabled:opacity-40 flex items-center gap-1">
+                <Download size={11} /> {fmt.toUpperCase()}
+              </button>
+            ))}
+            <button onClick={() => {
+              if (!complianceResult || savedCompliance) return;
+              const items = (complianceResult.compliance_items || []).map((item: any, i: number) =>
+                `${i+1}. ${item.citare} — ${item.verdict}: ${item.explicatie}${item.recomandare ? ` (Rec: ${item.recomandare})` : ''}`
+              ).join('\n');
+              const fullContent = `Scor: ${complianceResult.score}%\nConforme: ${complianceResult.conform}, Neconforme: ${complianceResult.neconform}, Neclar: ${complianceResult.neclar}\n\n${complianceResult.summary || ''}\n\n${items}`;
+              saveDocument('conformitate', `Verificare conformitate — ${complianceResult.score}%`, fullContent, [], { score: complianceResult.score, conform: complianceResult.conform, neconform: complianceResult.neconform });
+              setSavedCompliance(true);
+            }} disabled={!complianceResult || savedCompliance}
+              className={`text-xs px-2.5 py-1.5 rounded-lg font-medium transition flex items-center gap-1 ${savedCompliance ? 'bg-green-100 text-green-600' : 'bg-green-600 text-white hover:bg-green-700'} disabled:opacity-40`}>
+              <Save size={11} /> {savedCompliance ? 'Salvat ✓' : 'Salvează'}
+            </button>
+            <button onClick={() => loadHistory('conformitate')} className="text-xs bg-slate-100 text-slate-600 px-2.5 py-1.5 rounded-lg font-medium hover:bg-slate-200 transition flex items-center gap-1"><Bookmark size={11} /> Istoric</button>
+          </div>
+          {/* Scrollable content */}
+          <div className="flex-1 overflow-y-auto p-4 md:p-8">
           {!complianceResult && !complianceLoading && (
             <div className="h-full flex items-center justify-center text-slate-400">
               <div className="text-center">
@@ -4420,41 +4462,6 @@ const App = () => {
           )}
           {complianceResult && (
             <div className="max-w-3xl mx-auto space-y-6">
-              {/* Sticky toolbar */}
-              <div className="bg-white p-3 rounded-lg border border-slate-200 sticky top-0 z-10">
-                <div className="flex items-center justify-between">
-                  <h3 className="font-bold text-slate-800 text-sm">Rezultate Conformitate — {complianceResult.score}%</h3>
-                  <div className="flex gap-1.5 flex-wrap">
-                    {(['docx', 'pdf', 'md'] as const).map(fmt => (
-                      <button key={fmt} onClick={() => {
-                        const items = (complianceResult.compliance_items || []).map((item: any, i: number) =>
-                          `### ${i+1}. ${item.citare} — ${item.verdict}\n**${item.act}**\n\n${item.explicatie}\n${item.recomandare ? `\n**Recomandare:** ${item.recomandare}` : ''}${item.citat_document ? `\n\n> „${item.citat_document}"` : ''}`
-                        ).join('\n\n---\n\n');
-                        const fullContent = `# Verificare Conformitate\n\n**Scor:** ${complianceResult.score}%\n**Conforme:** ${complianceResult.conform} | **Neconforme:** ${complianceResult.neconform} | **Neclar:** ${complianceResult.neclar}\n\n${complianceResult.summary || ''}\n\n---\n\n## Matrice Conformitate\n\n${items}`;
-                        handleGenericExport(fmt, fullContent, 'Verificare_Conformitate', 'Verificare Conformitate');
-                      }} className="text-xs bg-purple-600 text-white px-2.5 py-1.5 rounded-lg font-medium hover:bg-purple-700 transition flex items-center gap-1">
-                        <Download size={11} /> {fmt.toUpperCase()}
-                      </button>
-                    ))}
-                    <button onClick={() => {
-                      const items = (complianceResult.compliance_items || []).map((item: any, i: number) =>
-                        `${i+1}. ${item.citare} — ${item.verdict}: ${item.explicatie}${item.recomandare ? ` (Rec: ${item.recomandare})` : ''}`
-                      ).join('\n');
-                      const fullContent = `Scor: ${complianceResult.score}%\nConforme: ${complianceResult.conform}, Neconforme: ${complianceResult.neconform}, Neclar: ${complianceResult.neclar}\n\n${complianceResult.summary || ''}\n\n${items}`;
-                      saveDocument('conformitate', `Verificare conformitate — ${complianceResult.score}%`, fullContent, [], {
-                        score: complianceResult.score,
-                        conform: complianceResult.conform,
-                        neconform: complianceResult.neconform,
-                      });
-                    }} className="text-xs bg-green-600 text-white px-2.5 py-1.5 rounded-lg font-medium hover:bg-green-700 transition flex items-center gap-1">
-                      <Save size={11} /> Salvează
-                    </button>
-                    <button onClick={() => loadHistory('conformitate')} className="text-xs bg-slate-100 text-slate-600 px-2.5 py-1.5 rounded-lg font-medium hover:bg-slate-200 transition flex items-center gap-1">
-                      <Bookmark size={11} /> Istoric
-                    </button>
-                  </div>
-                </div>
-              </div>
               {/* Score header */}
               <div className={`rounded-2xl p-6 text-center ${(complianceResult.score ?? 0) >= 80 ? 'bg-green-50 border-2 border-green-300' : (complianceResult.score ?? 0) >= 50 ? 'bg-amber-50 border-2 border-amber-300' : 'bg-red-50 border-2 border-red-300'}`}>
                 <div className={`text-4xl font-black mb-2 ${(complianceResult.score ?? 0) >= 80 ? 'text-green-700' : (complianceResult.score ?? 0) >= 50 ? 'text-amber-700' : 'text-red-700'}`}>
@@ -4506,6 +4513,7 @@ const App = () => {
               </div>
             </div>
           )}
+          </div>
         </div>
       </div>
     );
@@ -4538,6 +4546,7 @@ const App = () => {
     if (strategyInput.coduri_critici.length === 0 || !strategyInput.description.trim()) return;
     setStrategyLoading(true);
     setStrategyResult(null);
+    setSavedStrategy(false);
     try {
       const body: any = {
         description: strategyInput.description,
@@ -4568,11 +4577,10 @@ const App = () => {
       <div className="h-full flex flex-col md:flex-row bg-white panel-resize-container">
         {/* Left panel — input */}
         <div className="w-full md:border-r border-slate-200 p-6 overflow-y-auto bg-slate-50/50 shrink-0 panel-left">
-          <div className="flex items-center justify-between mb-4">
+          <div className="mb-4">
             <h2 className="text-lg font-bold text-slate-800 flex gap-2 items-center">
               <Target className="text-indigo-600" size={20}/> Strategie Contestare
             </h2>
-            <button onClick={() => loadHistory('contestatie')} className="text-xs bg-slate-50 text-slate-500 px-2.5 py-1 rounded-lg font-medium hover:bg-slate-100 transition flex items-center gap-1" title="Istoric"><Bookmark size={12} /> Istoric</button>
           </div>
           <p className="text-xs text-slate-500 mb-4">AI generează o strategie completă de contestare cu șanse de succes per critică, temei legal și jurisprudență.</p>
 
@@ -4691,7 +4699,41 @@ const App = () => {
 
         {/* Right panel — results */}
         <div className="panel-resize-handle hidden md:block" onMouseDown={handlePanelDragStart} />
-        <div className="w-full md:flex-1 p-4 md:p-8 overflow-y-auto bg-white panel-right">
+        <div className="w-full md:flex-1 flex flex-col bg-white panel-right">
+          {/* Fixed toolbar */}
+          <div className="shrink-0 p-3 border-b border-slate-100 bg-white flex items-center justify-end gap-1.5 flex-wrap">
+            {(['docx', 'pdf', 'md'] as const).map(fmt => (
+              <button key={fmt} onClick={() => {
+                if (!strategyResult) return;
+                const fullText = `# Strategie Contestare\n\n**Probabilitate:** ${strategyResult.overall_assessment?.overall_probability}% ${strategyResult.overall_assessment?.recommendation}\n\n${strategyResult.overall_assessment?.text || ''}\n\n` +
+                  (strategyResult.per_criticism || []).map((r: any) =>
+                    `## ${r.code} — ${r.label}\n**Probabilitate:** ${r.success_probability}%\n\n${r.recommendation || ''}\n\n**Argumente:** ${(r.arguments || []).join('; ')}\n**Temei legal:** ${(r.legal_basis || []).join('; ')}`
+                  ).join('\n\n---\n\n');
+                handleGenericExport(fmt, fullText, 'Strategie_Contestare', 'Strategie Contestare');
+              }} disabled={!strategyResult} className="text-xs bg-purple-600 text-white px-2.5 py-1.5 rounded-lg font-medium hover:bg-purple-700 transition disabled:opacity-40 flex items-center gap-1">
+                <Download size={11} /> {fmt.toUpperCase()}
+              </button>
+            ))}
+            <button onClick={() => {
+              if (!strategyResult || savedStrategy) return;
+              const fullText = (strategyResult.overall_assessment?.text || '') + '\n\n' +
+                (strategyResult.per_criticism || []).map((r: any) =>
+                  `## ${r.code} — ${r.label}\n${r.recommendation || ''}\n\nArgumente: ${(r.arguments || []).join('; ')}\nTemei legal: ${(r.legal_basis || []).join('; ')}\nProbabilitate: ${r.success_probability}%`
+                ).join('\n\n');
+              const refs = (strategyResult.precedents || []).map((p: any) => p.bo_reference);
+              saveDocument('strategie', strategyInput.description.slice(0, 200) || 'Strategie contestare', fullText, refs, {
+                coduri_critici: strategyInput.coduri_critici, cod_cpv: strategyInput.cod_cpv, complet: strategyInput.complet,
+                probability: strategyResult.overall_assessment?.overall_probability,
+              });
+              setSavedStrategy(true);
+            }} disabled={!strategyResult || savedStrategy}
+              className={`text-xs px-2.5 py-1.5 rounded-lg font-medium transition flex items-center gap-1 ${savedStrategy ? 'bg-green-100 text-green-600' : 'bg-green-600 text-white hover:bg-green-700'} disabled:opacity-40`}>
+              <Save size={11} /> {savedStrategy ? 'Salvat ✓' : 'Salvează'}
+            </button>
+            <button onClick={() => loadHistory('contestatie')} className="text-xs bg-slate-100 text-slate-600 px-2.5 py-1.5 rounded-lg font-medium hover:bg-slate-200 transition flex items-center gap-1"><Bookmark size={11} /> Istoric</button>
+          </div>
+          {/* Scrollable content */}
+          <div className="flex-1 overflow-y-auto p-4 md:p-8">
           {!strategyResult && !strategyLoading && (
             <div className="h-full flex items-center justify-center text-slate-400">
               <div className="text-center">
@@ -4712,39 +4754,6 @@ const App = () => {
           )}
           {strategyResult && (
             <div className="max-w-3xl mx-auto space-y-6">
-              {/* Sticky toolbar */}
-              <div className="bg-white p-3 rounded-lg border border-slate-200 sticky top-0 z-10">
-                <div className="flex items-center justify-between flex-wrap gap-2">
-                  <h3 className="font-bold text-slate-800 text-sm">Strategie Contestare — {strategyResult.overall_assessment?.overall_probability}%</h3>
-                  <div className="flex gap-1.5 flex-wrap">
-                    {(['docx', 'pdf', 'md'] as const).map(fmt => (
-                      <button key={fmt} onClick={() => {
-                        const fullText = `# Strategie Contestare\n\n**Probabilitate:** ${strategyResult.overall_assessment?.overall_probability}% ${strategyResult.overall_assessment?.recommendation}\n\n${strategyResult.overall_assessment?.text || ''}\n\n` +
-                          (strategyResult.per_criticism || []).map((r: any) =>
-                            `## ${r.code} — ${r.label}\n**Probabilitate:** ${r.success_probability}%\n\n${r.recommendation || ''}\n\n**Argumente:** ${(r.arguments || []).join('; ')}\n**Temei legal:** ${(r.legal_basis || []).join('; ')}`
-                          ).join('\n\n---\n\n');
-                        handleGenericExport(fmt, fullText, 'Strategie_Contestare', 'Strategie Contestare');
-                      }} className="text-xs bg-purple-600 text-white px-2.5 py-1.5 rounded-lg font-medium hover:bg-purple-700 transition flex items-center gap-1">
-                        <Download size={11} /> {fmt.toUpperCase()}
-                      </button>
-                    ))}
-                    <button onClick={() => {
-                      const fullText = (strategyResult.overall_assessment?.text || '') + '\n\n' +
-                        (strategyResult.per_criticism || []).map((r: any) =>
-                          `## ${r.code} — ${r.label}\n${r.recommendation || ''}\n\nArgumente: ${(r.arguments || []).join('; ')}\nTemei legal: ${(r.legal_basis || []).join('; ')}\nProbabilitate: ${r.success_probability}%`
-                        ).join('\n\n');
-                      const refs = (strategyResult.precedents || []).map((p: any) => p.bo_reference);
-                      saveDocument('strategie', strategyInput.description.slice(0, 200) || 'Strategie contestare', fullText, refs, {
-                        coduri_critici: strategyInput.coduri_critici,
-                        cod_cpv: strategyInput.cod_cpv,
-                        complet: strategyInput.complet,
-                        probability: strategyResult.overall_assessment?.overall_probability,
-                      });
-                    }} className="text-xs bg-green-600 text-white px-2.5 py-1.5 rounded-lg font-medium hover:bg-green-700 transition flex items-center gap-1"><Save size={11} /> Salvează</button>
-                    <button onClick={() => loadHistory('contestatie')} className="text-xs bg-slate-100 text-slate-600 px-2.5 py-1.5 rounded-lg font-medium hover:bg-slate-200 transition flex items-center gap-1"><Bookmark size={11} /> Istoric</button>
-                  </div>
-                </div>
-              </div>
               {/* Overall assessment */}
               <div className={`rounded-2xl p-6 ${strategyResult.overall_assessment?.recommendation === 'ADMIS' ? 'bg-green-50 border-2 border-green-300' : 'bg-red-50 border-2 border-red-300'}`}>
                 <div className="flex items-center justify-between mb-3">
@@ -4859,6 +4868,7 @@ const App = () => {
               )}
             </div>
           )}
+          </div>
         </div>
       </div>
     );
@@ -7520,11 +7530,10 @@ const App = () => {
           <div className="h-full flex flex-col md:flex-row bg-white panel-resize-container">
             {/* Left panel — input */}
             <div className="w-full md:border-r border-slate-200 p-6 overflow-y-auto bg-slate-50/50 shrink-0 panel-left">
-              <div className="flex items-center justify-between mb-2">
+              <div className="mb-2">
                 <h2 className="text-lg font-bold text-slate-800 flex gap-2 items-center">
                   <AlertTriangle className="text-red-500" size={20}/> Red Flags Detector
                 </h2>
-                <button onClick={() => loadHistory('redflags')} className="text-xs bg-slate-50 text-slate-500 px-2.5 py-1 rounded-lg font-medium hover:bg-slate-100 transition flex items-center gap-1" title="Istoric"><Bookmark size={12} /> Istoric</button>
               </div>
               <p className="text-xs text-slate-500 mb-4">Identifică clauze restrictive în documentația de achiziții publice.</p>
 
@@ -7639,54 +7648,36 @@ const App = () => {
 
             {/* Right panel — results */}
             <div className="panel-resize-handle hidden md:block" onMouseDown={handlePanelDragStart} />
-            <div className="w-full md:flex-1 p-4 md:p-8 overflow-y-auto bg-white panel-right">
+            <div className="w-full md:flex-1 flex flex-col bg-white panel-right">
+              {/* Fixed toolbar */}
+              <div className="shrink-0 p-3 border-b border-slate-100 bg-white flex items-center justify-end gap-1.5 flex-wrap">
+                {(['docx', 'pdf', 'md'] as const).map(fmt => (
+                  <button key={fmt} onClick={() => handleRedFlagsExport(fmt)} disabled={selectedRedFlags.length === 0}
+                    className="text-xs bg-purple-600 text-white px-2.5 py-1.5 rounded-lg font-medium hover:bg-purple-700 transition disabled:opacity-40 flex items-center gap-1">
+                    <Download size={11} /> {fmt.toUpperCase()}
+                  </button>
+                ))}
+                <button onClick={() => { if (savedRedFlags) return; saveRedFlags(); setSavedRedFlags(true); }} disabled={redFlagsResults.length === 0 || savedRedFlags}
+                  className={`text-xs px-2.5 py-1.5 rounded-lg font-medium transition flex items-center gap-1 ${savedRedFlags ? 'bg-green-100 text-green-600' : 'bg-green-600 text-white hover:bg-green-700'} disabled:opacity-40`}>
+                  <Save size={11} /> {savedRedFlags ? 'Salvat ✓' : 'Salvează'}
+                </button>
+                <button onClick={() => loadHistory('redflags')} className="text-xs bg-slate-100 text-slate-600 px-2.5 py-1.5 rounded-lg font-medium hover:bg-slate-200 transition flex items-center gap-1"><Bookmark size={11} /> Istoric</button>
+              </div>
+              {/* Scrollable content */}
+              <div className="flex-1 overflow-y-auto p-4 md:p-8">
               {redFlagsResults.length > 0 ? (
                 <div className="space-y-4">
-                  <div className="bg-white p-4 rounded-lg border border-slate-200 sticky top-0 z-10 space-y-2">
-                    <div className="flex items-center justify-between">
-                      <h3 className="font-bold text-slate-800">Rezultate Analiză</h3>
-                      <div className="flex gap-4 text-sm">
-                        <span className="text-red-600 font-bold">
-                          {redFlagsResults.filter(rf => rf.severity === 'CRITICĂ').length} Critice
-                        </span>
-                        <span className="text-orange-600 font-bold">
-                          {redFlagsResults.filter(rf => rf.severity === 'MEDIE').length} Medii
-                        </span>
-                        <span className="text-yellow-600 font-bold">
-                          {redFlagsResults.filter(rf => rf.severity === 'SCĂZUTĂ').length} Scăzute
-                        </span>
-                      </div>
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex gap-4 text-sm">
+                      <span className="text-red-600 font-bold">{redFlagsResults.filter(rf => rf.severity === 'CRITICĂ').length} Critice</span>
+                      <span className="text-orange-600 font-bold">{redFlagsResults.filter(rf => rf.severity === 'MEDIE').length} Medii</span>
+                      <span className="text-yellow-600 font-bold">{redFlagsResults.filter(rf => rf.severity === 'SCĂZUTĂ').length} Scăzute</span>
                     </div>
-                    <div className="flex items-center justify-between border-t border-slate-100 pt-2">
-                      <div className="flex gap-2 items-center text-xs">
-                        <button
-                          onClick={() => setSelectedRedFlags(redFlagsResults.map((_, i) => i))}
-                          className="text-blue-600 hover:text-blue-800 underline"
-                        >Selectează toate</button>
-                        <span className="text-slate-300">|</span>
-                        <button
-                          onClick={() => setSelectedRedFlags([])}
-                          className="text-blue-600 hover:text-blue-800 underline"
-                        >Deselectează</button>
-                        {selectedRedFlags.length > 0 && (
-                          <span className="text-slate-500 ml-2">{selectedRedFlags.length} selectate</span>
-                        )}
-                      </div>
-                      <div className="flex gap-1.5">
-                        {(['docx', 'pdf', 'md'] as const).map(fmt => (
-                          <button
-                            key={fmt}
-                            onClick={() => handleRedFlagsExport(fmt)}
-                            disabled={selectedRedFlags.length === 0}
-                            className="text-xs bg-purple-600 text-white px-2.5 py-1.5 rounded-lg font-medium hover:bg-purple-700 transition disabled:opacity-40 flex items-center gap-1"
-                          >
-                            <Download size={11} />
-                            {fmt.toUpperCase()}
-                          </button>
-                        ))}
-                        <button onClick={saveRedFlags} className="text-xs bg-green-600 text-white px-2.5 py-1.5 rounded-lg font-medium hover:bg-green-700 transition flex items-center gap-1"><Save size={11} /> Salvează</button>
-                        <button onClick={() => loadHistory('redflags')} className="text-xs bg-slate-100 text-slate-600 px-2.5 py-1.5 rounded-lg font-medium hover:bg-slate-200 transition flex items-center gap-1"><Bookmark size={11} /> Istoric</button>
-                      </div>
+                    <div className="flex gap-2 items-center text-xs">
+                      <button onClick={() => setSelectedRedFlags(redFlagsResults.map((_, i) => i))} className="text-blue-600 hover:text-blue-800 underline">Selectează toate</button>
+                      <span className="text-slate-300">|</span>
+                      <button onClick={() => setSelectedRedFlags([])} className="text-blue-600 hover:text-blue-800 underline">Deselectează</button>
+                      {selectedRedFlags.length > 0 && <span className="text-slate-500 ml-2">{selectedRedFlags.length} selectate</span>}
                     </div>
                   </div>
 
@@ -7869,6 +7860,7 @@ const App = () => {
                   </p>
                 </div>
               )}
+              </div>
             </div>
           </div>
         )}
@@ -7876,11 +7868,10 @@ const App = () => {
           <div className="h-full flex flex-col md:flex-row bg-white panel-resize-container">
             {/* Left panel — input */}
             <div className="w-full md:border-r border-slate-200 p-6 overflow-y-auto bg-slate-50/50 shrink-0 panel-left">
-              <div className="flex items-center justify-between mb-6">
+              <div className="mb-6">
                 <h2 className="text-lg font-bold text-slate-800 flex gap-2 items-center">
                   <Search className="text-purple-600" size={20}/> Asistent Clarificări
                 </h2>
-                <button onClick={() => loadHistory('clarificare')} className="text-xs bg-slate-50 text-slate-500 px-2.5 py-1 rounded-lg font-medium hover:bg-slate-100 transition flex items-center gap-1" title="Istoric"><Bookmark size={12} /> Istoric</button>
               </div>
 
               {renderActiveDosarBanner((docs) => {
@@ -7940,23 +7931,24 @@ const App = () => {
             </div>
             {/* Right panel — output */}
             <div className="panel-resize-handle hidden md:block" onMouseDown={handlePanelDragStart} />
-            <div className="w-full md:flex-1 p-4 md:p-10 overflow-y-auto bg-white panel-right">
+            <div className="w-full md:flex-1 flex flex-col bg-white panel-right">
+              {/* Fixed toolbar */}
+              <div className="shrink-0 p-3 border-b border-slate-100 bg-white flex items-center justify-end gap-1.5 flex-wrap">
+                {(['docx', 'pdf', 'md'] as const).map(fmt => (
+                  <button key={fmt} onClick={() => handleGenericExport(fmt, generatedContent, 'Clarificare', clarificationClause.slice(0, 100) || 'Clarificare')} disabled={!generatedContent} className="text-xs bg-purple-600 text-white px-2.5 py-1.5 rounded-lg font-medium hover:bg-purple-700 transition disabled:opacity-40 flex items-center gap-1">
+                    <Download size={11} /> {fmt.toUpperCase()}
+                  </button>
+                ))}
+                <button onClick={() => { if (savedClarification) return; saveDocument('clarificare', clarificationClause.slice(0, 200) || 'Clarificare', generatedContent, generatedDecisionRefs, { clauza_originala: clarificationClause }); setSavedClarification(true); }} disabled={!generatedContent || savedClarification}
+                  className={`text-xs px-2.5 py-1.5 rounded-lg font-medium transition flex items-center gap-1 ${savedClarification ? 'bg-green-100 text-green-600' : 'bg-green-600 text-white hover:bg-green-700'} disabled:opacity-40`}>
+                  <Save size={11} /> {savedClarification ? 'Salvat ✓' : 'Salvează'}
+                </button>
+                <button onClick={() => loadHistory('clarificare')} className="text-xs bg-slate-100 text-slate-600 px-2.5 py-1.5 rounded-lg font-medium hover:bg-slate-200 transition flex items-center gap-1"><Bookmark size={11} /> Istoric</button>
+              </div>
+              {/* Scrollable content */}
+              <div className="flex-1 overflow-y-auto p-4 md:p-10">
               {generatedContent ? (
                 <div className="space-y-4">
-                  <div className="bg-white p-3 rounded-lg border border-slate-200 sticky top-0 z-10">
-                    <div className="flex items-center justify-between flex-wrap gap-2">
-                      <h3 className="font-bold text-slate-800 text-sm">Răspuns Clarificare</h3>
-                      <div className="flex gap-1.5 flex-wrap">
-                        {(['docx', 'pdf', 'md'] as const).map(fmt => (
-                          <button key={fmt} onClick={() => handleGenericExport(fmt, generatedContent, 'Clarificare', clarificationClause.slice(0, 100) || 'Clarificare')} className="text-xs bg-purple-600 text-white px-2.5 py-1.5 rounded-lg font-medium hover:bg-purple-700 transition flex items-center gap-1">
-                            <Download size={11} /> {fmt.toUpperCase()}
-                          </button>
-                        ))}
-                        <button onClick={() => saveDocument('clarificare', clarificationClause.slice(0, 200) || 'Clarificare', generatedContent, generatedDecisionRefs, { clauza_originala: clarificationClause })} className="text-xs bg-green-600 text-white px-2.5 py-1.5 rounded-lg font-medium hover:bg-green-700 transition flex items-center gap-1"><Save size={11} /> Salvează</button>
-                        <button onClick={() => loadHistory('clarificare')} className="text-xs bg-slate-100 text-slate-600 px-2.5 py-1.5 rounded-lg font-medium hover:bg-slate-200 transition flex items-center gap-1"><Bookmark size={11} /> Istoric</button>
-                      </div>
-                    </div>
-                  </div>
                   <div className="prose prose-slate max-w-none" dangerouslySetInnerHTML={{ __html: formatMarkdown(generatedContent) }} />
                   {generatedDecisionRefs.length > 0 && (
                     <div className="mt-6 p-4 bg-purple-50 border border-purple-200 rounded-xl">
@@ -7976,6 +7968,7 @@ const App = () => {
                   <p className="text-sm mt-2">Încarcă un document sau introdu textul clauzei problematice</p>
                 </div>
               )}
+              </div>
             </div>
           </div>
         )}
