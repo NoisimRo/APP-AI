@@ -7,7 +7,7 @@ and training materials under a single legal case. Requires authentication.
 from datetime import datetime
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException, Depends, Query
+from fastapi import APIRouter, HTTPException, Depends, Query, UploadFile, File
 from pydantic import BaseModel, Field
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -17,8 +17,9 @@ from app.core.deps import get_current_active_user, get_optional_user, require_fe
 from app.core.logging import get_logger
 from app.db.session import get_session, is_db_available
 from app.models.decision import (
-    Dosar, Conversatie, DocumentGenerat, RedFlagsSalvate, TrainingMaterial, User,
+    Dosar, DosarDocument, Conversatie, DocumentGenerat, RedFlagsSalvate, TrainingMaterial, User,
 )
+from app.services.document_processor import DocumentProcessor
 
 router = APIRouter()
 logger = get_logger(__name__)
@@ -506,3 +507,274 @@ async def unlink_artifact(
 
     logger.info("artifact_unlinked", dosar_id=dosar_id, type=request.artifact_type, artifact_id=request.artifact_id)
     return {"status": "unlinked"}
+
+
+# =============================================================================
+# DOSAR DOCUMENTS (Attached Source Documents)
+# =============================================================================
+
+MAX_DOCS_PER_DOSAR = 30
+MAX_FILE_SIZE = 50 * 1024 * 1024  # 50MB
+ALLOWED_EXTENSIONS = {"pdf", "docx", "doc", "txt", "md", "markdown"}
+
+_doc_processor = DocumentProcessor()
+
+
+class DosarDocumentResponse(BaseModel):
+    id: str
+    filename: str
+    mime_type: str | None
+    file_size: int | None
+    text_preview: str | None
+    text_stats: dict | None
+    ordine: int
+    created_at: str
+    updated_at: str
+
+
+class DosarDocumentText(BaseModel):
+    id: str
+    filename: str
+    extracted_text: str
+
+
+def _compute_text_stats(text: str) -> dict:
+    """Compute basic text statistics."""
+    lines = text.split("\n")
+    words = text.split()
+    paragraphs = [p for p in text.split("\n\n") if p.strip()]
+    return {
+        "characters": len(text),
+        "words": len(words),
+        "lines": len(lines),
+        "paragraphs": len(paragraphs),
+    }
+
+
+def _doc_to_response(doc: DosarDocument) -> DosarDocumentResponse:
+    return DosarDocumentResponse(
+        id=doc.id,
+        filename=doc.filename,
+        mime_type=doc.mime_type,
+        file_size=doc.file_size,
+        text_preview=doc.text_preview,
+        text_stats=doc.text_stats,
+        ordine=doc.ordine,
+        created_at=doc.created_at.isoformat(),
+        updated_at=doc.updated_at.isoformat(),
+    )
+
+
+async def _verify_dosar_access(session: AsyncSession, dosar_id: str, user: User) -> Dosar:
+    """Verify dosar exists and user has access."""
+    result = await session.execute(select(Dosar).where(Dosar.id == dosar_id))
+    dosar = result.scalar_one_or_none()
+    if not dosar:
+        raise HTTPException(404, "Dosar negăsit")
+    if dosar.user_id != user.id and user.rol != "admin":
+        raise HTTPException(403, "Nu aveți acces la acest dosar")
+    return dosar
+
+
+@router.post("/{dosar_id}/documents", response_model=DosarDocumentResponse)
+async def upload_dosar_document(
+    dosar_id: str,
+    file: UploadFile = File(...),
+    session: AsyncSession = Depends(get_session),
+    user: User = Depends(get_current_active_user),
+):
+    """Upload a source document to a dosar. Extracts text and stores it."""
+    if not is_db_available():
+        raise HTTPException(503, "Database not available")
+
+    dosar = await _verify_dosar_access(session, dosar_id, user)
+
+    # Validate file extension
+    extension = file.filename.lower().split(".")[-1] if file.filename and "." in file.filename else ""
+    if extension not in ALLOWED_EXTENSIONS:
+        raise HTTPException(400, f"Tip fișier neacceptat. Tipuri acceptate: {', '.join(sorted(ALLOWED_EXTENSIONS))}")
+
+    # Check document count limit
+    count_result = await session.execute(
+        select(func.count()).where(DosarDocument.dosar_id == dosar_id)
+    )
+    current_count = count_result.scalar() or 0
+    if current_count >= MAX_DOCS_PER_DOSAR:
+        raise HTTPException(400, f"Limita de {MAX_DOCS_PER_DOSAR} documente per dosar a fost atinsă")
+
+    # Read file content
+    file_content = await file.read()
+    if len(file_content) > MAX_FILE_SIZE:
+        raise HTTPException(400, f"Fișier prea mare. Maxim {MAX_FILE_SIZE // (1024*1024)}MB")
+
+    # Extract text
+    try:
+        extracted_text = _doc_processor.extract_text_from_file(
+            file_content, file.filename or "document", file.content_type
+        )
+    except Exception as e:
+        logger.error("document_extraction_error", filename=file.filename, error=str(e))
+        raise HTTPException(422, f"Nu s-a putut extrage textul din fișier: {str(e)}")
+
+    if not extracted_text or not extracted_text.strip():
+        raise HTTPException(422, "Fișierul nu conține text extractibil")
+
+    # Compute stats
+    text_stats = _compute_text_stats(extracted_text)
+
+    # Get next ordine
+    ordine_result = await session.execute(
+        select(func.coalesce(func.max(DosarDocument.ordine), -1)).where(
+            DosarDocument.dosar_id == dosar_id
+        )
+    )
+    next_ordine = (ordine_result.scalar() or 0) + 1
+
+    doc = DosarDocument(
+        dosar_id=dosar_id,
+        filename=file.filename or "document",
+        mime_type=file.content_type,
+        file_size=len(file_content),
+        extracted_text=extracted_text,
+        text_preview=extracted_text[:500] if extracted_text else None,
+        text_stats=text_stats,
+        ordine=next_ordine,
+    )
+    session.add(doc)
+    await session.commit()
+    await session.refresh(doc)
+
+    logger.info("dosar_document_uploaded", dosar_id=dosar_id, filename=file.filename, words=text_stats.get("words"))
+    return _doc_to_response(doc)
+
+
+@router.get("/{dosar_id}/documents", response_model=list[DosarDocumentResponse])
+async def list_dosar_documents(
+    dosar_id: str,
+    session: AsyncSession = Depends(get_session),
+    user: User = Depends(get_current_active_user),
+):
+    """List documents attached to a dosar (metadata only, no extracted_text)."""
+    if not is_db_available():
+        return []
+
+    await _verify_dosar_access(session, dosar_id, user)
+
+    result = await session.execute(
+        select(DosarDocument)
+        .where(DosarDocument.dosar_id == dosar_id)
+        .order_by(DosarDocument.ordine)
+    )
+    docs = result.scalars().all()
+    return [_doc_to_response(d) for d in docs]
+
+
+@router.get("/{dosar_id}/documents/texts", response_model=list[DosarDocumentText])
+async def get_dosar_document_texts(
+    dosar_id: str,
+    session: AsyncSession = Depends(get_session),
+    user: User = Depends(get_current_active_user),
+):
+    """Get all extracted texts for a dosar. Used when activating a dosar."""
+    if not is_db_available():
+        return []
+
+    await _verify_dosar_access(session, dosar_id, user)
+
+    result = await session.execute(
+        select(DosarDocument)
+        .where(DosarDocument.dosar_id == dosar_id)
+        .order_by(DosarDocument.ordine)
+    )
+    docs = result.scalars().all()
+    return [
+        DosarDocumentText(id=d.id, filename=d.filename, extracted_text=d.extracted_text)
+        for d in docs
+    ]
+
+
+@router.delete("/{dosar_id}/documents/{doc_id}")
+async def delete_dosar_document(
+    dosar_id: str,
+    doc_id: str,
+    session: AsyncSession = Depends(get_session),
+    user: User = Depends(get_current_active_user),
+):
+    """Delete a document from a dosar."""
+    if not is_db_available():
+        raise HTTPException(503, "Database not available")
+
+    await _verify_dosar_access(session, dosar_id, user)
+
+    result = await session.execute(
+        select(DosarDocument).where(
+            DosarDocument.id == doc_id, DosarDocument.dosar_id == dosar_id
+        )
+    )
+    doc = result.scalar_one_or_none()
+    if not doc:
+        raise HTTPException(404, "Document negăsit în acest dosar")
+
+    await session.delete(doc)
+    await session.commit()
+
+    logger.info("dosar_document_deleted", dosar_id=dosar_id, doc_id=doc_id)
+    return {"status": "deleted"}
+
+
+@router.put("/{dosar_id}/documents/{doc_id}", response_model=DosarDocumentResponse)
+async def replace_dosar_document(
+    dosar_id: str,
+    doc_id: str,
+    file: UploadFile = File(...),
+    session: AsyncSession = Depends(get_session),
+    user: User = Depends(get_current_active_user),
+):
+    """Replace a document in a dosar with a new file."""
+    if not is_db_available():
+        raise HTTPException(503, "Database not available")
+
+    await _verify_dosar_access(session, dosar_id, user)
+
+    result = await session.execute(
+        select(DosarDocument).where(
+            DosarDocument.id == doc_id, DosarDocument.dosar_id == dosar_id
+        )
+    )
+    doc = result.scalar_one_or_none()
+    if not doc:
+        raise HTTPException(404, "Document negăsit în acest dosar")
+
+    # Validate
+    extension = file.filename.lower().split(".")[-1] if file.filename and "." in file.filename else ""
+    if extension not in ALLOWED_EXTENSIONS:
+        raise HTTPException(400, f"Tip fișier neacceptat. Tipuri acceptate: {', '.join(sorted(ALLOWED_EXTENSIONS))}")
+
+    file_content = await file.read()
+    if len(file_content) > MAX_FILE_SIZE:
+        raise HTTPException(400, f"Fișier prea mare. Maxim {MAX_FILE_SIZE // (1024*1024)}MB")
+
+    try:
+        extracted_text = _doc_processor.extract_text_from_file(
+            file_content, file.filename or "document", file.content_type
+        )
+    except Exception as e:
+        raise HTTPException(422, f"Nu s-a putut extrage textul din fișier: {str(e)}")
+
+    if not extracted_text or not extracted_text.strip():
+        raise HTTPException(422, "Fișierul nu conține text extractibil")
+
+    text_stats = _compute_text_stats(extracted_text)
+
+    doc.filename = file.filename or "document"
+    doc.mime_type = file.content_type
+    doc.file_size = len(file_content)
+    doc.extracted_text = extracted_text
+    doc.text_preview = extracted_text[:500]
+    doc.text_stats = text_stats
+
+    await session.commit()
+    await session.refresh(doc)
+
+    logger.info("dosar_document_replaced", dosar_id=dosar_id, doc_id=doc_id, filename=file.filename)
+    return _doc_to_response(doc)

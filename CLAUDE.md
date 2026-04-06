@@ -158,7 +158,7 @@ DATABASE_URL="postgresql+asyncpg://..." python scripts/generate_embeddings.py
 - **History:** Started at 768 (text-embedding-004 convention) → tried 3072 (native) but hit pgvector HNSW limit → settled on 2000.
 - After dimension changes, regenerate embeddings: `python scripts/generate_embeddings.py --force`
 
-### Key Tables (18 în producție)
+### Key Tables (19 în producție)
 
 | Table | Purpose | RAG? |
 |-------|---------|------|
@@ -178,6 +178,7 @@ DATABASE_URL="postgresql+asyncpg://..." python scripts/generate_embeddings.py
 | `red_flags_salvate` | Analize Red Flags salvate (rezultate JSONB, statistici severitate, dosar_id FK) | No |
 | `training_materials` | Materiale didactice salvate (tip, temă, nivel, secțiuni parsate, dosar_id FK) | No |
 | `dosare` | Dosare digitale — case management (client, AC, CPV, termene, status, artefacte linkuite) | No |
+| `dosar_documents` | Documente sursă atașate la dosare (text extras stocat, metadata, stats) | No |
 | `alert_rules` | Reguli alerte decizii noi (filtre JSONB, frecvență, status activ/inactiv) | No |
 | `document_comments` | Comentarii inline pe documente generate (anchor text, resolved tracking) | No |
 
@@ -445,6 +446,22 @@ CREATE TABLE document_comments (
 CREATE INDEX ix_dc_document ON document_comments(document_id);
 CREATE INDEX ix_dc_user ON document_comments(user_id);
 CREATE INDEX ix_dc_resolved ON document_comments(resolved);
+
+-- 5. Dosar Documents (attached source documents with extracted text)
+CREATE TABLE dosar_documents (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  dosar_id UUID NOT NULL REFERENCES dosare(id) ON DELETE CASCADE,
+  filename VARCHAR(500) NOT NULL,
+  mime_type VARCHAR(100),
+  file_size INTEGER,
+  extracted_text TEXT NOT NULL,
+  text_preview VARCHAR(500),
+  text_stats JSONB,
+  ordine INTEGER NOT NULL DEFAULT 0,
+  created_at TIMESTAMP NOT NULL DEFAULT now(),
+  updated_at TIMESTAMP NOT NULL DEFAULT now()
+);
+CREATE INDEX ix_dosardoc_dosar ON dosar_documents(dosar_id);
 ```
 
 ### What still needs to be done
@@ -457,6 +474,7 @@ CREATE INDEX ix_dc_resolved ON document_comments(resolved);
 
 ### What's been done (complete)
 - ✅ Sprint 4 SQL migration executed in production (2026-04-05): dosare, alert_rules, document_comments + dosar_id FK on 4 tables
+- ✅ dosar_documents table created in production (2026-04-06): source documents attached to dosare, with extracted text storage, active dosar system + banner on tool pages
 
 ### Future: Daily Automation (Cloud Run Job + Cloud Scheduler)
 

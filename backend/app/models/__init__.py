@@ -16,6 +16,7 @@ from app.models.decision import (
     SpetaANAP,
     UserContext,
     Dosar,
+    DosarDocument,
     AlertRule,
     DocumentComment,
     # Legacy aliases
@@ -39,6 +40,7 @@ __all__ = [
     "SpetaANAP",
     "UserContext",
     "Dosar",
+    "DosarDocument",
     "AlertRule",
     "DocumentComment",
     "Decision",

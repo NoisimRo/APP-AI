@@ -10,6 +10,7 @@
  public | decizii_cnsc             | table | expertap | permanent   | heap          | 78 MB      |
  public | document_comments        | table | expertap | permanent   | heap          | 8192 bytes |
  public | documente_generate       | table | expertap | permanent   | heap          | 8192 bytes |
+ public | dosar_documents          | table | expertap | permanent   | heap          | 8192 bytes |
  public | dosare                   | table | expertap | permanent   | heap          | 8192 bytes |
  public | legislatie_fragmente     | table | expertap | permanent   | heap          | 8192 bytes |
  public | llm_settings             | table | expertap | permanent   | heap          | 8192 bytes |
@@ -21,7 +22,7 @@
  public | training_materials       | table | expertap | permanent   | heap          | 8192 bytes |
  public | user_context             | table | expertap | permanent   | heap          | 8192 bytes |
  public | users                    | table | expertap | permanent   | heap          | 8192 bytes |
-(18 rows)
+(19 rows)
 
 
 # \d decizii_cnsc
@@ -459,9 +460,32 @@ Foreign-key constraints:
     "dosare_user_id_fkey" FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 Referenced by:
     TABLE "conversatii" CONSTRAINT "conversatii_dosar_id_fkey" FOREIGN KEY (dosar_id) REFERENCES dosare(id) ON DELETE SET NULL
+    TABLE "dosar_documents" CONSTRAINT "dosar_documents_dosar_id_fkey" FOREIGN KEY (dosar_id) REFERENCES dosare(id) ON DELETE CASCADE
     TABLE "documente_generate" CONSTRAINT "documente_generate_dosar_id_fkey" FOREIGN KEY (dosar_id) REFERENCES dosare(id) ON DELETE SET NULL
     TABLE "red_flags_salvate" CONSTRAINT "red_flags_salvate_dosar_id_fkey" FOREIGN KEY (dosar_id) REFERENCES dosare(id) ON DELETE SET NULL
     TABLE "training_materials" CONSTRAINT "training_materials_dosar_id_fkey" FOREIGN KEY (dosar_id) REFERENCES dosare(id) ON DELETE SET NULL
+
+
+# \d dosar_documents
+                            Table "public.dosar_documents"
+     Column      |            Type             | Collation | Nullable |       Default
+-----------------+-----------------------------+-----------+----------+--------------------
+ id              | uuid                        |           | not null | gen_random_uuid()
+ dosar_id        | uuid                        |           | not null |
+ filename        | character varying(500)      |           | not null |
+ mime_type       | character varying(100)      |           |          |
+ file_size       | integer                     |           |          |
+ extracted_text  | text                        |           | not null |
+ text_preview    | character varying(500)      |           |          |
+ text_stats      | jsonb                       |           |          |
+ ordine          | integer                     |           | not null | 0
+ created_at      | timestamp without time zone |           | not null | now()
+ updated_at      | timestamp without time zone |           | not null | now()
+Indexes:
+    "dosar_documents_pkey" PRIMARY KEY, btree (id)
+    "ix_dosardoc_dosar" btree (dosar_id)
+Foreign-key constraints:
+    "dosar_documents_dosar_id_fkey" FOREIGN KEY (dosar_id) REFERENCES dosare(id) ON DELETE CASCADE
 
 
 # \d alert_rules
@@ -566,3 +590,4 @@ Foreign-key constraints:
 | 2026-04-05 | `ALTER TABLE training_materials ADD COLUMN dosar_id UUID REFERENCES dosare(id) ON DELETE SET NULL;` | Utilizator | DA |
 | 2026-04-05 | `CREATE TABLE alert_rules (...)` + 2 indexuri (user_id, activ) — Sprint 4: Alerte Decizii (2.3) | Utilizator | DA |
 | 2026-04-05 | `CREATE TABLE document_comments (...)` + 3 indexuri (document_id, user_id, resolved) — Sprint 4: Comentarii Documente (3.3) | Utilizator | DA |
+| 2026-04-06 | `CREATE TABLE dosar_documents (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), dosar_id UUID NOT NULL REFERENCES dosare(id) ON DELETE CASCADE, filename VARCHAR(500) NOT NULL, mime_type VARCHAR(100), file_size INTEGER, extracted_text TEXT NOT NULL, text_preview VARCHAR(500), text_stats JSONB, ordine INTEGER NOT NULL DEFAULT 0, created_at TIMESTAMP NOT NULL DEFAULT now(), updated_at TIMESTAMP NOT NULL DEFAULT now()); CREATE INDEX ix_dosardoc_dosar ON dosar_documents(dosar_id);` — Documente atașate la dosare (text extras stocat în DB) | Utilizator | DA |
