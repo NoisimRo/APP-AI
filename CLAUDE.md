@@ -114,9 +114,49 @@ DATABASE_URL="postgresql+asyncpg://..." python scripts/generate_embeddings.py
 | `backend/app/api/v1/multi_document.py` | Multi-Document API endpoint (POST /analyze, 2-5 files) |
 | `backend/app/services/entity_extractor.py` | NER: extragere CPV, procedură, valoare din documente |
 | `backend/app/api/v1/analytics.py` | Analytics API (panel profiles, predictor, compare) |
-| `backend/app/api/v1/dosare.py` | Dosare Digitale CRUD API (case management) |
+| `backend/app/api/v1/dosare.py` | Dosare Digitale CRUD API (case management) + document upload/delete |
 | `backend/app/api/v1/alerts.py` | Alert Rules CRUD API (decision alerts) |
 | `backend/app/api/v1/comments.py` | Document Comments API (inline comments, resolve/unresolve) |
+| `backend/app/services/document_processor.py` | Text extraction from PDF/DOCX/TXT/MD files |
+
+## Lecții Învățate & Gotchas
+
+### Multi-Chunk RAG — Când și Cum
+
+Documentele juridice voluminoase (20+ pagini, 40+ argumente) necesită **embedding per chunk** (paragrafe de ~1500 chars), nu un singur embedding pe textul trunchiat. Regula:
+
+- **< 5000 chars** → single embedding (rapid, suficient)
+- **> 5000 chars** → `multi_chunk_search()` automat (split paragraf → embed per chunk → dedup → top K)
+
+Fără multi-chunk, un document de 50K chars era efectiv redus la primele 2-4K chars pentru căutare vectorială — argumentele de la paginile 5-20 erau complet ignorate.
+
+**Implementare:** `rag.py:multi_chunk_search()` — se apelează din: drafter.py, ragmemo.py, chat.py, compliance_checker.py, strategy_generator.py.
+
+### Gemini Context Truncation
+
+Gemini acceptă 1M tokens, dar fără truncation, prompturi de 500K+ chars cauzau timeout-uri (HTTP 504). Fix: `gemini.py:_build_prompt()` aplică **truncare proporțională** la 800K chars (~200K tokens), păstrând structura (fiecare document context primește aceeași proporție de tăiere).
+
+### Dosar Activ — Pattern Cross-Page
+
+Pattern: `activeDosarId` (localStorage) → `activeDosarDocs` (text extras) → banner colapsabil pe fiecare pagină → checkboxes selectare → populare state pagină.
+
+**Dosar documents stochează text extras (nu fișiere raw)** — zero infrastructură de storage. DocumentProcessor extrage text la upload, textul se stochează în `dosar_documents.extracted_text`.
+
+### Frontend Single-File Patterns
+
+- Panouri redimensionabile: CSS variable `leftPanelPct` + `panel-left`/`panel-right` classes + drag handle div
+- Toolbar fix: `flex flex-col` pe right panel → `shrink-0` toolbar + `flex-1 overflow-y-auto` content
+- Save-once: `savedX` state per pagină, reset la re-generare, `disabled={!result || savedX}`
+
+### Drafter — Tipuri Documente & Perspective
+
+Contestația e doar unul din 6 tipuri de documente. Fiecare tip are structură obligatorie diferită și fiecare perspectivă (contestator/AC/intervenient/CNSC) schimbă strategia argumentativă:
+- **Contestator**: atacă, găsește neconformități
+- **AC**: apără documentația, minimizează deficiențele
+- **Intervenient**: combate contestatorul, apără propria ofertă
+- **CNSC**: analizează neutru, decide motivat
+
+Câmpul `previous_document` e esențial pentru Concluzii Scrise și răspunsuri la PDV — documentul anterior definește cadrul procesual.
 
 ## Code Conventions
 
@@ -376,6 +416,57 @@ DATABASE_URL="..." python scripts/import_spete_anap.py --force                  
     - Comment stats endpoint per document
     - Backend ready for frontend integration in document viewer
 
+### Sprint 5 — Document Intelligence & Drafter Redesign (2026-04-07)
+
+11. **Multi-Chunk RAG** — acoperire completă a documentelor voluminoase
+    - `rag.py`: `multi_chunk_search()` — split document în chunks ~1500 chars, embedding per chunk, dedup, top K
+    - `rag.py`: `_build_context_from_chunks()` — convertor multi-chunk → format prepare_context
+    - Integrat în: Drafter, RAG Memo, Chat, Compliance, Strategy (prag: >5000 chars activează automat)
+    - Red Flags avea deja chunking propriu (10K + 1.5K overlap) — neschimbat
+    - Fix HTTP 504: timeout 300s pe ragmemo, truncare embedding query la 4K, context truncation Gemini 800K chars
+
+12. **Dosar Activ cu Documente Atașate** — flow cross-page
+    - `dosar_documents` table (text extras stocat, nu fișier raw) — reutilizează DocumentProcessor
+    - 5 endpoints CRUD: upload (POST), list (GET), texts (GET), delete, replace
+    - State global `activeDosarId` persistent în localStorage + auto-restore la refresh
+    - Banner colapsabil pe toate paginile de instrumente cu checkboxes per document
+    - Auto-link `dosar_id` la save pe toate endpoint-urile (conversations, documents, red_flags, training)
+    - Deletare dosar → CASCADE pe dosar_documents + clear active dosar
+
+13. **Drafter Redesign** — 6 tipuri documente × 4 perspective
+    - Tipuri: Contestație, Plângere, Concluzii Scrise, Punct de Vedere, Cerere Intervenție, Decizie CNSC
+    - Perspective: OE Contestator, OE Intervenient, Autoritate Contractantă, CNSC
+    - Documente din dosar activ ca context RAG (via multi_chunk_search)
+    - Câmp "Document anterior" pentru lanțul procesual (contestație → concluzii → PDV → concluzii la PDV)
+    - System prompts specializate per tip+perspectivă cu structuri obligatorii
+
+14. **UX Standardizare** — panouri redimensionabile + toolbars uniforme
+    - Panouri left/right draggable (20-50%, persistent localStorage) pe toate paginile split
+    - Toolbar fix top-right pe panoul drept (DOCX/PDF/MD + Salvează + Istoric) — mereu vizibil
+    - Prevenire duplicate la salvare (savedX state, "Salvat ✓", reset la re-generare)
+    - Butoane Istoric eliminate din header-ul stâng (redundante cu toolbar-ul)
+    - Export DOCX/PDF/MD adăugat pe Compliance, Clarificări, Strategy (erau lipsă)
+
+### Sprint 5 SQL Migration (executat în producție 2026-04-06)
+
+```sql
+-- dosar_documents (attached source documents with extracted text)
+CREATE TABLE dosar_documents (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  dosar_id UUID NOT NULL REFERENCES dosare(id) ON DELETE CASCADE,
+  filename VARCHAR(500) NOT NULL,
+  mime_type VARCHAR(100),
+  file_size INTEGER,
+  extracted_text TEXT NOT NULL,
+  text_preview VARCHAR(500),
+  text_stats JSONB,
+  ordine INTEGER NOT NULL DEFAULT 0,
+  created_at TIMESTAMP NOT NULL DEFAULT now(),
+  updated_at TIMESTAMP NOT NULL DEFAULT now()
+);
+CREATE INDEX ix_dosardoc_dosar ON dosar_documents(dosar_id);
+```
+
 ### Sprint 4 SQL Migration (trebuie executat în producție)
 
 ```sql
@@ -474,7 +565,14 @@ CREATE INDEX ix_dosardoc_dosar ON dosar_documents(dosar_id);
 
 ### What's been done (complete)
 - ✅ Sprint 4 SQL migration executed in production (2026-04-05): dosare, alert_rules, document_comments + dosar_id FK on 4 tables
-- ✅ dosar_documents table created in production (2026-04-06): source documents attached to dosare, with extracted text storage, active dosar system + banner on tool pages
+- ✅ Sprint 5: dosar_documents table (2026-04-06): source documents attached to dosare
+- ✅ Sprint 5: Active dosar system with collapsible banner on all tool pages (2026-04-07)
+- ✅ Sprint 5: Multi-chunk RAG integrated across all endpoints (2026-04-07)
+- ✅ Sprint 5: Drafter redesigned — 6 doc types × 4 perspectives (2026-04-07)
+- ✅ Sprint 5: Resizable panels + standardized toolbars on all split-panel pages (2026-04-07)
+- ✅ Sprint 5: Save/export (DOCX/PDF/MD) added to Compliance, Clarificări, Strategy (2026-04-07)
+- ✅ Sprint 5: Save-once tracking prevents duplicate saves across all pages (2026-04-07)
+- ✅ Sprint 5: HTTP 504 fix — timeout + Gemini context truncation + embedding query truncation (2026-04-07)
 
 ### Future: Daily Automation (Cloud Run Job + Cloud Scheduler)
 
@@ -586,8 +684,9 @@ Toate deciziile CNSC au datele părților anonimizate (`autoritate_contractanta`
 | **2 — Intelligence** | Profil Complet CNSC (1.2), Predictor Rezultat (1.1), Analiză Comparativă (1.4) | Analytics | ✅ DONE |
 | **3 — AI** | Strategie Contestare (4.2), Verificator Conformitate (4.5), Multi-Document (4.1), NER Entități (4.3), Memorie Persistentă (4.4) | AI Avansat | ✅ DONE |
 | **4 — Workflow** | Dosar Digital (2.2), Alerte Decizii (2.3), Comentarii Documente (3.3) | Flux de lucru | ✅ DONE |
-| **5 — Data Moat** | Import Curtea de Apel (5.1), Hartă Jurisprudențială (1.5) | Date | |
-| **6 — UX** | Frontend Modular (8.1), Dark Mode (8.4) | Experiență | |
+| **5 — Doc Intelligence** | Multi-Chunk RAG, Dosar Activ + Documente, Drafter Redesign (6 tipuri × 4 perspective), UX Standardizare | AI + UX | ✅ DONE |
+| **6 — Data Moat** | Import Curtea de Apel (5.1), Hartă Jurisprudențială (1.5) | Date | |
+| **7 — UX** | Frontend Modular (8.1), Dark Mode (8.4) | Experiență | |
 
 ### Funcționalități Amânate (15)
 
