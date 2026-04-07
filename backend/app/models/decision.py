@@ -1198,6 +1198,102 @@ class DocumentComment(Base):
 
 
 # =============================================================================
+# HOTĂRÂRI JUDECĂTOREȘTI (CURȚI DE APEL + TRIBUNALE)
+# =============================================================================
+
+class HotarareJudecatoreasca(Base):
+    """Hotărâre judecătorească din portalul ReJust (rejust.ro).
+
+    Hotărârile instanțelor (Curți de Apel, Tribunale) care revizuiesc
+    deciziile CNSC — completează ciclul de litigiu achiziții publice.
+
+    Sursa: rejust.ro, scraper Playwright cu filtre pe achiziții publice.
+    Embedding direct pe tabelul principal (nu per-criticism ca CNSC) —
+    hotărârile instanțelor sunt un singur narativ continuu.
+    """
+
+    __tablename__ = "hotarari_judecatoresti"
+
+    id: Mapped[str] = mapped_column(
+        UUID(as_uuid=False), primary_key=True, default=lambda: str(uuid4())
+    )
+
+    # Identificatori rejust
+    cod_rj: Mapped[str] = mapped_column(String(20), nullable=False, unique=True)
+    url: Mapped[str] = mapped_column(String(255), nullable=False)
+    referinta_citare: Mapped[str] = mapped_column(Text, nullable=False)
+
+    # Metadate document
+    numar_document: Mapped[Optional[str]] = mapped_column(String(50))
+    data_document: Mapped[Optional[datetime]] = mapped_column(DateTime)
+    cod_ecli: Mapped[Optional[str]] = mapped_column(String(50))
+    dosar_nr: Mapped[Optional[str]] = mapped_column(String(50))
+
+    # Clasificare instanță
+    denumire_instanta: Mapped[str] = mapped_column(String(200), nullable=False)
+    denumire_materie: Mapped[Optional[str]] = mapped_column(String(200))
+    denumire_obiect: Mapped[Optional[str]] = mapped_column(String(500))
+    denumire_categorie: Mapped[Optional[str]] = mapped_column(String(100))
+    stadiu_procesual: Mapped[Optional[str]] = mapped_column(String(100))
+    solutie: Mapped[Optional[str]] = mapped_column(String(200))
+
+    # Soluție parsată (la import, nu la scrape)
+    solutie_tip: Mapped[Optional[str]] = mapped_column(String(50))
+    solutie_detalii: Mapped[Optional[str]] = mapped_column(String(200))
+
+    # Text complet
+    text_hotarare: Mapped[str] = mapped_column(Text, nullable=False)
+
+    # Documente conexe din dosar (JSONB, read-only metadata)
+    documente_dosar: Mapped[Optional[dict]] = mapped_column(JSONB, default=list)
+
+    # FK opțional la decizia CNSC (populat prin dosar_nr matching)
+    decizie_cnsc_id: Mapped[Optional[str]] = mapped_column(
+        UUID(as_uuid=False),
+        ForeignKey("decizii_cnsc.id", ondelete="SET NULL"),
+    )
+
+    # Embedding RAG
+    embedding: Mapped[Optional[list]] = mapped_column(Vector(2000))
+
+    # Metadate import
+    batch_file: Mapped[Optional[str]] = mapped_column(String(255))
+
+    # Timestamps
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(), nullable=False
+    )
+
+    # Relationships
+    decizie_cnsc: Mapped[Optional["DecizieCNSC"]] = relationship(
+        "DecizieCNSC", foreign_keys=[decizie_cnsc_id]
+    )
+
+    __table_args__ = (
+        Index("ix_hj_cod_rj", cod_rj, unique=True),
+        Index("ix_hj_instanta", denumire_instanta),
+        Index("ix_hj_stadiu", stadiu_procesual),
+        Index("ix_hj_solutie_tip", solutie_tip),
+        Index("ix_hj_data", data_document),
+        Index("ix_hj_dosar_nr", dosar_nr),
+        Index("ix_hj_cnsc_fk", decizie_cnsc_id),
+        Index(
+            "ix_hj_embedding_hnsw",
+            embedding,
+            postgresql_using="hnsw",
+            postgresql_ops={"embedding": "vector_cosine_ops"},
+            postgresql_with={"m": 16, "ef_construction": 64},
+        ),
+    )
+
+    def __repr__(self) -> str:
+        return f"<HotarareJudecatoreasca {self.cod_rj}: {self.denumire_instanta}>"
+
+
+# =============================================================================
 # LEGACY COMPATIBILITY (if needed)
 # =============================================================================
 
