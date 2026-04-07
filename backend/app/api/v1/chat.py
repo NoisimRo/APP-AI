@@ -259,12 +259,31 @@ async def chat_stream(
         t_start = time.monotonic()
 
         query = request.message
-        contexts, system_prompt, citations, confidence, suggested = await rag.prepare_context(
-            query=query, session=session, conversation_history=history, max_decisions=5,
-            scope_decision_ids=scope_ids,
-            enable_rerank=request.rerank,
-            enable_expansion=request.expansion,
-        )
+        MULTI_CHUNK_THRESHOLD = 5000
+        if len(query) > MULTI_CHUNK_THRESHOLD:
+            # Large message (user pasted documents) — use multi-chunk for better coverage
+            logger.info("chat_using_multi_chunk", message_len=len(query))
+            relevant_chunks, leg_fragments = await rag.multi_chunk_search(
+                documents=[query],
+                session=session,
+                max_decisions=5,
+                max_legislation=5,
+                scope_decision_ids=scope_ids,
+            )
+            contexts, system_prompt, citations, confidence = await rag._build_context_from_chunks(
+                query=query,
+                relevant_chunks=relevant_chunks,
+                legislation_fragments=leg_fragments,
+                session=session,
+            )
+            suggested = []
+        else:
+            contexts, system_prompt, citations, confidence, suggested = await rag.prepare_context(
+                query=query, session=session, conversation_history=history, max_decisions=5,
+                scope_decision_ids=scope_ids,
+                enable_rerank=request.rerank,
+                enable_expansion=request.expansion,
+            )
 
         # Inject user context into system prompt
         if user_context and system_prompt:
