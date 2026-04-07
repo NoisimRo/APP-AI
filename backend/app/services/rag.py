@@ -1646,6 +1646,163 @@ class RAGService:
 
         return suggestions[:4]
 
+    async def multi_chunk_search(
+        self,
+        documents: list[str],
+        session: AsyncSession,
+        max_decisions: int = 15,
+        max_legislation: int = 8,
+        scope_decision_ids: list[str] | None = None,
+    ) -> tuple[list[tuple], list]:
+        """Search for jurisprudence and legislation using multi-chunk strategy.
+
+        Instead of embedding a single query, this splits documents into chunks
+        and runs a separate vector search per chunk, then deduplicates results.
+
+        Args:
+            documents: List of document texts to search with.
+            session: Database session.
+            max_decisions: Maximum ArgumentareCritica results to return.
+            max_legislation: Maximum legislation fragments to return.
+            scope_decision_ids: If provided, restrict search to these decision IDs.
+
+        Returns:
+            Tuple of (relevant_chunks: list[(ArgumentareCritica, distance)],
+                       legislation_fragments: list[(LegislatieFragment, act_name)])
+        """
+        import time
+        t0 = time.monotonic()
+
+        # 1. Concatenate all documents into one text
+        full_text = "\n\n".join(documents)
+
+        # 2. Split on paragraph boundaries
+        paragraphs = full_text.split("\n\n")
+
+        # 3. Filter: keep paragraphs > 100 chars
+        paragraphs = [p.strip() for p in paragraphs if len(p.strip()) > 100]
+
+        if not paragraphs:
+            logger.info("multi_chunk_search_no_paragraphs", doc_count=len(documents))
+            return [], []
+
+        # 4. Group consecutive paragraphs into chunks of ~1500 chars max
+        chunks: list[str] = []
+        current_chunk: list[str] = []
+        current_len = 0
+
+        for para in paragraphs:
+            if current_len + len(para) > 1500 and current_chunk:
+                chunks.append("\n\n".join(current_chunk))
+                current_chunk = [para]
+                current_len = len(para)
+            else:
+                current_chunk.append(para)
+                current_len += len(para)
+
+        if current_chunk:
+            chunks.append("\n\n".join(current_chunk))
+
+        logger.info(
+            "multi_chunk_search_splitting",
+            doc_count=len(documents),
+            paragraphs=len(paragraphs),
+            chunks=len(chunks),
+        )
+
+        # 5-7. For each chunk, embed and search sequentially (asyncpg limitation)
+        # Deduplicate by argumentare_critica.id, keeping best distance
+        best_results: dict[str, tuple[ArgumentareCritica, float]] = {}
+
+        t_search_start = time.monotonic()
+        for i, chunk in enumerate(chunks):
+            try:
+                # 5. Embed the chunk
+                chunk_vector = await self.embedding_service.embed_query(chunk)
+
+                # 6. Vector search on ArgumentareCritica (top 3 per chunk, distance < 0.5)
+                stmt = (
+                    select(
+                        ArgumentareCritica,
+                        ArgumentareCritica.embedding.cosine_distance(chunk_vector).label("distance"),
+                    )
+                    .where(ArgumentareCritica.embedding.isnot(None))
+                    .order_by("distance")
+                    .limit(3)
+                )
+
+                # Scope pre-filter
+                if scope_decision_ids is not None:
+                    stmt = stmt.where(
+                        ArgumentareCritica.decizie_id.in_(scope_decision_ids)
+                    )
+
+                result = await session.execute(stmt)
+                rows = result.all()
+
+                # 7. Deduplicate: keep best (lowest) distance per id
+                for row in rows:
+                    if row.distance >= 0.5:
+                        continue
+                    arg = row.ArgumentareCritica
+                    arg_id = str(arg.id)
+                    if arg_id not in best_results or row.distance < best_results[arg_id][1]:
+                        best_results[arg_id] = (arg, row.distance)
+
+                logger.debug(
+                    "multi_chunk_search_chunk",
+                    chunk_idx=i,
+                    chunk_len=len(chunk),
+                    matches=len([r for r in rows if r.distance < 0.5]),
+                )
+            except Exception as e:
+                logger.warning(
+                    "multi_chunk_search_chunk_failed",
+                    chunk_idx=i,
+                    error=str(e),
+                )
+                continue
+
+        t_search = time.monotonic()
+        logger.info(
+            "timing_multi_chunk_vector_search",
+            duration_s=round(t_search - t_search_start, 2),
+            chunks_searched=len(chunks),
+            unique_results=len(best_results),
+        )
+
+        # 8. Sort by distance, take top max_decisions
+        sorted_results = sorted(best_results.values(), key=lambda x: x[1])
+        relevant_chunks = sorted_results[:max_decisions]
+
+        # 9. Find legislation fragments for the top chunks
+        legislation_fragments: list[tuple[LegislatieFragment, str]] = []
+        if relevant_chunks:
+            try:
+                legislation_fragments = await self._find_legislation_for_chunks(
+                    matched_chunks=relevant_chunks,
+                    session=session,
+                    limit=max_legislation,
+                )
+            except Exception as e:
+                logger.warning(
+                    "multi_chunk_legislation_search_failed",
+                    error=str(e),
+                )
+
+        t_total = time.monotonic()
+        logger.info(
+            "timing_multi_chunk_search_total",
+            duration_s=round(t_total - t0, 2),
+            chunks=len(chunks),
+            results=len(relevant_chunks),
+            legislation=len(legislation_fragments),
+            scoped=scope_decision_ids is not None,
+        )
+
+        # 10. Return results
+        return relevant_chunks, legislation_fragments
+
     async def prepare_context(
         self,
         query: str,
@@ -1671,8 +1828,20 @@ class RAGService:
         import time
         t0 = time.monotonic()
 
+        # Truncate query for embedding: embedding models have token limits and
+        # very long inputs (e.g., 100K-char memo topics) produce poor vectors.
+        # Keep first ~4000 chars (~1000 tokens) which captures the semantic intent.
+        MAX_EMBED_QUERY_CHARS = 4000
+        embed_query = query[:MAX_EMBED_QUERY_CHARS] if len(query) > MAX_EMBED_QUERY_CHARS else query
+        if len(query) > MAX_EMBED_QUERY_CHARS:
+            logger.info(
+                "query_truncated_for_embedding",
+                original_len=len(query),
+                truncated_len=len(embed_query),
+            )
+
         # EMBED QUERY ONCE — reuse the vector in all sub-functions
-        query_vector = await self.embedding_service.embed_query(query)
+        query_vector = await self.embedding_service.embed_query(embed_query)
         t_embed = time.monotonic()
         logger.info("timing_embed_query", duration_s=round(t_embed - t0, 2))
 

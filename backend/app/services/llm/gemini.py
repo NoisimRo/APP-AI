@@ -198,23 +198,52 @@ class GeminiProvider(LLMProvider):
         ]):
             raise ResourceExhaustedError("gemini", str(error)) from error
 
+    # Gemini context window limits (chars, ~4 chars/token)
+    # gemini-2.5-pro: 1M tokens, gemini-3.1-pro: 1M tokens
+    # Reserve 20% for output + system prompt overhead
+    MAX_CONTEXT_CHARS = 800_000  # ~200K tokens — safe for 1M token models
+
     def _build_prompt(
         self,
         prompt: str,
         context: list[str] | None,
         system_prompt: str | None,
     ) -> str:
-        """Build the full prompt with context and system instructions."""
+        """Build the full prompt with context and system instructions.
+
+        Applies proportional truncation if total context exceeds budget.
+        """
         parts = []
 
         if system_prompt:
             parts.append(f"<system>\n{system_prompt}\n</system>\n")
 
-        if context:
+        # Calculate budget for context (total budget minus system prompt and query)
+        overhead = len(system_prompt or "") + len(prompt) + 200  # tags etc.
+        context_budget = self.MAX_CONTEXT_CHARS - overhead
+
+        if context and context_budget > 0:
+            total_ctx_chars = sum(len(c) for c in context)
+            if total_ctx_chars > context_budget:
+                # Proportional truncation: each context doc gets its fair share
+                ratio = context_budget / total_ctx_chars
+                logger.info(
+                    "gemini_context_truncated",
+                    original_chars=total_ctx_chars,
+                    budget_chars=context_budget,
+                    ratio=round(ratio, 2),
+                    num_contexts=len(context),
+                )
+                truncated = [c[:int(len(c) * ratio)] for c in context]
+                context = truncated
+
             parts.append("<context>")
             for i, ctx in enumerate(context, 1):
                 parts.append(f"\n[Document {i}]\n{ctx}\n")
             parts.append("</context>\n")
+        elif context:
+            # Budget exhausted by system prompt + query, skip context
+            logger.warning("gemini_context_skipped_budget_exhausted")
 
         parts.append(f"<query>\n{prompt}\n</query>")
 
