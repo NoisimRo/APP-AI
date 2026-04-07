@@ -615,8 +615,9 @@ const App = () => {
   const [generatedDecisionRefs, setGeneratedDecisionRefs] = useState<string[]>([]);
 
   // Specialized Input States
-  const [drafterContext, setDrafterContext] = useState({ facts: "", authorityArgs: "", legalGrounds: "", remediiSolicitate: "", detaliiProcedura: "", numarDecizieCnsc: "" });
-  const [drafterDocType, setDrafterDocType] = useState<'contestatie' | 'plangere'>('contestatie');
+  const [drafterContext, setDrafterContext] = useState({ facts: "", authorityArgs: "", legalGrounds: "", remediiSolicitate: "", detaliiProcedura: "", numarDecizieCnsc: "", previousDocument: "" });
+  const [drafterDocType, setDrafterDocType] = useState('contestatie');
+  const [drafterPerspective, setDrafterPerspective] = useState('contestator');
 
   // Analytics States
   const [analyticsTab, setAnalyticsTab] = useState<'panels' | 'predictor' | 'compare'>('panels');
@@ -1782,6 +1783,9 @@ const App = () => {
           legal_grounds: drafterContext.legalGrounds,
           scope_id: activeScopeId || undefined,
           doc_type: drafterDocType,
+          perspective: drafterPerspective,
+          documents: uploadedDocsDrafter.map(d => ({ filename: d.name, text: d.text })),
+          previous_document: drafterContext.previousDocument || undefined,
           remedii_solicitate: drafterContext.remediiSolicitate || undefined,
           detalii_procedura: drafterContext.detaliiProcedura || undefined,
           numar_decizie_cnsc: drafterContext.numarDecizieCnsc || undefined,
@@ -3729,37 +3733,39 @@ const App = () => {
   const renderDrafter = () => (
     <div className="h-full flex flex-col md:flex-row bg-white panel-resize-container">
       <div className="w-full md:border-r border-slate-200 p-6 overflow-y-auto bg-slate-50/50 shrink-0 panel-left">
-        <div className="mb-4">
-          <h2 className="text-lg font-bold text-slate-800 flex gap-2 items-center">
-            <Scale className="text-blue-600" size={20}/>
-            {drafterDocType === 'contestatie' ? 'Configurare Contestație' : 'Configurare Plângere'}
-          </h2>
-        </div>
+        <h2 className="text-lg font-bold text-slate-800 mb-3 flex gap-2 items-center">
+          <Scale className="text-blue-600" size={20}/> Redactare Document Juridic
+        </h2>
 
         {renderActiveDosarBanner((docs) => {
           setUploadedDocsDrafter(prev => [...prev, ...docs]);
         })}
 
-        {/* Document Type Selector */}
-        <div className="flex gap-2 mb-4 mt-2">
-          <button
-            onClick={() => setDrafterDocType('contestatie')}
-            className={`flex-1 text-xs font-semibold py-2.5 rounded-lg border transition ${drafterDocType === 'contestatie' ? 'bg-blue-600 text-white border-blue-600 shadow-sm' : 'bg-white text-slate-600 border-slate-300 hover:bg-slate-50'}`}
-          >
-            Contestație CNSC
-          </button>
-          <button
-            onClick={() => setDrafterDocType('plangere')}
-            className={`flex-1 text-xs font-semibold py-2.5 rounded-lg border transition ${drafterDocType === 'plangere' ? 'bg-purple-600 text-white border-purple-600 shadow-sm' : 'bg-white text-slate-600 border-slate-300 hover:bg-slate-50'}`}
-          >
-            Plângere instanță
-          </button>
+        {/* Type + Perspective Selectors */}
+        <div className="grid grid-cols-2 gap-2 mb-3 mt-2">
+          <div>
+            <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Tip Document</label>
+            <select value={drafterDocType} onChange={e => { setDrafterDocType(e.target.value); const defaults: Record<string,string> = { contestatie: 'contestator', plangere: 'contestator', concluzii_scrise: 'contestator', punct_de_vedere: 'autoritate_contractanta', cerere_interventie: 'intervenient', decizie_cnsc: 'cnsc' }; setDrafterPerspective(defaults[e.target.value] || 'contestator'); }}
+              className="w-full border border-slate-300 rounded-lg px-2.5 py-2 text-xs bg-white focus:ring-2 focus:ring-blue-500/40 outline-none">
+              <option value="contestatie">Contestație CNSC</option>
+              <option value="plangere">Plângere instanță</option>
+              <option value="concluzii_scrise">Concluzii Scrise</option>
+              <option value="punct_de_vedere">Punct de Vedere AC</option>
+              <option value="cerere_interventie">Cerere Intervenție</option>
+              <option value="decizie_cnsc">Decizie CNSC (dispozitiv)</option>
+            </select>
+          </div>
+          <div>
+            <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Perspectivă</label>
+            <select value={drafterPerspective} onChange={e => setDrafterPerspective(e.target.value)}
+              className="w-full border border-slate-300 rounded-lg px-2.5 py-2 text-xs bg-white focus:ring-2 focus:ring-blue-500/40 outline-none">
+              <option value="contestator">OE Contestator</option>
+              <option value="intervenient">OE Intervenient</option>
+              <option value="autoritate_contractanta">Autoritate Contractantă</option>
+              <option value="cnsc">CNSC</option>
+            </select>
+          </div>
         </div>
-        <p className="text-[10px] text-slate-400 mb-4">
-          {drafterDocType === 'contestatie'
-            ? 'Generează o contestație către CNSC împotriva actelor autorității contractante.'
-            : 'Generează o plângere la Curtea de Apel împotriva unei decizii CNSC.'}
-        </p>
 
         <ScopeSelector compact />
         <ActiveScopeIndicator />
@@ -3809,9 +3815,32 @@ const App = () => {
             </div>
           )}
 
+          {/* Previous Document — for types that respond to another document */}
+          {['concluzii_scrise', 'punct_de_vedere', 'cerere_interventie', 'decizie_cnsc'].includes(drafterDocType) && (
+            <div>
+              <label className="block text-xs font-bold text-slate-700 uppercase mb-2">
+                {drafterDocType === 'punct_de_vedere' ? 'Contestația la care se răspunde' :
+                 drafterDocType === 'cerere_interventie' ? 'Contestația la care se intervine' :
+                 drafterDocType === 'decizie_cnsc' ? 'Contestația + PDV analizate' :
+                 'Documentul anterior (contestație / PDV AC)'}
+              </label>
+              <textarea
+                className={`w-full p-3 border rounded-lg text-sm h-24 focus:ring-2 focus:ring-blue-500 outline-none transition shadow-sm ${drafterContext.previousDocument.length > 200000 ? 'border-red-400 bg-red-50' : 'border-slate-300'}`}
+                placeholder="Lipește textul documentului anterior sau încarcă-l din zona de documente de mai sus..."
+                value={drafterContext.previousDocument}
+                onChange={(e) => setDrafterContext({...drafterContext, previousDocument: e.target.value})}
+              />
+              <CharCounter value={drafterContext.previousDocument} maxLength={200000} />
+            </div>
+          )}
+
           <div>
             <label className="block text-xs font-bold text-slate-700 uppercase mb-2">
-              {drafterDocType === 'contestatie' ? 'Situația de Fapt' : 'Motivele Plângerii'}
+              {drafterDocType === 'contestatie' ? 'Situația de Fapt' :
+               drafterDocType === 'plangere' ? 'Motivele Plângerii' :
+               drafterDocType === 'punct_de_vedere' ? 'Descrierea procedurii și deciziilor' :
+               drafterDocType === 'decizie_cnsc' ? 'Contextul cauzei' :
+               'Situația de fapt / Contextul'}
             </label>
             <textarea
               className={`w-full p-3 border rounded-lg text-sm h-32 focus:ring-2 focus:ring-blue-500 outline-none transition shadow-sm ${drafterContext.facts.length > 200000 ? 'border-red-400 bg-red-50' : 'border-slate-300'}`}
@@ -3822,7 +3851,12 @@ const App = () => {
             <CharCounter value={drafterContext.facts} maxLength={200000} />
           </div>
           <div>
-            <label className="block text-xs font-bold text-slate-700 uppercase mb-2">Argumentele Autorității / CNSC</label>
+            <label className="block text-xs font-bold text-slate-700 uppercase mb-2">
+              {drafterPerspective === 'contestator' ? 'Argumentele Autorității Contractante' :
+               drafterPerspective === 'autoritate_contractanta' ? 'Argumentele Contestatorului' :
+               drafterPerspective === 'intervenient' ? 'Argumentele Contestatorului' :
+               'Argumentele Părților'}
+            </label>
             <textarea
               className={`w-full p-3 border rounded-lg text-sm h-24 focus:ring-2 focus:ring-blue-500 outline-none transition shadow-sm ${drafterContext.authorityArgs.length > 200000 ? 'border-red-400 bg-red-50' : 'border-slate-300'}`}
               placeholder={drafterDocType === 'contestatie' ? 'Ce motive a invocat autoritatea pentru respingere?' : 'Ce a reținut CNSC în decizia atacată?'}
@@ -3878,7 +3912,7 @@ const App = () => {
               drafterDocType === 'plangere' ? 'bg-purple-700 hover:bg-purple-600' : 'bg-slate-900 hover:bg-slate-800'
             }`}
           >
-            {isLoading ? <><Loader2 className="animate-spin" size={18} /> <span className="text-sm">{streamStatus || "Se procesează..."}</span></> : drafterDocType === 'contestatie' ? 'Generează Contestație' : 'Generează Plângere'}
+            {isLoading ? <><Loader2 className="animate-spin" size={18} /> <span className="text-sm">{streamStatus || "Se procesează..."}</span></> : `Generează ${({contestatie:'Contestație',plangere:'Plângere',concluzii_scrise:'Concluzii',punct_de_vedere:'Punct de Vedere',cerere_interventie:'Cerere Intervenție',decizie_cnsc:'Decizie CNSC'} as Record<string,string>)[drafterDocType] || 'Document'}`}
           </button>
         </div>
       </div>
