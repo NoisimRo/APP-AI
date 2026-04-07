@@ -170,40 +170,89 @@ class ComplianceChecker:
         tip_procedura: Optional[str],
         tip_document: Optional[str],
     ) -> list[dict]:
-        """Identify which legal requirements apply to this document."""
-        # Search legislation by document content embedding
-        doc_summary = document_text  # Full text for requirements identification
-        query = f"cerințe legale obligatorii {tip_document or 'documentație achiziții publice'}"
+        """Identify which legal requirements apply to this document.
+
+        Uses multi-chunk embedding for large documents (>5K chars) to ensure
+        requirements from all parts of the document are discovered.
+        """
+        doc_summary = document_text
+        base_query = f"cerințe legale obligatorii {tip_document or 'documentație achiziții publice'}"
         if tip_procedura:
-            query += f" {tip_procedura}"
-        query += f" {document_text[:2000]}"  # Embedding query — keep reasonable for vector search
+            base_query += f" {tip_procedura}"
 
-        query_vector = await self.embedding_service.embed_query(query)
+        # Multi-chunk strategy for large documents
+        MULTI_CHUNK_THRESHOLD = 5000
+        if len(document_text) > MULTI_CHUNK_THRESHOLD:
+            # Split document into chunks and search with each
+            paragraphs = [p.strip() for p in document_text.split("\n\n") if len(p.strip()) > 100]
+            chunks = []
+            current_chunk = ""
+            for para in paragraphs:
+                if len(current_chunk) + len(para) > 1500 and current_chunk:
+                    chunks.append(current_chunk)
+                    current_chunk = para
+                else:
+                    current_chunk = (current_chunk + "\n\n" + para).strip() if current_chunk else para
+            if current_chunk:
+                chunks.append(current_chunk)
 
-        # Get relevant legislation fragments
-        stmt = (
-            select(
-                LegislatieFragment,
-                ActNormativ,
-                LegislatieFragment.embedding.cosine_distance(query_vector).label("distance"),
+            # Search with each chunk, deduplicate results
+            best_fragments: dict[str, tuple] = {}  # fragment_id → (LegislatieFragment, ActNormativ, distance)
+            for chunk in chunks[:20]:  # Cap at 20 chunks
+                chunk_query = base_query + f" {chunk[:1500]}"
+                try:
+                    chunk_vector = await self.embedding_service.embed_query(chunk_query)
+                    stmt = (
+                        select(
+                            LegislatieFragment,
+                            ActNormativ,
+                            LegislatieFragment.embedding.cosine_distance(chunk_vector).label("distance"),
+                        )
+                        .join(ActNormativ, LegislatieFragment.act_id == ActNormativ.id)
+                        .where(LegislatieFragment.embedding.isnot(None))
+                        .order_by("distance")
+                        .limit(10)
+                    )
+                    result = await session.execute(stmt)
+                    for row in result.all():
+                        fid = str(row.LegislatieFragment.id)
+                        if fid not in best_fragments or row.distance < best_fragments[fid][2]:
+                            best_fragments[fid] = (row.LegislatieFragment, row.ActNormativ, row.distance)
+                except Exception as e:
+                    logger.warning("compliance_chunk_search_failed", error=str(e))
+                    continue
+
+            # Sort by distance, take top 30
+            sorted_results = sorted(best_fragments.values(), key=lambda x: x[2])[:30]
+            rows_for_processing = sorted_results
+            logger.info("compliance_multi_chunk_legislation", chunks=len(chunks), unique_fragments=len(best_fragments), top_results=len(sorted_results))
+        else:
+            # Single embedding for small documents
+            query = base_query + f" {document_text[:2000]}"
+            query_vector = await self.embedding_service.embed_query(query)
+            stmt = (
+                select(
+                    LegislatieFragment,
+                    ActNormativ,
+                    LegislatieFragment.embedding.cosine_distance(query_vector).label("distance"),
+                )
+                .join(ActNormativ, LegislatieFragment.act_id == ActNormativ.id)
+                .where(LegislatieFragment.embedding.isnot(None))
+                .order_by("distance")
+                .limit(30)
             )
-            .join(ActNormativ, LegislatieFragment.act_id == ActNormativ.id)
-            .where(LegislatieFragment.embedding.isnot(None))
-            .order_by("distance")
-            .limit(30)
-        )
-        result = await session.execute(stmt)
-        rows = result.all()
+            result = await session.execute(stmt)
+            rows_for_processing = [(row.LegislatieFragment, row.ActNormativ, row.distance) for row in result.all()]
 
         candidates = [
             {
-                "citare": row.LegislatieFragment.citare,
-                "text": row.LegislatieFragment.text_fragment[:600],
-                "articol_complet": (row.LegislatieFragment.articol_complet or "")[:800],
-                "act": row.ActNormativ.denumire,
-                "distance": round(row.distance, 3),
+                "citare": frag.citare,
+                "text": frag.text_fragment[:600],
+                "articol_complet": (frag.articol_complet or "")[:800],
+                "act": act.denumire,
+                "distance": round(dist, 3),
             }
-            for row in rows if row.distance < 0.7
+            for frag, act, dist in rows_for_processing if dist < 0.7
         ]
 
         if not candidates:

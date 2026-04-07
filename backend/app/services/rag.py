@@ -1803,6 +1803,58 @@ class RAGService:
         # 10. Return results
         return relevant_chunks, legislation_fragments
 
+    async def _build_context_from_chunks(
+        self,
+        query: str,
+        relevant_chunks: list[tuple],
+        legislation_fragments: list,
+        session: AsyncSession,
+    ) -> tuple[list[str], str, list, float]:
+        """Build RAG context from multi_chunk_search results.
+
+        Converts multi_chunk_search output into the same format as prepare_context:
+        (contexts, system_prompt, citations, confidence).
+        """
+        from sqlalchemy.orm import defer
+
+        if not relevant_chunks and not legislation_fragments:
+            return None, None, [], 0.0
+
+        # Load decision metadata for matched chunks
+        dec_ids = list({arg.decizie_id for arg, _ in relevant_chunks})
+        decisions_map = {}
+        if dec_ids:
+            dec_result = await session.execute(
+                select(DecizieCNSC).options(defer(DecizieCNSC.text_integral)).where(
+                    DecizieCNSC.id.in_(dec_ids)
+                )
+            )
+            decisions_map = {d.id: d for d in dec_result.scalars().all()}
+
+        # Build decisions list + matched_chunks in the format _build_context expects
+        decisions = list(decisions_map.values())
+        matched_chunks_for_context = [
+            (arg, 1.0 - dist) for arg, dist in relevant_chunks
+        ]
+
+        contexts = []
+        if legislation_fragments:
+            contexts.extend(self._build_legislation_context(legislation_fragments))
+        if decisions:
+            contexts.extend(self._build_context(decisions, matched_chunks_for_context))
+
+        has_legislation = bool(legislation_fragments)
+        has_decisions = bool(decisions)
+        system_prompt = self._build_system_prompt(has_legislation, has_decisions)
+        citations = self._build_citations(decisions, matched_chunks_for_context)
+        confidence = self._calculate_confidence(decisions, matched_chunks_for_context, len(relevant_chunks))
+        if has_legislation and not has_decisions:
+            confidence = max(confidence, 0.9)
+        elif has_legislation:
+            confidence = min(1.0, confidence + 0.1)
+
+        return contexts, system_prompt, citations, confidence
+
     async def prepare_context(
         self,
         query: str,

@@ -6,18 +6,22 @@ from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Depends, Request
 from pydantic import BaseModel, Field
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import defer
 
 from app.core.logging import get_logger
 from app.core.rate_limiter import require_rate_limit, increment_usage
 from app.db.session import get_session
-from app.models.decision import User
+from app.models.decision import User, DecizieCNSC
 from app.services.rag import RAGService
 from app.services.llm.streaming import create_sse_response
 from app.api.v1.scopes import get_scope_decision_ids
 
 # Overall endpoint timeout (seconds) — generous for large topics + RAG search
 ENDPOINT_TIMEOUT = 300
+# Threshold above which we use multi-chunk RAG instead of single embedding
+MULTI_CHUNK_THRESHOLD = 5000
 
 router = APIRouter()
 logger = get_logger(__name__)
@@ -153,19 +157,43 @@ async def generate_rag_memo_stream(
     query = f"Generează un memo juridic despre: {request.topic}. Include jurisprudență CNSC relevantă, argumente cheie și recomandări."
 
     t0 = time.monotonic()
+    use_multi_chunk = len(request.topic) > MULTI_CHUNK_THRESHOLD
+
     try:
-        contexts, system_prompt, citations, confidence, _ = await asyncio.wait_for(
-            rag.prepare_context(
-                query=query, session=session, conversation_history=None, max_decisions=request.max_decisions,
-                scope_decision_ids=scope_ids,
-            ),
-            timeout=ENDPOINT_TIMEOUT,
-        )
+        if use_multi_chunk:
+            # Multi-chunk RAG: split large topic into chunks for better coverage
+            logger.info("ragmemo_using_multi_chunk", topic_len=len(request.topic))
+            relevant_chunks, leg_fragments = await asyncio.wait_for(
+                rag.multi_chunk_search(
+                    documents=[request.topic],
+                    session=session,
+                    max_decisions=request.max_decisions,
+                    max_legislation=8,
+                    scope_decision_ids=scope_ids,
+                ),
+                timeout=ENDPOINT_TIMEOUT,
+            )
+            # Build context from multi-chunk results
+            contexts, system_prompt, citations, confidence = await rag._build_context_from_chunks(
+                query=query,
+                relevant_chunks=relevant_chunks,
+                legislation_fragments=leg_fragments,
+                session=session,
+            )
+        else:
+            contexts, system_prompt, citations, confidence, _ = await asyncio.wait_for(
+                rag.prepare_context(
+                    query=query, session=session, conversation_history=None, max_decisions=request.max_decisions,
+                    scope_decision_ids=scope_ids,
+                ),
+                timeout=ENDPOINT_TIMEOUT,
+            )
     except asyncio.TimeoutError:
         logger.error(
             "rag_memo_stream_timeout",
             topic_length=len(request.topic),
             timeout=ENDPOINT_TIMEOUT,
+            multi_chunk=use_multi_chunk,
         )
         raise HTTPException(
             status_code=504,
@@ -175,7 +203,7 @@ async def generate_rag_memo_stream(
             ),
         )
     search_duration_s = round(time.monotonic() - t0, 2)
-    logger.info("timing_ragmemo_stream_search", duration_s=search_duration_s)
+    logger.info("timing_ragmemo_stream_search", duration_s=search_duration_s, multi_chunk=use_multi_chunk)
 
     if contexts is None:
         raise HTTPException(

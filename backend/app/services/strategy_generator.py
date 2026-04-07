@@ -99,15 +99,49 @@ class StrategyGenerator:
         # --- Phase 2: RAG search per criticism code (sequential DB, parallel LLM) ---
         # Phase 2a: sequential DB fetches
         per_code_context = {}
+        # For large descriptions, use multiple chunks for better coverage
+        MULTI_CHUNK_THRESHOLD = 5000
+        desc_chunks = []
+        if len(description) > MULTI_CHUNK_THRESHOLD:
+            paragraphs = [p.strip() for p in description.split("\n\n") if len(p.strip()) > 80]
+            current = ""
+            for para in paragraphs:
+                if len(current) + len(para) > 1500 and current:
+                    desc_chunks.append(current)
+                    current = para
+                else:
+                    current = (current + "\n\n" + para).strip() if current else para
+            if current:
+                desc_chunks.append(current)
+        else:
+            desc_chunks = [description[:2000]]
+
         for code in coduri_critici:
             label = CRITIQUE_LABELS.get(code, code)
-            search_query = f"{label} achiziții publice {description[:2000]}"  # Embedding query
-            query_vector = await self.embedding_service.embed_query(search_query)
-            legislation = await self._search_legislation(session, search_query, query_vector)
-            jurisprudence = await self._search_jurisprudence(session, search_query, query_vector)
+            # Search with each chunk, merge results
+            all_legislation = []
+            all_jurisprudence = []
+            seen_leg_ids = set()
+            seen_jur_ids = set()
+            for chunk in desc_chunks[:10]:
+                search_query = f"{label} achiziții publice {chunk[:1500]}"
+                query_vector = await self.embedding_service.embed_query(search_query)
+                leg = await self._search_legislation(session, search_query, query_vector)
+                jur = await self._search_jurisprudence(session, search_query, query_vector)
+                for item in leg:
+                    lid = item.get("citare", "")
+                    if lid not in seen_leg_ids:
+                        seen_leg_ids.add(lid)
+                        all_legislation.append(item)
+                for item in jur:
+                    jid = item.get("external_id", "") or item.get("bo_reference", "")
+                    if jid not in seen_jur_ids:
+                        seen_jur_ids.add(jid)
+                        all_jurisprudence.append(item)
+
             per_code_context[code] = {
-                "legislation": legislation,
-                "jurisprudence": jurisprudence,
+                "legislation": all_legislation[:8],
+                "jurisprudence": all_jurisprudence[:8],
                 "stats": stats.get(f"critica_{code}", {}),
                 "label": label,
             }
