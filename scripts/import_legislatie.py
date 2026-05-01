@@ -405,7 +405,9 @@ def _parse_annex_sections(annex_text: str, annex_num: int, annex_label: str) -> 
             "numar_articol": fragment_num,
             "articol": art_label,
             "alineat": idx,
-            "alineat_text": heading,
+            # alineat_text is VARCHAR(20). The full heading lives in `sectiune`
+            # and `citare`; here we keep only a short positional label.
+            "alineat_text": f"sect. {idx}",
             "litera": None,
             "text_fragment": section_text,
             "articol_complet": annex_full_text[:10000],  # cap to prevent huge texts
@@ -563,7 +565,8 @@ def _parse_numbered_sections_document(raw_text: str) -> list[dict]:
                     "numar_articol": sec_num,
                     "articol": f"pct. {sec_num}",
                     "alineat": None,
-                    "alineat_text": f"pct. {sec_num} - {sec_title[:80]}",
+                    # alineat_text is VARCHAR(20); section title lives in `sectiune`.
+                    "alineat_text": None,
                     "litera": lit,
                     "text_fragment": lit_text,
                     "articol_complet": full_section,
@@ -1271,11 +1274,11 @@ async def _update_existing(
                     .values(
                         text_fragment=rec_data["text_fragment"],
                         articol_complet=rec_data["articol_complet"],
-                        citare=rec_data["citare"],
+                        citare=(rec_data["citare"] or "")[:150] or None,
                         capitol=(rec_data["capitol"] or "")[:500] or None,
                         sectiune=(rec_data["sectiune"] or "")[:500] or None,
-                        articol=rec_data["articol"],
-                        alineat_text=rec_data["alineat_text"],
+                        articol=rec_data["articol"][:30],
+                        alineat_text=(rec_data["alineat_text"] or "")[:20] or None,
                         embedding=emb,
                         keywords=None,
                     )
@@ -1397,13 +1400,13 @@ async def _embed_and_insert(
             record = LegislatieFragment(
                 act_id=act_id,
                 numar_articol=rec_data["numar_articol"],
-                articol=rec_data["articol"],
+                articol=rec_data["articol"][:30],
                 alineat=rec_data["alineat"],
-                alineat_text=rec_data["alineat_text"],
-                litera=rec_data["litera"],
+                alineat_text=(rec_data["alineat_text"] or "")[:20] or None,
+                litera=(rec_data["litera"] or "")[:5] or None,
                 text_fragment=rec_data["text_fragment"],
                 articol_complet=rec_data["articol_complet"],
-                citare=rec_data["citare"],
+                citare=(rec_data["citare"] or "")[:150] or None,
                 capitol=(rec_data["capitol"] or "")[:500] or None,
                 sectiune=(rec_data["sectiune"] or "")[:500] or None,
                 embedding=emb,
