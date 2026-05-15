@@ -95,6 +95,32 @@ async def list_spete(
     session: AsyncSession = Depends(get_session),
 ):
     """List spete with pagination, filtering, and search."""
+    # Direct number lookup short-circuit (works for both regular and semantic mode)
+    if search and search.strip().isdigit():
+        numar = int(search.strip())
+        stmt_exact = select(SpetaANAP).where(SpetaANAP.numar_speta == numar)
+        if categorie:
+            stmt_exact = stmt_exact.where(SpetaANAP.categorie == categorie)
+        if tag:
+            stmt_exact = stmt_exact.where(SpetaANAP.taguri.any(tag))
+        result = await session.execute(stmt_exact)
+        speta = result.scalar_one_or_none()
+        if speta:
+            return SpeteListResponse(
+                items=[
+                    SpetaSummary(
+                        numar_speta=speta.numar_speta,
+                        categorie=speta.categorie,
+                        intrebare=speta.intrebare,
+                        taguri=speta.taguri or [],
+                        data_publicarii=speta.data_publicarii.isoformat() if speta.data_publicarii else "",
+                    )
+                ],
+                total=1,
+                page=1,
+                pages=1,
+            )
+
     # Semantic search path
     if semantic and search and search.strip():
         try:
