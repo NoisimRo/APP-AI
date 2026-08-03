@@ -102,6 +102,8 @@ DATABASE_URL="postgresql+asyncpg://..." python scripts/generate_embeddings.py
 | `backend/app/api/v1/saved.py` | Saved content CRUD API (conversations, documents, red flags, training materials) |
 | `backend/app/core/auth.py` | JWT token creation + bcrypt password hashing |
 | `backend/app/core/deps.py` | Auth dependencies (get_current_user, require_role, require_feature) |
+| `backend/app/core/permissions.py` | **Sursa unică de adevăr** pentru drepturi: catalogul de funcții + matricea rol→funcții (DB-backed, cu fallback) |
+| `backend/app/api/v1/permissions.py` | Permissions API (GET/PUT matrice, reset, `/me` pentru navigarea din frontend) |
 | `backend/app/core/rate_limiter.py` | In-memory daily rate limiter per role |
 | `backend/app/api/v1/auth.py` | Auth API (register, login, refresh, me, change-password) |
 | `backend/app/api/v1/users.py` | Admin user management CRUD |
@@ -158,7 +160,7 @@ DATABASE_URL="postgresql+asyncpg://..." python scripts/generate_embeddings.py
 - **History:** Started at 768 (text-embedding-004 convention) → tried 3072 (native) but hit pgvector HNSW limit → settled on 2000.
 - After dimension changes, regenerate embeddings: `python scripts/generate_embeddings.py --force`
 
-### Key Tables (19 în producție)
+### Key Tables (19 în producție + `role_permissions` în așteptare)
 
 | Table | Purpose | RAG? |
 |-------|---------|------|
@@ -169,6 +171,7 @@ DATABASE_URL="postgresql+asyncpg://..." python scripts/generate_embeddings.py
 | `legislatie_fragmente` | Fragmente legislație la granularitate maximă (articol/alineat/literă) | Yes (2000-dim) |
 | `spete_anap` | Spețe ANAP — cazuistică oficială (întrebare + răspuns ANAP) | Yes (2000-dim) |
 | `llm_settings` | LLM provider config (single-row: active provider, model, encrypted API keys for Gemini/Anthropic/OpenAI/Groq/OpenRouter) | No |
+| `role_permissions` | Matricea de drepturi per rol — ce pagini/instrumente vede fiecare tip de utilizator (inclusiv pseudo-rolul `anonymous`) | No |
 | `search_scopes` | Saved filter presets for RAG pre-filtering (name, JSONB filters, cached decision_count) | No (pre-filter) |
 | `users` | Conturi utilizatori cu JWT auth (password_hash, roluri: admin, registered, paid_basic/pro/enterprise) | No |
 | `user_context` | Memorie persistentă AI per utilizator (fapte, preferințe, expertiză — extrase din conversații) | No |

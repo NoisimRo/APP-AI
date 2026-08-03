@@ -7,6 +7,7 @@ from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core import permissions
 from app.core.auth import decode_token
 from app.core.logging import get_logger
 from app.db.session import get_session
@@ -95,56 +96,38 @@ def require_role(*roles: str):
     return _check_role
 
 
-# Feature access rules per role
-FEATURE_ROLES = {
-    "chat": ["registered", "paid_basic", "paid_pro", "paid_enterprise", "admin"],
-    "rag": ["registered", "paid_basic", "paid_pro", "paid_enterprise", "admin"],
-    "dashboard": ["registered", "paid_basic", "paid_pro", "paid_enterprise", "admin"],
-    "datalake": ["registered", "paid_basic", "paid_pro", "paid_enterprise", "admin"],
-    "drafter": ["paid_basic", "paid_pro", "paid_enterprise", "admin"],
-    "redflags": ["paid_basic", "paid_pro", "paid_enterprise", "admin"],
-    "clarification": ["paid_basic", "paid_pro", "paid_enterprise", "admin"],
-    "training": ["paid_pro", "paid_enterprise", "admin"],
-    "export": ["paid_pro", "paid_enterprise", "admin"],
-    "strategy": ["paid_basic", "paid_pro", "paid_enterprise", "admin"],
-    "compliance": ["paid_basic", "paid_pro", "paid_enterprise", "admin"],
-    "multi_document": ["paid_pro", "paid_enterprise", "admin"],
-    "dosare": ["paid_basic", "paid_pro", "paid_enterprise", "admin"],
-    "alerts": ["paid_basic", "paid_pro", "paid_enterprise", "admin"],
-    "comments": ["paid_basic", "paid_pro", "paid_enterprise", "admin"],
-}
-
-
 def require_feature(feature: str):
     """Dependency factory that checks if user's role allows access to a feature.
 
-    Anonymous users get access to free-tier features (chat, rag, dashboard, datalake).
+    Rules come from the ``role_permissions`` table via ``app.core.permissions``
+    — the same source the admin "Drepturi & Roluri" page edits — so the API and
+    the UI can never drift apart. Anonymous callers are checked against the
+    ``anonymous`` pseudo-role.
     """
-    allowed_roles = FEATURE_ROLES.get(feature, [])
-
     async def _check_feature(
         user: Optional[User] = Depends(get_optional_user),
+        session: AsyncSession = Depends(get_session),
     ) -> Optional[User]:
-        # Anonymous access: only free features
+        rol = user.rol if user else permissions.ANONYMOUS_ROLE
+        allowed = await permissions.get_role_features(session, rol)
+
+        if feature in allowed:
+            return user
+
+        # Denied. An anonymous caller may simply need to log in — say so with
+        # 401 so the frontend can open the auth modal instead of a dead end.
         if user is None:
-            if feature in ("chat", "rag", "dashboard", "datalake"):
-                return None
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Autentificare necesară pentru această funcționalitate",
                 headers={"WWW-Authenticate": "Bearer"},
             )
 
-        if user.rol not in allowed_roles:
-            # Map feature to required plan for helpful error message
-            plan_needed = "Basic"
-            if feature == "training" or feature == "export":
-                plan_needed = "Pro"
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail=f"Funcționalitate disponibilă în planul {plan_needed}. "
-                       f"Planul curent: {user.rol}",
-            )
-        return user
+        plan_needed = await permissions.required_plan_hint(session, feature)
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"Funcționalitate disponibilă în planul {plan_needed}. "
+                   f"Planul curent: {user.rol}",
+        )
 
     return _check_feature

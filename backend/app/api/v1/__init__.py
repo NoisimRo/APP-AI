@@ -2,12 +2,13 @@
 
 from fastapi import APIRouter
 
-from app.api.v1 import auth, chat, search, decisions, documents, redflags, ragmemo, drafter, clarification, training, settings, scopes, saved, users, spete_anap, analytics, strategy, compliance, multi_document, dosare, alerts, comments
+from app.api.v1 import auth, chat, search, decisions, documents, redflags, ragmemo, drafter, clarification, training, settings, scopes, saved, users, spete_anap, analytics, strategy, compliance, multi_document, dosare, alerts, comments, permissions
 
 api_router = APIRouter()
 
 api_router.include_router(auth.router, prefix="/auth", tags=["auth"])
 api_router.include_router(users.router, prefix="/users", tags=["users"])
+api_router.include_router(permissions.router, prefix="/permissions", tags=["permissions"])
 api_router.include_router(chat.router, prefix="/chat", tags=["chat"])
 api_router.include_router(search.router, prefix="/search", tags=["search"])
 api_router.include_router(decisions.router, prefix="/decisions", tags=["decisions"])
