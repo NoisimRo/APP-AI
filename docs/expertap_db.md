@@ -566,9 +566,9 @@ CREATE TABLE role_permissions (
 INSERT INTO role_permissions (rol, features) VALUES
   ('anonymous', '["chat","pricing"]'::jsonb),
   ('registered', '["chat","datalake","spete","dashboard","analytics","rag","profile","pricing"]'::jsonb),
-  ('paid_basic', '["chat","datalake","spete","dashboard","analytics","rag","strategy","compliance","drafter","redflags","clarification","dosare","alerts","comments","profile","pricing"]'::jsonb),
-  ('paid_pro', '["chat","datalake","spete","dashboard","analytics","rag","strategy","compliance","multi_document","drafter","redflags","clarification","training","export","dosare","alerts","comments","profile","pricing"]'::jsonb),
-  ('paid_enterprise', '["chat","datalake","spete","dashboard","analytics","rag","strategy","compliance","multi_document","drafter","redflags","clarification","training","export","dosare","alerts","comments","profile","pricing"]'::jsonb),
+  ('paid_basic', '["chat","datalake","spete","dashboard","analytics","strategy","dosare","alerts","compliance","drafter","redflags","clarification","rag","comments","profile","pricing"]'::jsonb),
+  ('paid_pro', '["chat","datalake","spete","dashboard","analytics","strategy","dosare","alerts","multi_document","compliance","drafter","redflags","clarification","rag","training","export","comments","profile","pricing"]'::jsonb),
+  ('paid_enterprise', '["chat","datalake","spete","dashboard","analytics","strategy","dosare","alerts","multi_document","compliance","drafter","redflags","clarification","rag","training","export","comments","profile","pricing"]'::jsonb),
   ('admin', '["chat","datalake","spete","dashboard","analytics","strategy","dosare","alerts","multi_document","compliance","drafter","redflags","clarification","rag","training","export","comments","settings","permissions","users","profile","pricing"]'::jsonb)
 ON CONFLICT (rol) DO NOTHING;
 ```
