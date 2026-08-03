@@ -65,9 +65,25 @@ PROVIDER_MODELS = {
         "meta-llama/llama-4-scout-17b-16e-instruct",
     ],
     "openrouter": [
-        "openrouter/free",  # Fallback — always kept first
+        "openrouter/free",  # Auto-router — always kept first
     ],
 }
+
+# Curated fallback list of well-known OpenRouter free models.
+# Used when the OpenRouter /models API is unreachable or returns nothing usable,
+# so the dropdown is never empty. Kept small and stable on purpose.
+OPENROUTER_FALLBACK_MODELS = [
+    "openrouter/free",
+    "deepseek/deepseek-r1:free",
+    "deepseek/deepseek-chat-v3-0324:free",
+    "meta-llama/llama-4-maverick:free",
+    "meta-llama/llama-4-scout:free",
+    "meta-llama/llama-3.3-70b-instruct:free",
+    "qwen/qwen3-235b-a22b:free",
+    "qwen/qwen-2.5-72b-instruct:free",
+    "google/gemma-3-27b-it:free",
+    "mistralai/mistral-small-3.2-24b-instruct:free",
+]
 
 # Default model per provider
 DEFAULT_MODELS = {
@@ -117,12 +133,39 @@ MODEL_TOKEN_LIMITS: dict[str, tuple[int, int]] = {
 
 # Cache for dynamically fetched OpenRouter models
 _openrouter_models_cache: list[str] | None = None
+_openrouter_limits_cache: dict[str, tuple[int, int]] = {}
 _openrouter_cache_time: float = 0
 OPENROUTER_CACHE_TTL = 3600  # 1 hour
+OPENROUTER_MODELS_URL = "https://openrouter.ai/api/v1/models"
+
+# Fallback token budget for a free model whose context_length we cannot read.
+OPENROUTER_DEFAULT_LIMITS = (12_000, 4_096)
+
+
+def _price_is_zero(value: object) -> bool:
+    """True if an OpenRouter pricing entry means "no cost".
+
+    OpenRouter returns prices as strings, but the exact formatting is not
+    contractual — "0", "0.0", "0E-9" and 0 (numeric) have all been observed.
+    Comparing against the literal string "0" silently drops every free model
+    the moment the formatting changes, so parse numerically instead.
+    A missing field is treated as "not free" (conservative).
+    """
+    if value is None:
+        return False
+    try:
+        return float(value) == 0.0
+    except (TypeError, ValueError):
+        return False
 
 
 async def _fetch_openrouter_free_models() -> list[str]:
-    """Fetch available free models from OpenRouter API. Cached for 1 hour."""
+    """Fetch available free models from OpenRouter API. Cached for 1 hour.
+
+    Populates ``_openrouter_limits_cache`` with the real context window and
+    max output tokens reported by OpenRouter for each model, so the UI can
+    show token budgets for dynamically discovered models.
+    """
     global _openrouter_models_cache, _openrouter_cache_time
 
     now = time.monotonic()
@@ -130,20 +173,56 @@ async def _fetch_openrouter_free_models() -> list[str]:
         return _openrouter_models_cache
 
     try:
-        async with httpx.AsyncClient(timeout=10) as client:
-            resp = await client.get("https://openrouter.ai/api/v1/models")
+        async with httpx.AsyncClient(timeout=15) as client:
+            resp = await client.get(
+                OPENROUTER_MODELS_URL,
+                headers={"Accept": "application/json"},
+            )
             resp.raise_for_status()
             data = resp.json()
 
-        free_models = []
-        for model in data.get("data", []):
-            model_id = model.get("id", "")
-            pricing = model.get("pricing", {})
-            # A model is free if both prompt and completion cost are "0"
-            prompt_cost = str(pricing.get("prompt", "1"))
-            completion_cost = str(pricing.get("completion", "1"))
-            if prompt_cost == "0" and completion_cost == "0":
-                free_models.append(model_id)
+        entries = data.get("data") or []
+        if not isinstance(entries, list):
+            raise ValueError(f"unexpected payload shape: {type(entries).__name__}")
+
+        free_models: list[str] = []
+        limits: dict[str, tuple[int, int]] = {}
+
+        for model in entries:
+            if not isinstance(model, dict):
+                continue
+            model_id = model.get("id") or ""
+            if not model_id:
+                continue
+
+            pricing = model.get("pricing") or {}
+            # Two independent signals — OpenRouter marks free models with a
+            # ":free" id suffix and with zero prompt/completion pricing.
+            # Accept either, so a change to one does not empty the list.
+            is_free_by_suffix = model_id.endswith(":free")
+            is_free_by_price = _price_is_zero(pricing.get("prompt")) and _price_is_zero(
+                pricing.get("completion")
+            )
+            if not (is_free_by_suffix or is_free_by_price):
+                continue
+
+            free_models.append(model_id)
+
+            context_length = model.get("context_length")
+            top_provider = model.get("top_provider") or {}
+            max_completion = top_provider.get("max_completion_tokens")
+            try:
+                max_in = int(context_length) if context_length else OPENROUTER_DEFAULT_LIMITS[0]
+            except (TypeError, ValueError):
+                max_in = OPENROUTER_DEFAULT_LIMITS[0]
+            try:
+                max_out = int(max_completion) if max_completion else OPENROUTER_DEFAULT_LIMITS[1]
+            except (TypeError, ValueError):
+                max_out = OPENROUTER_DEFAULT_LIMITS[1]
+            limits[model_id] = (max_in, max_out)
+
+        if not free_models:
+            raise ValueError(f"no free models found in {len(entries)} entries")
 
         # Sort: prioritize well-known providers
         priority_prefixes = ["deepseek/", "meta-llama/", "qwen/", "google/", "mistralai/", "nvidia/"]
@@ -159,16 +238,31 @@ async def _fetch_openrouter_free_models() -> list[str]:
         result = ["openrouter/free"] + [m for m in free_models if m != "openrouter/free"]
 
         _openrouter_models_cache = result
+        _openrouter_limits_cache.clear()
+        _openrouter_limits_cache.update(limits)
         _openrouter_cache_time = now
-        logger.info("openrouter_models_fetched", count=len(result))
+        logger.info("openrouter_models_fetched", count=len(result), total_seen=len(entries))
         return result
 
+    except httpx.HTTPStatusError as e:
+        logger.warning(
+            "openrouter_models_fetch_failed",
+            error=str(e),
+            status_code=e.response.status_code,
+            body=e.response.text[:300],
+        )
     except Exception as e:
-        logger.warning("openrouter_models_fetch_failed", error=str(e))
-        # Return cached if available, otherwise fallback
-        if _openrouter_models_cache:
-            return _openrouter_models_cache
-        return PROVIDER_MODELS["openrouter"]
+        logger.warning(
+            "openrouter_models_fetch_failed",
+            error=str(e),
+            error_type=type(e).__name__,
+        )
+
+    # Serve the last good list if we have one, otherwise the curated fallback
+    # so the dropdown is never reduced to a single entry.
+    if _openrouter_models_cache:
+        return _openrouter_models_cache
+    return list(OPENROUTER_FALLBACK_MODELS)
 
 
 class ModelInfo(BaseModel):
@@ -235,10 +329,14 @@ def _is_provider_configured(provider: str, settings_row: LLMSettings | None) -> 
 
 
 def _build_model_list(model_ids: list[str]) -> list[ModelInfo]:
-    """Build sorted ModelInfo list from model IDs (largest input first)."""
+    """Build sorted ModelInfo list from model IDs (largest input first).
+
+    Token limits come from the static ``MODEL_TOKEN_LIMITS`` table first, then
+    from the limits OpenRouter reported for dynamically discovered models.
+    """
     models = []
     for mid in model_ids:
-        limits = MODEL_TOKEN_LIMITS.get(mid, (0, 0))
+        limits = MODEL_TOKEN_LIMITS.get(mid) or _openrouter_limits_cache.get(mid, (0, 0))
         models.append(ModelInfo(id=mid, input_tokens=limits[0], output_tokens=limits[1]))
     models.sort(key=lambda m: m.input_tokens, reverse=True)
     return models
@@ -335,8 +433,8 @@ async def update_llm_settings(
     # Clear provider cache so next request uses new settings
     clear_provider_cache()
 
-    # Return updated settings (use cached OpenRouter models if available)
-    openrouter_models = _openrouter_models_cache or PROVIDER_MODELS["openrouter"]
+    # Return updated settings (served from the 1h cache when warm)
+    openrouter_models = await _fetch_openrouter_free_models()
     providers = {}
     for provider_name, model_ids in PROVIDER_MODELS.items():
         raw_ids = openrouter_models if provider_name == "openrouter" else model_ids
