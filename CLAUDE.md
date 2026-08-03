@@ -160,7 +160,7 @@ DATABASE_URL="postgresql+asyncpg://..." python scripts/generate_embeddings.py
 - **History:** Started at 768 (text-embedding-004 convention) → tried 3072 (native) but hit pgvector HNSW limit → settled on 2000.
 - After dimension changes, regenerate embeddings: `python scripts/generate_embeddings.py --force`
 
-### Key Tables (19 în producție + `role_permissions` în așteptare)
+### Key Tables (20 în producție)
 
 | Table | Purpose | RAG? |
 |-------|---------|------|
