@@ -1116,7 +1116,13 @@ const App = () => {
   };
 
   useEffect(() => {
-    if (authState.user?.rol === 'admin') fetchLLMSettings();
+    if (authState.user?.rol === 'admin') {
+      fetchLLMSettings();
+    } else {
+      // Non-admin (or logged out): drop any stale settings data and leave the page
+      setLlmSettings(null);
+      setMode(prev => (prev === 'settings' ? 'chat' : prev));
+    }
   }, [authState.user?.rol]);
 
   // Fetch search scopes
@@ -2395,8 +2401,8 @@ const App = () => {
                 <p className="text-xs text-slate-500">Salvează și accesează instrumentele</p>
               </div>
             </button>
-            {/* LLM provider mini-info */}
-            <div className="mt-2 flex items-center gap-2 cursor-pointer hover:bg-slate-800/50 rounded p-1 -mx-1" onClick={() => { setMode('settings'); setSidebarOpen(false); }}>
+            {/* LLM provider mini-info — read-only for guests, Setări LLM is admin-only */}
+            <div className="mt-2 flex items-center gap-2 rounded p-1 -mx-1">
               <div className={`w-5 h-5 rounded-full flex items-center justify-center text-white font-bold text-[8px] ${
                 llmSettings?.active_provider === 'anthropic' ? 'bg-orange-500' : llmSettings?.active_provider === 'groq' ? 'bg-purple-500' : llmSettings?.active_provider === 'openai' ? 'bg-green-500' : 'bg-blue-500'
               }`}>AI</div>
@@ -8105,7 +8111,7 @@ const App = () => {
         {mode === 'training' && renderTraining()}
         {mode === 'dosare' && renderDosare()}
         {mode === 'alerts' && renderAlerts()}
-        {mode === 'settings' && renderSettings()}
+        {mode === 'settings' && canAccess('settings') && renderSettings()}
         {mode === 'profile' && renderProfile()}
         {mode === 'pricing' && renderPricing()}
         </div>
