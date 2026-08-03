@@ -476,6 +476,43 @@ class LLMSettings(Base):
 
 
 # =============================================================================
+# ROLE PERMISSIONS (which features/pages each role may access)
+# =============================================================================
+
+class RolePermission(Base):
+    """Feature access matrix — one row per role.
+
+    Single source of truth for what each role may reach. The backend enforces
+    it in ``require_feature``; the frontend renders its navigation from the
+    effective list the server returns. Rows are seeded from
+    ``app.core.permissions.DEFAULT_ROLE_FEATURES`` and edited from the admin
+    "Drepturi & Roluri" page.
+
+    ``rol`` also accepts the pseudo-role ``anonymous`` — visitors with no
+    account — so guest visibility is managed in the same place.
+    """
+
+    __tablename__ = "role_permissions"
+
+    rol: Mapped[str] = mapped_column(String(30), primary_key=True)
+
+    # List of feature keys, e.g. ["chat", "rag", "dashboard"].
+    # Keys are validated against app.core.permissions.FEATURE_CATALOG.
+    features: Mapped[list] = mapped_column(JSONB, nullable=False, default=list)
+
+    # Audit — who last touched this row
+    updated_by: Mapped[Optional[str]] = mapped_column(
+        UUID(as_uuid=False), ForeignKey("users.id", ondelete="SET NULL")
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+
+    def __repr__(self) -> str:
+        return f"<RolePermission rol={self.rol} features={len(self.features or [])}>"
+
+
+# =============================================================================
 # SEARCH SCOPES (saved filter presets for RAG pre-filtering)
 # =============================================================================
 

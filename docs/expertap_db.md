@@ -540,6 +540,44 @@ Foreign-key constraints:
 
 ---
 
+# Migrări în așteptare (NEEXECUTATE în producție)
+
+Comenzile de mai jos sunt propuse de cod, dar **nu au fost rulate încă**. După
+executare, mutați intrarea în „Changelog Schema Producție" și adăugați output-ul
+`\d <table>` mai sus.
+
+## `role_permissions` — matricea de drepturi per rol (pagina „Drepturi & Roluri")
+
+Aplicația funcționează și fără acest tabel: `app/core/permissions.py` detectează
+lipsa lui și servește valorile implicite din cod, semnalând în UI că nimic nu e
+persistat. Salvarea din pagina de admin va eșua până la rularea migrării.
+
+```sql
+CREATE TABLE role_permissions (
+  rol        VARCHAR(30) PRIMARY KEY,
+  features   JSONB NOT NULL DEFAULT '[]'::jsonb,
+  updated_by UUID REFERENCES users(id) ON DELETE SET NULL,
+  updated_at TIMESTAMP NOT NULL DEFAULT now()
+);
+
+-- Seed cu valorile implicite (identice cu DEFAULT_ROLE_FEATURES din
+-- backend/app/core/permissions.py). Rolul 'anonymous' este un pseudo-rol
+-- pentru vizitatorii neautentificați.
+INSERT INTO role_permissions (rol, features) VALUES
+  ('anonymous', '["chat","pricing"]'::jsonb),
+  ('registered', '["chat","datalake","spete","dashboard","analytics","rag","profile","pricing"]'::jsonb),
+  ('paid_basic', '["chat","datalake","spete","dashboard","analytics","rag","strategy","compliance","drafter","redflags","clarification","dosare","alerts","comments","profile","pricing"]'::jsonb),
+  ('paid_pro', '["chat","datalake","spete","dashboard","analytics","rag","strategy","compliance","multi_document","drafter","redflags","clarification","training","export","dosare","alerts","comments","profile","pricing"]'::jsonb),
+  ('paid_enterprise', '["chat","datalake","spete","dashboard","analytics","rag","strategy","compliance","multi_document","drafter","redflags","clarification","training","export","dosare","alerts","comments","profile","pricing"]'::jsonb),
+  ('admin', '["chat","datalake","spete","dashboard","analytics","strategy","dosare","alerts","multi_document","compliance","drafter","redflags","clarification","rag","training","export","comments","settings","permissions","users","profile","pricing"]'::jsonb)
+ON CONFLICT (rol) DO NOTHING;
+```
+
+Seed-ul este opțional — la prima salvare din pagina de admin rândurile lipsă se
+creează automat. Rularea doar a `CREATE TABLE` este suficientă.
+
+---
+
 # Ultima sincronizare cu producția: 2026-04-05
 
 # Changelog Schema Producție

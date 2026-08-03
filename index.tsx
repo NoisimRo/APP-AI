@@ -58,11 +58,13 @@ import {
   Clock,
   Archive,
   Briefcase,
+  ShieldCheck,
+  RotateCcw,
 } from "lucide-react";
 
 // --- Types ---
 
-type AppMode = 'dashboard' | 'datalake' | 'spete' | 'drafter' | 'redflags' | 'chat' | 'clarification' | 'rag' | 'training' | 'analytics' | 'strategy' | 'compliance' | 'multi_document' | 'dosare' | 'alerts' | 'settings' | 'profile' | 'pricing';
+type AppMode = 'dashboard' | 'datalake' | 'spete' | 'drafter' | 'redflags' | 'chat' | 'clarification' | 'rag' | 'training' | 'analytics' | 'strategy' | 'compliance' | 'multi_document' | 'dosare' | 'alerts' | 'settings' | 'permissions' | 'profile' | 'pricing';
 
 interface AuthUser {
   id: string;
@@ -96,6 +98,32 @@ interface LLMSettingsData {
   active_provider: string;
   active_model: string | null;
   providers: Record<string, LLMProviderInfo>;
+}
+
+// --- Role permissions (admin "Drepturi & Roluri" page) ---
+interface PermissionFeature {
+  key: string;
+  label: string;
+  category: string;
+  description: string;
+  admin_only: boolean;
+  always_on: boolean;
+  ui_only: boolean;
+}
+
+interface PermissionRole {
+  rol: string;
+  label: string;
+  locked: boolean;
+}
+
+interface PermissionsMatrixData {
+  features: PermissionFeature[];
+  categories: string[];
+  roles: PermissionRole[];
+  matrix: Record<string, string[]>;
+  defaults: Record<string, string[]>;
+  persisted: boolean;
 }
 
 interface UploadedFile {
@@ -319,12 +347,15 @@ const authFetchStream = async (
 };
 
 // Feature access rules per role
+// Offline fallback only. The live rules come from GET /api/v1/permissions/me,
+// backed by the role_permissions table and editable from "Drepturi & Roluri".
+// Keep in sync with DEFAULT_ROLE_FEATURES in backend/app/core/permissions.py.
 const ROLE_FEATURES: Record<string, string[]> = {
   registered: ['chat', 'dashboard', 'datalake', 'spete', 'rag', 'analytics', 'profile', 'pricing'],
   paid_basic: ['chat', 'dashboard', 'datalake', 'spete', 'rag', 'analytics', 'strategy', 'compliance', 'drafter', 'redflags', 'clarification', 'dosare', 'alerts', 'profile', 'pricing'],
   paid_pro: ['chat', 'dashboard', 'datalake', 'spete', 'rag', 'analytics', 'strategy', 'compliance', 'multi_document', 'drafter', 'redflags', 'clarification', 'training', 'export', 'dosare', 'alerts', 'profile', 'pricing'],
   paid_enterprise: ['chat', 'dashboard', 'datalake', 'spete', 'rag', 'analytics', 'strategy', 'compliance', 'multi_document', 'drafter', 'redflags', 'clarification', 'training', 'export', 'dosare', 'alerts', 'profile', 'pricing'],
-  admin: ['chat', 'dashboard', 'datalake', 'spete', 'rag', 'analytics', 'strategy', 'compliance', 'multi_document', 'drafter', 'redflags', 'clarification', 'training', 'export', 'dosare', 'alerts', 'settings', 'profile', 'pricing'],
+  admin: ['chat', 'dashboard', 'datalake', 'spete', 'rag', 'analytics', 'strategy', 'compliance', 'multi_document', 'drafter', 'redflags', 'clarification', 'training', 'export', 'dosare', 'alerts', 'comments', 'settings', 'permissions', 'users', 'profile', 'pricing'],
 };
 
 const PLAN_LABELS: Record<string, string> = {
@@ -773,6 +804,16 @@ const App = () => {
   const [settingsTestResult, setSettingsTestResult] = useState<{success: boolean, response_time_ms: number, error?: string} | null>(null);
   const [settingsMessage, setSettingsMessage] = useState<{type: 'success' | 'error', text: string} | null>(null);
 
+  // Role Permissions States
+  // effectiveFeatures = what the server says THIS identity may reach. Null while
+  // loading, in which case canAccess falls back to the static ROLE_FEATURES map.
+  const [effectiveFeatures, setEffectiveFeatures] = useState<string[] | null>(null);
+  const [permData, setPermData] = useState<PermissionsMatrixData | null>(null);
+  const [permDraft, setPermDraft] = useState<Record<string, string[]>>({});
+  const [permLoading, setPermLoading] = useState(false);
+  const [permSaving, setPermSaving] = useState(false);
+  const [permMessage, setPermMessage] = useState<{type: 'success' | 'error', text: string} | null>(null);
+
   // Decision Viewer State
   const [viewingDecision, setViewingDecision] = useState<any | null>(null);
   const [isLoadingDecision, setIsLoadingDecision] = useState(false);
@@ -872,9 +913,16 @@ const App = () => {
   }, []);
 
   // Auth helper: canAccess feature
+  //
+  // The authoritative answer comes from GET /permissions/me, which reads the
+  // same role_permissions table the API enforces — so the sidebar can never
+  // drift from what the endpoints actually allow. ROLE_FEATURES is only the
+  // offline fallback used before that response lands (or if it fails).
+  // This hides navigation; it is not the security boundary — every protected
+  // endpoint still runs its own require_feature check.
   const canAccess = (feature: string): boolean => {
+    if (effectiveFeatures) return effectiveFeatures.includes(feature);
     const user = authState.user;
-    // Unregistered users: only chat
     if (!user) return feature === 'chat';
     const features = ROLE_FEATURES[user.rol];
     if (!features) return false;
@@ -1121,9 +1169,159 @@ const App = () => {
     } else {
       // Non-admin (or logged out): drop any stale settings data and leave the page
       setLlmSettings(null);
-      setMode(prev => (prev === 'settings' ? 'chat' : prev));
+      setPermData(null);
+      setMode(prev => (prev === 'settings' || prev === 'permissions' ? 'chat' : prev));
     }
   }, [authState.user?.rol]);
+
+  // --- Role permissions ---
+
+  // Effective access for the current identity. Refetched on every auth change
+  // (login, logout, role change) so navigation matches what the API allows.
+  const fetchEffectiveFeatures = async () => {
+    try {
+      const res = await authFetch('/api/v1/permissions/me');
+      if (res.ok) {
+        const data: { rol: string; features: string[] } = await res.json();
+        setEffectiveFeatures(data.features);
+      } else {
+        setEffectiveFeatures(null);
+      }
+    } catch (e) {
+      console.error('Failed to fetch effective permissions:', e);
+      setEffectiveFeatures(null);
+    }
+  };
+
+  useEffect(() => {
+    fetchEffectiveFeatures();
+  }, [authState.user?.id, authState.user?.rol]);
+
+  const fetchPermissions = async () => {
+    setPermLoading(true);
+    setPermMessage(null);
+    try {
+      const res = await authFetch('/api/v1/permissions/');
+      if (res.ok) {
+        const data: PermissionsMatrixData = await res.json();
+        setPermData(data);
+        setPermDraft(data.matrix);
+      } else {
+        setPermMessage({ type: 'error', text: 'Nu s-au putut încărca permisiunile.' });
+      }
+    } catch (e) {
+      setPermMessage({ type: 'error', text: 'Eroare de rețea la încărcarea permisiunilor.' });
+    } finally {
+      setPermLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (mode === 'permissions' && authState.user?.rol === 'admin' && !permData) {
+      fetchPermissions();
+    }
+  }, [mode, authState.user?.rol]);
+
+  // A cell is locked when the guardrails decide it, not the admin:
+  // the admin column always holds everything, admin-only features are never
+  // grantable elsewhere, and always-on features stay on for logged-in roles.
+  const permCellLocked = (feature: PermissionFeature, rol: string): boolean => {
+    if (rol === 'admin') return true;
+    if (feature.admin_only) return true;
+    if (feature.always_on && rol !== 'anonymous') return true;
+    return false;
+  };
+
+  const permCellChecked = (feature: PermissionFeature, rol: string): boolean => {
+    if (rol === 'admin') return true;
+    if (feature.admin_only) return false;
+    if (feature.always_on && rol !== 'anonymous') return true;
+    return (permDraft[rol] || []).includes(feature.key);
+  };
+
+  const togglePermCell = (feature: PermissionFeature, rol: string) => {
+    if (permCellLocked(feature, rol)) return;
+    setPermMessage(null);
+    setPermDraft(prev => {
+      const current = prev[rol] || [];
+      const next = current.includes(feature.key)
+        ? current.filter(k => k !== feature.key)
+        : [...current, feature.key];
+      return { ...prev, [rol]: next };
+    });
+  };
+
+  // Bulk helpers — toggle a whole category for one role
+  const togglePermCategory = (category: string, rol: string, on: boolean) => {
+    if (!permData) return;
+    const keys = permData.features
+      .filter(f => f.category === category && !permCellLocked(f, rol))
+      .map(f => f.key);
+    if (keys.length === 0) return;
+    setPermMessage(null);
+    setPermDraft(prev => {
+      const current = new Set(prev[rol] || []);
+      keys.forEach(k => (on ? current.add(k) : current.delete(k)));
+      return { ...prev, [rol]: Array.from(current) };
+    });
+  };
+
+  const permDirty = useMemo(() => {
+    if (!permData) return false;
+    return permData.roles.some(r => {
+      const saved = [...(permData.matrix[r.rol] || [])].sort().join(',');
+      const draft = [...(permDraft[r.rol] || [])].sort().join(',');
+      return saved !== draft;
+    });
+  }, [permData, permDraft]);
+
+  const handleSavePermissions = async () => {
+    setPermSaving(true);
+    setPermMessage(null);
+    try {
+      const res = await authFetch('/api/v1/permissions/', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ matrix: permDraft }),
+      });
+      if (res.ok) {
+        const data: PermissionsMatrixData = await res.json();
+        setPermData(data);
+        setPermDraft(data.matrix);
+        setPermMessage({ type: 'success', text: 'Permisiunile au fost salvate.' });
+        await fetchEffectiveFeatures();
+      } else {
+        const err = await res.json().catch(() => ({}));
+        setPermMessage({ type: 'error', text: err.detail || 'Eroare la salvare.' });
+      }
+    } catch (e) {
+      setPermMessage({ type: 'error', text: 'Eroare de rețea la salvare.' });
+    } finally {
+      setPermSaving(false);
+    }
+  };
+
+  const handleResetPermissions = async () => {
+    if (!confirm('Reveniți la drepturile implicite pentru toate rolurile? Modificările curente se pierd.')) return;
+    setPermSaving(true);
+    setPermMessage(null);
+    try {
+      const res = await authFetch('/api/v1/permissions/reset', { method: 'POST' });
+      if (res.ok) {
+        const data: PermissionsMatrixData = await res.json();
+        setPermData(data);
+        setPermDraft(data.matrix);
+        setPermMessage({ type: 'success', text: 'S-au restaurat drepturile implicite.' });
+        await fetchEffectiveFeatures();
+      } else {
+        setPermMessage({ type: 'error', text: 'Eroare la restaurare.' });
+      }
+    } catch (e) {
+      setPermMessage({ type: 'error', text: 'Eroare de rețea la restaurare.' });
+    } finally {
+      setPermSaving(false);
+    }
+  };
 
   // Fetch search scopes
   const fetchScopes = async () => {
@@ -2178,7 +2376,12 @@ const App = () => {
     training: 'TrainingAP',
     dosare: 'Dosare Digitale',
     alerts: 'Alerte Decizii',
+    analytics: 'Analiză CNSC',
+    strategy: 'Strategie Contestare',
+    compliance: 'Verificator Conformitate',
+    multi_document: 'Analiză Multi-Document',
     settings: 'Setări LLM',
+    permissions: 'Drepturi & Roluri',
     profile: 'Profil',
     pricing: 'Planuri & Prețuri',
   };
@@ -2344,6 +2547,9 @@ const App = () => {
            <div className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3 px-2">Sistem</div>
            {canAccess('settings') && (
              <SidebarItem icon={Settings} label="Setări LLM" active={mode === 'settings'} onClick={() => { setMode('settings'); setSidebarOpen(false); }} />
+           )}
+           {canAccess('permissions') && (
+             <SidebarItem icon={ShieldCheck} label="Drepturi & Roluri" active={mode === 'permissions'} onClick={() => { setMode('permissions'); setSidebarOpen(false); }} />
            )}
            <SidebarItem icon={Package} label="Planuri & Prețuri" active={mode === 'pricing'} onClick={() => { setMode('pricing'); setSidebarOpen(false); }} />
         </div>
@@ -7031,6 +7237,241 @@ const App = () => {
     );
   };
 
+  const renderPermissions = () => {
+    const roles = permData?.roles || [];
+    const categories = permData?.categories || [];
+    const features = permData?.features || [];
+
+    const roleAccent: Record<string, string> = {
+      anonymous: 'text-slate-500',
+      registered: 'text-slate-700',
+      paid_basic: 'text-blue-700',
+      paid_pro: 'text-indigo-700',
+      paid_enterprise: 'text-purple-700',
+      admin: 'text-emerald-700',
+    };
+
+    const countFor = (rol: string) =>
+      features.filter(f => permCellChecked(f, rol)).length;
+
+    // Flags a role whose current selection differs from the shipped defaults,
+    // so it is obvious at a glance what has been customised.
+    const isCustomised = (rol: string) => {
+      if (!permData) return false;
+      const def = [...(permData.defaults[rol] || [])].sort().join(',');
+      const cur = [...(permDraft[rol] || [])].sort().join(',');
+      return def !== cur;
+    };
+
+    return (
+      <div className="h-full overflow-y-auto bg-slate-50/50 p-4 md:p-8">
+        <div className="max-w-6xl mx-auto">
+          <h2 className="text-xl md:text-2xl font-bold text-slate-800 mb-1 flex items-center gap-3">
+            <ShieldCheck className="text-emerald-600" size={24} /> Drepturi & Roluri
+          </h2>
+          <p className="text-sm text-slate-500 mb-6">
+            Stabilește ce pagini și instrumente sunt vizibile pentru fiecare tip de utilizator.
+            Regulile se aplică atât în meniul aplicației, cât și la nivel de API.
+          </p>
+
+          {permLoading && (
+            <div className="flex items-center gap-2 text-sm text-slate-500 py-10 justify-center">
+              <Loader2 className="animate-spin" size={16} /> Se încarcă permisiunile...
+            </div>
+          )}
+
+          {!permLoading && permData && (
+            <>
+              {!permData.persisted && (
+                <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 mb-5 text-sm text-amber-800">
+                  <p className="font-semibold mb-1">Tabelul <code>role_permissions</code> nu există încă în baza de date.</p>
+                  <p className="text-xs">
+                    Se afișează valorile implicite din cod, iar aplicația funcționează normal.
+                    Prima salvare va eșua până când se rulează migrarea SQL din <code>docs/expertap_db.md</code>.
+                  </p>
+                </div>
+              )}
+
+              {/* Summary per role */}
+              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 mb-6">
+                {roles.map(r => (
+                  <div key={r.rol} className="bg-white rounded-xl border border-slate-200 p-3 shadow-sm">
+                    <p className={`text-xs font-bold ${roleAccent[r.rol] || 'text-slate-700'}`}>{r.label}</p>
+                    <p className="text-[11px] text-slate-400 mt-1">
+                      {countFor(r.rol)} din {features.length} funcții
+                    </p>
+                    {r.locked ? (
+                      <p className="text-[10px] text-emerald-600 mt-1 flex items-center gap-1">
+                        <Lock size={9} /> acces complet, fix
+                      </p>
+                    ) : isCustomised(r.rol) ? (
+                      <p className="text-[10px] text-amber-600 mt-1">modificat față de implicit</p>
+                    ) : (
+                      <p className="text-[10px] text-slate-300 mt-1">implicit</p>
+                    )}
+                  </div>
+                ))}
+              </div>
+
+              {/* Matrix */}
+              <div className="bg-white rounded-xl border border-slate-200 shadow-sm mb-6 overflow-x-auto">
+                <table className="w-full text-sm min-w-[820px]">
+                  <thead>
+                    <tr className="border-b border-slate-200">
+                      <th className="text-left font-bold text-slate-600 uppercase tracking-wider text-xs px-4 py-3 sticky left-0 bg-white z-10">
+                        Pagină / Instrument
+                      </th>
+                      {roles.map(r => (
+                        <th key={r.rol} className="px-2 py-3 text-center">
+                          <span className={`text-xs font-bold ${roleAccent[r.rol] || 'text-slate-700'}`}>{r.label}</span>
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {categories.map(cat => {
+                      const catFeatures = features.filter(f => f.category === cat);
+                      if (catFeatures.length === 0) return null;
+                      return (
+                        <React.Fragment key={cat}>
+                          <tr className="bg-slate-50 border-b border-slate-200">
+                            <td className="px-4 py-2 text-xs font-bold text-slate-500 uppercase tracking-wider sticky left-0 bg-slate-50 z-10">
+                              {cat}
+                            </td>
+                            {roles.map(r => {
+                              const editable = catFeatures.some(f => !permCellLocked(f, r.rol));
+                              const allOn = catFeatures.every(f => permCellChecked(f, r.rol));
+                              return (
+                                <td key={r.rol} className="px-2 py-2 text-center">
+                                  {editable && (
+                                    <button
+                                      onClick={() => togglePermCategory(cat, r.rol, !allOn)}
+                                      className="text-[10px] text-slate-400 hover:text-blue-600 underline decoration-dotted transition-colors"
+                                      title={allOn ? `Dezactivează tot pentru ${r.label}` : `Activează tot pentru ${r.label}`}
+                                    >
+                                      {allOn ? 'niciuna' : 'toate'}
+                                    </button>
+                                  )}
+                                </td>
+                              );
+                            })}
+                          </tr>
+                          {catFeatures.map(f => (
+                            <tr key={f.key} className="border-b border-slate-100 hover:bg-slate-50/60 transition-colors">
+                              <td className="px-4 py-2.5 sticky left-0 bg-white z-10">
+                                <div className="flex items-center gap-2">
+                                  <span className="font-medium text-slate-700">{f.label}</span>
+                                  {f.admin_only && (
+                                    <span className="text-[9px] text-emerald-700 bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 rounded uppercase tracking-wide">
+                                      doar admin
+                                    </span>
+                                  )}
+                                  {f.always_on && (
+                                    <span className="text-[9px] text-slate-500 bg-slate-100 border border-slate-200 px-1.5 py-0.5 rounded uppercase tracking-wide">
+                                      mereu activ
+                                    </span>
+                                  )}
+                                  {f.ui_only && (
+                                    <span className="text-[9px] text-amber-700 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded uppercase tracking-wide"
+                                          title="Ascunde doar navigarea — nu există un endpoint separat care să o impună">
+                                      doar UI
+                                    </span>
+                                  )}
+                                </div>
+                                {f.description && (
+                                  <p className="text-[11px] text-slate-400 mt-0.5">{f.description}</p>
+                                )}
+                              </td>
+                              {roles.map(r => {
+                                const checked = permCellChecked(f, r.rol);
+                                const locked = permCellLocked(f, r.rol);
+                                return (
+                                  <td key={r.rol} className="px-2 py-2.5 text-center">
+                                    <button
+                                      onClick={() => togglePermCell(f, r.rol)}
+                                      disabled={locked}
+                                      aria-label={`${f.label} — ${r.label}`}
+                                      aria-pressed={checked}
+                                      title={locked
+                                        ? (r.rol === 'admin'
+                                            ? 'Administratorul are întotdeauna acces complet'
+                                            : f.admin_only
+                                              ? 'Funcție rezervată administratorului'
+                                              : 'Funcție mereu disponibilă utilizatorilor autentificați')
+                                        : (checked ? 'Click pentru a ascunde' : 'Click pentru a activa')}
+                                      className={`w-6 h-6 rounded-md border-2 inline-flex items-center justify-center transition-all ${
+                                        checked
+                                          ? locked
+                                            ? 'bg-slate-300 border-slate-300 text-white cursor-not-allowed'
+                                            : 'bg-emerald-500 border-emerald-500 text-white hover:bg-emerald-600'
+                                          : locked
+                                            ? 'bg-slate-50 border-slate-200 cursor-not-allowed'
+                                            : 'bg-white border-slate-300 hover:border-emerald-400'
+                                      }`}
+                                    >
+                                      {checked && <CheckCircle size={13} />}
+                                    </button>
+                                  </td>
+                                );
+                              })}
+                            </tr>
+                          ))}
+                        </React.Fragment>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Actions */}
+              <div className="flex flex-col sm:flex-row gap-3 mb-4">
+                <button
+                  onClick={handleSavePermissions}
+                  disabled={permSaving || !permDirty}
+                  className="flex-1 bg-emerald-600 text-white py-3 rounded-lg font-medium hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2"
+                >
+                  <Save size={16} />
+                  {permSaving ? 'Se salvează...' : permDirty ? 'Salvează drepturile' : 'Nicio modificare'}
+                </button>
+                <button
+                  onClick={() => { if (permData) { setPermDraft(permData.matrix); setPermMessage(null); } }}
+                  disabled={permSaving || !permDirty}
+                  className="sm:w-48 border border-slate-300 text-slate-700 py-3 rounded-lg font-medium hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                >
+                  Anulează modificările
+                </button>
+                <button
+                  onClick={handleResetPermissions}
+                  disabled={permSaving}
+                  className="sm:w-48 border border-slate-300 text-slate-600 py-3 rounded-lg font-medium hover:bg-slate-50 disabled:opacity-50 transition-colors flex items-center justify-center gap-2"
+                >
+                  <RotateCcw size={15} /> Valori implicite
+                </button>
+              </div>
+
+              {permMessage && (
+                <div className={`p-4 rounded-lg mb-4 text-sm font-medium ${
+                  permMessage.type === 'success'
+                    ? 'bg-green-50 text-green-700 border border-green-200'
+                    : 'bg-red-50 text-red-700 border border-red-200'
+                }`}>
+                  {permMessage.text}
+                </div>
+              )}
+
+              <div className="bg-slate-100 rounded-lg p-4 text-xs text-slate-500 space-y-1">
+                <p className="font-medium text-slate-600">Cum se aplică regulile:</p>
+                <p>Aceeași matrice controlează meniul din aplicație și accesul la API. Ascunderea unei pagini blochează efectiv și endpoint-urile aferente, cu excepția celor marcate <strong>doar UI</strong>, care nu au un endpoint propriu.</p>
+                <p>Administratorul păstrează întotdeauna acces complet, iar funcțiile marcate <strong>doar admin</strong> nu pot fi acordate altui rol — protecție împotriva blocării accidentale în afara aplicației.</p>
+                <p>Modificările sunt vizibile imediat pentru tine; pentru ceilalți utilizatori se propagă în cel mult un minut.</p>
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+    );
+  };
+
   const renderSpeteANAP = () => {
     return (
       <div className="h-full flex flex-col p-4 md:p-6 overflow-auto">
@@ -8112,6 +8553,7 @@ const App = () => {
         {mode === 'dosare' && renderDosare()}
         {mode === 'alerts' && renderAlerts()}
         {mode === 'settings' && canAccess('settings') && renderSettings()}
+        {mode === 'permissions' && canAccess('permissions') && renderPermissions()}
         {mode === 'profile' && renderProfile()}
         {mode === 'pricing' && renderPricing()}
         </div>
