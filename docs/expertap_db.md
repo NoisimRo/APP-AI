@@ -24,6 +24,10 @@
  public | users                    | table | expertap | permanent   | heap          | 8192 bytes |
 (19 rows)
 
+> ⚠️ Listarea de mai sus este din 2026-04-05 și **nu include `role_permissions`**,
+> creat pe 2026-08-03 (vezi secțiunea dedicată mai jos). Producția are 20 de tabele.
+> La următoarea rulare `\dt+`, înlocuiți blocul de mai sus cu output-ul proaspăt.
+
 
 # \d decizii_cnsc
                               Table "public.decizii_cnsc"
@@ -549,21 +553,36 @@ instrumente vede fiecare tip de utilizator. Editată din pagina admin
 
 Rolul `anonymous` este un pseudo-rol pentru vizitatorii neautentificați.
 
-⚠️ **Output-ul verbatim `\d role_permissions` din producție lipsește încă.**
-Structura de mai jos este DDL-ul exact executat pe 2026-08-03, nu o citire din
-producție. La următoarea sincronizare, înlocuiți cu output-ul real.
-
-```sql
-CREATE TABLE role_permissions (
-  rol        VARCHAR(30) PRIMARY KEY,
-  features   JSONB NOT NULL DEFAULT '[]'::jsonb,
-  updated_by UUID REFERENCES users(id) ON DELETE SET NULL,
-  updated_at TIMESTAMP NOT NULL DEFAULT now()
-);
+```
+# \d role_permissions
+                        Table "public.role_permissions"
+   Column   |            Type             | Collation | Nullable |   Default
+------------+-----------------------------+-----------+----------+-------------
+ rol        | character varying(30)       |           | not null |
+ features   | jsonb                       |           | not null | '[]'::jsonb
+ updated_by | uuid                        |           |          |
+ updated_at | timestamp without time zone |           | not null | now()
+Indexes:
+    "role_permissions_pkey" PRIMARY KEY, btree (rol)
+Foreign-key constraints:
+    "role_permissions_updated_by_fkey" FOREIGN KEY (updated_by) REFERENCES users(id) ON DELETE SET NULL
 ```
 
-Conținut la seed (6 rânduri): `anonymous` 2 funcții, `registered` 8,
-`paid_basic` 16, `paid_pro` 19, `paid_enterprise` 19, `admin` 22.
+Conținut la seed, verificat în producție 2026-08-03 (6 rânduri):
+
+```
+SELECT rol, jsonb_array_length(features) AS nr_functii FROM role_permissions ORDER BY nr_functii;
+
+       rol       | nr_functii
+-----------------+------------
+ anonymous       |          2
+ registered      |          8
+ paid_basic      |         16
+ paid_pro        |         19
+ paid_enterprise |         19
+ admin           |         22
+(6 rows)
+```
 
 Valorile implicite sunt generate din `DEFAULT_ROLE_FEATURES`
 (`backend/app/core/permissions.py`) — la orice modificare a catalogului de
@@ -625,4 +644,4 @@ servește valorile implicite din cod și semnalează în UI că nimic nu e persi
 | 2026-04-05 | `CREATE TABLE alert_rules (...)` + 2 indexuri (user_id, activ) — Sprint 4: Alerte Decizii (2.3) | Utilizator | DA |
 | 2026-04-05 | `CREATE TABLE document_comments (...)` + 3 indexuri (document_id, user_id, resolved) — Sprint 4: Comentarii Documente (3.3) | Utilizator | DA |
 | 2026-04-06 | `CREATE TABLE dosar_documents (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), dosar_id UUID NOT NULL REFERENCES dosare(id) ON DELETE CASCADE, filename VARCHAR(500) NOT NULL, mime_type VARCHAR(100), file_size INTEGER, extracted_text TEXT NOT NULL, text_preview VARCHAR(500), text_stats JSONB, ordine INTEGER NOT NULL DEFAULT 0, created_at TIMESTAMP NOT NULL DEFAULT now(), updated_at TIMESTAMP NOT NULL DEFAULT now()); CREATE INDEX ix_dosardoc_dosar ON dosar_documents(dosar_id);` — Documente atașate la dosare (text extras stocat în DB) | Utilizator | DA |
-| 2026-08-03 | `CREATE TABLE role_permissions (rol VARCHAR(30) PRIMARY KEY, features JSONB NOT NULL DEFAULT '[]'::jsonb, updated_by UUID REFERENCES users(id) ON DELETE SET NULL, updated_at TIMESTAMP NOT NULL DEFAULT now());` + `INSERT` seed 6 roluri (anonymous/registered/paid_basic/paid_pro/paid_enterprise/admin) — matricea de drepturi per rol, pagina „Drepturi & Roluri" | Utilizator | DA (verificat prin `jsonb_array_length`: 2/8/16/19/19/22; output `\d` verbatim încă nepreluat) |
+| 2026-08-03 | `CREATE TABLE role_permissions (rol VARCHAR(30) PRIMARY KEY, features JSONB NOT NULL DEFAULT '[]'::jsonb, updated_by UUID REFERENCES users(id) ON DELETE SET NULL, updated_at TIMESTAMP NOT NULL DEFAULT now());` + `INSERT` seed 6 roluri (anonymous/registered/paid_basic/paid_pro/paid_enterprise/admin) — matricea de drepturi per rol, pagina „Drepturi & Roluri" | Utilizator | DA (`\d role_permissions` + `jsonb_array_length` 2/8/16/19/19/22 preluate din producție) |
