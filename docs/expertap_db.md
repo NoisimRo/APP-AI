@@ -540,17 +540,18 @@ Foreign-key constraints:
 
 ---
 
-# Migrări în așteptare (NEEXECUTATE în producție)
+# role_permissions
 
-Comenzile de mai jos sunt propuse de cod, dar **nu au fost rulate încă**. După
-executare, mutați intrarea în „Changelog Schema Producție" și adăugați output-ul
-`\d <table>` mai sus.
+Matricea de drepturi per rol — sursa unică de adevăr pentru ce pagini și
+instrumente vede fiecare tip de utilizator. Editată din pagina admin
+„Drepturi & Roluri", impusă de `require_feature` prin
+`backend/app/core/permissions.py`.
 
-## `role_permissions` — matricea de drepturi per rol (pagina „Drepturi & Roluri")
+Rolul `anonymous` este un pseudo-rol pentru vizitatorii neautentificați.
 
-Aplicația funcționează și fără acest tabel: `app/core/permissions.py` detectează
-lipsa lui și servește valorile implicite din cod, semnalând în UI că nimic nu e
-persistat. Salvarea din pagina de admin va eșua până la rularea migrării.
+⚠️ **Output-ul verbatim `\d role_permissions` din producție lipsește încă.**
+Structura de mai jos este DDL-ul exact executat pe 2026-08-03, nu o citire din
+producție. La următoarea sincronizare, înlocuiți cu output-ul real.
 
 ```sql
 CREATE TABLE role_permissions (
@@ -559,26 +560,21 @@ CREATE TABLE role_permissions (
   updated_by UUID REFERENCES users(id) ON DELETE SET NULL,
   updated_at TIMESTAMP NOT NULL DEFAULT now()
 );
-
--- Seed cu valorile implicite (identice cu DEFAULT_ROLE_FEATURES din
--- backend/app/core/permissions.py). Rolul 'anonymous' este un pseudo-rol
--- pentru vizitatorii neautentificați.
-INSERT INTO role_permissions (rol, features) VALUES
-  ('anonymous', '["chat","pricing"]'::jsonb),
-  ('registered', '["chat","datalake","spete","dashboard","analytics","rag","profile","pricing"]'::jsonb),
-  ('paid_basic', '["chat","datalake","spete","dashboard","analytics","strategy","dosare","alerts","compliance","drafter","redflags","clarification","rag","comments","profile","pricing"]'::jsonb),
-  ('paid_pro', '["chat","datalake","spete","dashboard","analytics","strategy","dosare","alerts","multi_document","compliance","drafter","redflags","clarification","rag","training","export","comments","profile","pricing"]'::jsonb),
-  ('paid_enterprise', '["chat","datalake","spete","dashboard","analytics","strategy","dosare","alerts","multi_document","compliance","drafter","redflags","clarification","rag","training","export","comments","profile","pricing"]'::jsonb),
-  ('admin', '["chat","datalake","spete","dashboard","analytics","strategy","dosare","alerts","multi_document","compliance","drafter","redflags","clarification","rag","training","export","comments","settings","permissions","users","profile","pricing"]'::jsonb)
-ON CONFLICT (rol) DO NOTHING;
 ```
 
-Seed-ul este opțional — la prima salvare din pagina de admin rândurile lipsă se
-creează automat. Rularea doar a `CREATE TABLE` este suficientă.
+Conținut la seed (6 rânduri): `anonymous` 2 funcții, `registered` 8,
+`paid_basic` 16, `paid_pro` 19, `paid_enterprise` 19, `admin` 22.
+
+Valorile implicite sunt generate din `DEFAULT_ROLE_FEATURES`
+(`backend/app/core/permissions.py`) — la orice modificare a catalogului de
+funcții, regenerați seed-ul din cod, nu manual.
+
+Aplicația funcționează și fără acest tabel: serviciul detectează lipsa lui,
+servește valorile implicite din cod și semnalează în UI că nimic nu e persistat.
 
 ---
 
-# Ultima sincronizare cu producția: 2026-04-05
+# Ultima sincronizare cu producția: 2026-08-03
 
 # Changelog Schema Producție
 
@@ -629,3 +625,4 @@ creează automat. Rularea doar a `CREATE TABLE` este suficientă.
 | 2026-04-05 | `CREATE TABLE alert_rules (...)` + 2 indexuri (user_id, activ) — Sprint 4: Alerte Decizii (2.3) | Utilizator | DA |
 | 2026-04-05 | `CREATE TABLE document_comments (...)` + 3 indexuri (document_id, user_id, resolved) — Sprint 4: Comentarii Documente (3.3) | Utilizator | DA |
 | 2026-04-06 | `CREATE TABLE dosar_documents (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), dosar_id UUID NOT NULL REFERENCES dosare(id) ON DELETE CASCADE, filename VARCHAR(500) NOT NULL, mime_type VARCHAR(100), file_size INTEGER, extracted_text TEXT NOT NULL, text_preview VARCHAR(500), text_stats JSONB, ordine INTEGER NOT NULL DEFAULT 0, created_at TIMESTAMP NOT NULL DEFAULT now(), updated_at TIMESTAMP NOT NULL DEFAULT now()); CREATE INDEX ix_dosardoc_dosar ON dosar_documents(dosar_id);` — Documente atașate la dosare (text extras stocat în DB) | Utilizator | DA |
+| 2026-08-03 | `CREATE TABLE role_permissions (rol VARCHAR(30) PRIMARY KEY, features JSONB NOT NULL DEFAULT '[]'::jsonb, updated_by UUID REFERENCES users(id) ON DELETE SET NULL, updated_at TIMESTAMP NOT NULL DEFAULT now());` + `INSERT` seed 6 roluri (anonymous/registered/paid_basic/paid_pro/paid_enterprise/admin) — matricea de drepturi per rol, pagina „Drepturi & Roluri" | Utilizator | DA (verificat prin `jsonb_array_length`: 2/8/16/19/19/22; output `\d` verbatim încă nepreluat) |
