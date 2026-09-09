@@ -95,7 +95,7 @@ class TestCriticismCodes:
 
     def test_get_criticism_description(self):
         """Should return correct description for known codes."""
-        assert "experiență similară" in get_criticism_description("D1")
+        assert "experiența similară" in get_criticism_description("D1")
         assert "Respingerea ofertei" in get_criticism_description("R2")
 
     def test_get_criticism_description_unknown(self):

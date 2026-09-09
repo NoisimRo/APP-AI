@@ -5,10 +5,15 @@ import sys
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
+
+from app.core.config import get_settings
+from app.core.middleware import BodySizeLimitMiddleware, security_headers_middleware
+
+settings = get_settings()
 
 # Early startup logging for debugging
 print(f"[STARTUP] Python: {sys.version}", flush=True)
@@ -59,6 +64,22 @@ async def lifespan(app: FastAPI):
         pass
 
 
+def resolve_static_file(static_root: Path, requested: str) -> Path | None:
+    """Map a URL path onto a file inside ``static_root``, or None.
+
+    The raw request path can carry ``..`` segments (``/..%2f..%2fapp/core/config.py``);
+    anything that resolves outside the static directory is refused so the
+    SPA catch-all can never serve application source or system files.
+    """
+    try:
+        candidate = (static_root / requested).resolve()
+    except (OSError, ValueError):
+        return None
+    if candidate == static_root or not candidate.is_relative_to(static_root):
+        return None
+    return candidate if candidate.is_file() else None
+
+
 # Create FastAPI app
 app = FastAPI(
     title="ExpertAP",
@@ -67,14 +88,37 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# CORS
+# CORS — the SPA is served from this same origin, so only the explicitly
+# configured dev/preview origins may make cross-origin credentialed calls.
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=settings.cors_origin_list,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Security headers on every response + hard cap on request body size.
+app.middleware("http")(security_headers_middleware)
+app.add_middleware(BodySizeLimitMiddleware, max_bytes=settings.max_request_body_bytes)
+
+
+@app.exception_handler(HTTPException)
+async def _mask_server_errors(request: Request, exc: HTTPException) -> JSONResponse:
+    """Hide internal exception text from 5xx responses in production.
+
+    Many handlers raise ``HTTPException(500, detail=str(e))``; in production
+    that leaks stack details, DB errors and file paths to the caller. The
+    full error is still logged where it was raised.
+    """
+    detail = exc.detail
+    if exc.status_code >= 500 and settings.is_production:
+        detail = "Eroare internă. Încercați din nou mai târziu."
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={"detail": detail},
+        headers=getattr(exc, "headers", None),
+    )
 
 
 @app.get("/health")
@@ -102,14 +146,18 @@ async def deep_health_check():
         else:
             components["database"] = {"status": "unavailable"}
     except Exception as e:
-        components["database"] = {"status": "error", "error": str(e)}
+        print(f"[HEALTH] database check failed: {e}", flush=True)
+        components["database"] = {"status": "error"}
 
     # Redis check
     try:
         from app.core.redis import health_check as redis_health
-        components["redis"] = await redis_health()
+        redis_status = await redis_health()
+        redis_status.pop("error", None)
+        components["redis"] = redis_status
     except Exception as e:
-        components["redis"] = {"status": "error", "error": str(e)}
+        print(f"[HEALTH] redis check failed: {e}", flush=True)
+        components["redis"] = {"status": "error"}
 
     # LLM provider check
     try:
@@ -129,7 +177,8 @@ async def deep_health_check():
         else:
             components["llm"] = {"status": "unavailable", "reason": "no_database"}
     except Exception as e:
-        components["llm"] = {"status": "error", "error": str(e)}
+        print(f"[HEALTH] llm check failed: {e}", flush=True)
+        components["llm"] = {"status": "error"}
 
     all_healthy = all(
         c.get("status") in ("healthy", "configured")
@@ -174,20 +223,20 @@ if STATIC_DIR.exists():
         """Serve the frontend index.html."""
         return FileResponse(STATIC_DIR / "index.html")
 
+    STATIC_ROOT = STATIC_DIR.resolve()
+
     @app.get("/{full_path:path}")
     async def serve_spa(full_path: str):
         """Serve SPA - return index.html for all non-API routes."""
         # Skip API routes - let FastAPI handle them
         if full_path.startswith("api/"):
-            from fastapi import HTTPException
             raise HTTPException(status_code=404, detail="Not Found")
 
-        # Check if file exists in static dir
-        file_path = STATIC_DIR / full_path
-        if file_path.exists() and file_path.is_file():
+        file_path = resolve_static_file(STATIC_ROOT, full_path)
+        if file_path is not None:
             return FileResponse(file_path)
         # Return index.html for SPA routing
-        return FileResponse(STATIC_DIR / "index.html")
+        return FileResponse(STATIC_ROOT / "index.html")
 
     print("[STARTUP] Frontend routes configured", flush=True)
 else:

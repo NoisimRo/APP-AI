@@ -1,6 +1,5 @@
 import React, { useState, useRef, useEffect, useMemo } from "react";
 import { createRoot } from "react-dom/client";
-import { GoogleGenAI } from "@google/genai";
 import {
   Scale,
   AlertTriangle,
@@ -577,7 +576,6 @@ const StatCard = ({ label, value, icon: Icon, color }: { label: string, value: s
 
 const App = () => {
   const [mode, setMode] = useState<AppMode>('chat');
-  const [apiKey] = useState(process.env.API_KEY || "");
   const [files, setFiles] = useState<UploadedFile[]>([]);
   const [fileSearch, setFileSearch] = useState("");
   const [isUploading, setIsUploading] = useState(false);
@@ -1089,8 +1087,6 @@ const App = () => {
 
   const chatEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-
-  const ai = new GoogleGenAI({ apiKey });
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -8905,10 +8901,7 @@ const App = () => {
 
                   try {
                     const endpoint = files.length === 1 ? '/api/v1/decisions/import' : '/api/v1/decisions/import/batch';
-                    const token = localStorage.getItem('access_token');
-                    const headers: Record<string, string> = {};
-                    if (token) headers['Authorization'] = `Bearer ${token}`;
-                    const res = await fetch(endpoint, { method: 'POST', headers, body: formData });
+                    const res = await authFetch(endpoint, { method: 'POST', body: formData });
                     const data = await res.json();
                     if (!res.ok) {
                       setImportResult({ error: data.detail || `Eroare HTTP ${res.status}` });

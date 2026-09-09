@@ -7,8 +7,10 @@ from fastapi import APIRouter, HTTPException, UploadFile, File, Form, Depends, R
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import get_settings
 from app.core.logging import get_logger
 from app.core.rate_limiter import require_rate_limit, increment_usage
+from app.core.uploads import read_upload
 from app.db.session import get_session
 from app.models.decision import User
 from app.services.document_processor import DocumentProcessor
@@ -63,6 +65,11 @@ async def analyze_document(request: DocumentAnalyzeRequest) -> DocumentAnalyzeRe
         mime_type=request.mime_type,
         content_length=len(request.content)
     )
+
+    # base64 inflates by 4/3 — bound the encoded payload accordingly.
+    max_encoded = get_settings().max_upload_bytes * 4 // 3 + 4
+    if len(request.content) > max_encoded:
+        raise HTTPException(status_code=413, detail="Fișier prea mare")
 
     try:
         # Initialize document processor
@@ -122,8 +129,8 @@ async def upload_document(file: UploadFile = File(...)) -> DocumentAnalyzeRespon
     )
 
     try:
-        # Read file content
-        file_content = await file.read()
+        # Read file content (bounded)
+        file_content = await read_upload(file)
 
         # Initialize document processor
         processor = DocumentProcessor()
@@ -184,7 +191,7 @@ async def extract_entities(
     doc_text = text
     if file and not doc_text:
         processor = DocumentProcessor()
-        content = await file.read()
+        content = await read_upload(file)
         filename = file.filename or "document.txt"
         doc_text = processor.extract_text_from_file(content, filename)
 

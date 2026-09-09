@@ -1,11 +1,10 @@
 """Authentication API — register, login, token refresh, profile, email verification."""
 
-import random
 import secrets
 import string
 from datetime import datetime, timedelta
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordRequestForm
 from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy import select
@@ -18,6 +17,7 @@ from app.core.auth import (
     get_password_hash,
     verify_password,
 )
+from app.core import throttle
 from app.core.deps import get_current_active_user
 from app.core.logging import get_logger
 from app.db.session import get_session
@@ -27,13 +27,25 @@ from app.services.email_service import send_reset_password_email, send_verificat
 router = APIRouter()
 logger = get_logger(__name__)
 
+# Abuse limits (attempts per window). Keyed per client IP and, where an
+# account is involved, per account too — so one attacker cannot lock
+# everyone out, and a distributed attacker cannot hammer one account.
+LOGIN_IP_LIMIT = (30, 15 * 60)
+LOGIN_ACCOUNT_LIMIT = (10, 15 * 60)
+REGISTER_IP_LIMIT = (5, 60 * 60)
+FORGOT_IP_LIMIT = (10, 60 * 60)
+FORGOT_ACCOUNT_LIMIT = (3, 60 * 60)
+RESET_IP_LIMIT = (10, 60 * 60)
+VERIFY_ACCOUNT_LIMIT = (10, 60 * 60)
+THROTTLE_MESSAGE = "Prea multe încercări. Reîncercați mai târziu."
+
 
 # =============================================================================
 # PYDANTIC SCHEMAS
 # =============================================================================
 
 class RegisterRequest(BaseModel):
-    email: str = Field(..., min_length=5, max_length=255)
+    email: EmailStr = Field(..., max_length=255)
     password: str = Field(..., min_length=8, max_length=128)
     nume: str | None = Field(None, max_length=200)
 
@@ -55,7 +67,7 @@ class ChangePasswordRequest(BaseModel):
 
 
 class ForgotPasswordRequest(BaseModel):
-    email: str
+    email: EmailStr = Field(..., max_length=255)
 
 
 class ResetPasswordRequest(BaseModel):
@@ -76,8 +88,8 @@ class ResendVerificationRequest(BaseModel):
 
 
 def _generate_verification_code() -> str:
-    """Generate a 6-digit verification code."""
-    return "".join(random.choices(string.digits, k=6))
+    """Generate a 6-digit verification code from a CSPRNG."""
+    return "".join(secrets.choice(string.digits) for _ in range(6))
 
 
 def _user_to_dict(user: User, queries_today: int = 0, queries_limit: int = 5) -> dict:
@@ -113,9 +125,15 @@ def _create_tokens(user: User) -> tuple[str, str]:
 @router.post("/register", response_model=LoginResponse)
 async def register(
     req: RegisterRequest,
+    http_request: Request,
     session: AsyncSession = Depends(get_session),
 ):
     """Register a new user account."""
+    await throttle.enforce(
+        f"register:ip:{throttle.get_client_ip(http_request)}",
+        *REGISTER_IP_LIMIT, THROTTLE_MESSAGE,
+    )
+
     # Check email uniqueness
     result = await session.execute(
         select(User).where(User.email == req.email.lower().strip())
@@ -161,13 +179,19 @@ async def register(
 
 @router.post("/login", response_model=LoginResponse)
 async def login(
+    http_request: Request,
     form_data: OAuth2PasswordRequestForm = Depends(),
     session: AsyncSession = Depends(get_session),
 ):
     """Login with email and password. Uses OAuth2 form for Swagger compatibility."""
-    result = await session.execute(
-        select(User).where(User.email == form_data.username.lower().strip())
+    email = form_data.username.lower().strip()[:255]
+    await throttle.enforce(
+        f"login:ip:{throttle.get_client_ip(http_request)}",
+        *LOGIN_IP_LIMIT, THROTTLE_MESSAGE,
     )
+    await throttle.enforce(f"login:acct:{email}", *LOGIN_ACCOUNT_LIMIT, THROTTLE_MESSAGE)
+
+    result = await session.execute(select(User).where(User.email == email))
     user = result.scalar_one_or_none()
 
     if not user or not user.password_hash:
@@ -300,7 +324,10 @@ async def verify_email(
             detail="Codul de verificare a expirat. Solicită un cod nou.",
         )
 
-    if user.verification_code != req.code:
+    # A 6-digit code has only 10^6 values — cap guesses per account.
+    await throttle.enforce(f"verify:acct:{user.id}", *VERIFY_ACCOUNT_LIMIT, THROTTLE_MESSAGE)
+
+    if not secrets.compare_digest(user.verification_code.encode(), req.code.encode()):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Cod de verificare incorect.",
@@ -355,12 +382,20 @@ async def resend_verification(
 @router.post("/forgot-password")
 async def forgot_password(
     req: ForgotPasswordRequest,
+    http_request: Request,
     session: AsyncSession = Depends(get_session),
 ):
     """Request password reset. Always returns 200 (no email enumeration)."""
-    result = await session.execute(
-        select(User).where(User.email == req.email.lower().strip())
+    email = req.email.lower().strip()
+    await throttle.enforce(
+        f"forgot:ip:{throttle.get_client_ip(http_request)}",
+        *FORGOT_IP_LIMIT, THROTTLE_MESSAGE,
     )
+    # Per-address cap keeps the endpoint from being used to bomb an inbox.
+    # Applied before the lookup so timing does not reveal whether it exists.
+    await throttle.enforce(f"forgot:acct:{email}", *FORGOT_ACCOUNT_LIMIT, THROTTLE_MESSAGE)
+
+    result = await session.execute(select(User).where(User.email == email))
     user = result.scalar_one_or_none()
 
     if user and user.password_hash:
@@ -384,9 +419,15 @@ async def forgot_password(
 @router.post("/reset-password")
 async def reset_password(
     req: ResetPasswordRequest,
+    http_request: Request,
     session: AsyncSession = Depends(get_session),
 ):
     """Reset password using a valid reset token."""
+    await throttle.enforce(
+        f"reset:ip:{throttle.get_client_ip(http_request)}",
+        *RESET_IP_LIMIT, THROTTLE_MESSAGE,
+    )
+
     # Find users with non-expired reset tokens
     result = await session.execute(
         select(User).where(

@@ -133,6 +133,15 @@ async def update_user(
     if not user:
         raise HTTPException(status_code=404, detail="Utilizator inexistent")
 
+    # Guard against locking yourself out of the admin panel.
+    if user.id == admin.id and (
+        (req.rol is not None and req.rol != "admin") or req.activ is False
+    ):
+        raise HTTPException(
+            status_code=400,
+            detail="Nu vă puteți retrograda sau dezactiva propriul cont",
+        )
+
     if req.rol is not None:
         if req.rol not in VALID_ROLES:
             raise HTTPException(

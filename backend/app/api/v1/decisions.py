@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.logging import get_logger
 from app.core.deps import require_role
+from app.core.uploads import read_upload
 from app.db.session import get_session, is_db_available
 from app.models.decision import DecizieCNSC, ArgumentareCritica, NomenclatorCPV, User
 from app.services.parser import CNSCDecisionParser
@@ -1086,10 +1087,11 @@ class ImportResult(BaseModel):
     details: list[dict] = Field(default_factory=list)
 
 
-@router.post("/import", response_model=ImportResult)
+@router.post("/import", response_model=ImportResult, tags=["admin"])
 async def import_decisions(
     file: UploadFile = File(..., description="Decision file (.json or .txt)"),
     session: AsyncSession = Depends(get_session),
+    _admin: User = Depends(require_role("admin")),
 ):
     """Import one or more CNSC decisions from a JSON or .txt file.
 
@@ -1138,7 +1140,7 @@ async def import_decisions(
     if not is_db_available():
         raise HTTPException(status_code=503, detail="Baza de date nu este disponibilă")
 
-    content_bytes = await file.read()
+    content_bytes = await read_upload(file)
     try:
         content = content_bytes.decode("utf-8")
     except UnicodeDecodeError:
@@ -1161,10 +1163,11 @@ async def import_decisions(
     return result
 
 
-@router.post("/import/batch", response_model=ImportResult)
+@router.post("/import/batch", response_model=ImportResult, tags=["admin"])
 async def import_decisions_batch(
     files: list[UploadFile] = File(..., description="Multiple decision files (.json or .txt)"),
     session: AsyncSession = Depends(get_session),
+    _admin: User = Depends(require_role("admin")),
 ):
     """Import multiple decision files at once (batch upload)."""
     if not is_db_available():
@@ -1182,7 +1185,7 @@ async def import_decisions_batch(
             result.errors.append(f"{file.filename}: format neacceptat (doar .json/.txt)")
             continue
 
-        content_bytes = await file.read()
+        content_bytes = await read_upload(file)
         try:
             content = content_bytes.decode("utf-8")
         except UnicodeDecodeError:

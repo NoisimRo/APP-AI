@@ -1,14 +1,17 @@
 """Saved content API — CRUD for conversations, documents, red flags, training materials.
 
-All endpoints use optional auth: authenticated users see only their own content,
-anonymous users see only anonymous (user_id=NULL) content.
+Authenticated users see only their own content (admins see everything).
+Anonymous callers get empty lists and 401 on any read-by-id or write:
+saved items regularly contain uploaded client documents, and a shared
+``user_id IS NULL`` pool would let any visitor read or delete every other
+visitor's items.
 """
 
 from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Depends, Query
 from pydantic import BaseModel, Field
-from sqlalchemy import select, func, true as sa_true
+from sqlalchemy import select, func, false as sa_false, true as sa_true
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -29,26 +32,32 @@ def _is_admin(user: Optional[User]) -> bool:
     return user is not None and user.rol == "admin"
 
 
+def _require_user(user: Optional[User]) -> User:
+    """Raise 401 for anonymous callers; saved content is per-account only."""
+    if user is None:
+        raise HTTPException(401, "Autentificare necesară pentru conținut salvat")
+    return user
+
+
 def _ownership_filter(model_class, user: Optional[User]):
     """Return a SQLAlchemy where clause filtering by ownership.
 
-    Admin users bypass the filter and see all records.
+    Admin users bypass the filter and see all records. Anonymous callers
+    match nothing.
     """
     if user and user.rol == "admin":
         return sa_true()  # No filter — admin sees everything
     if user:
         return model_class.user_id == user.id
-    return model_class.user_id.is_(None)
+    return sa_false()
 
 
 def _check_ownership(obj, user: Optional[User]):
-    """Raise 403 if user doesn't own the object. Admin bypasses."""
-    if user and user.rol == "admin":
+    """Raise 401/403 unless the user owns the object. Admin bypasses."""
+    user = _require_user(user)
+    if user.rol == "admin":
         return  # Admin can access everything
-    obj_user_id = getattr(obj, "user_id", None)
-    if user and obj_user_id != user.id:
-        raise HTTPException(403, "Nu aveți acces la această resursă")
-    if not user and obj_user_id is not None:
+    if getattr(obj, "user_id", None) != user.id:
         raise HTTPException(403, "Nu aveți acces la această resursă")
 
 
@@ -208,7 +217,7 @@ async def save_conversation(
         primul_mesaj=request.mesaje[0].continut[:500] if request.mesaje else None,
         numar_mesaje=len(request.mesaje),
         scope_id=request.scope_id,
-        user_id=user.id if user else None,
+        user_id=_require_user(user).id,
         dosar_id=request.dosar_id,
     )
     session.add(conv)
@@ -369,7 +378,7 @@ async def save_document(
         continut=request.continut,
         referinte_decizii=request.referinte_decizii or [],
         metadata_=request.metadata or {},
-        user_id=user.id if user else None,
+        user_id=_require_user(user).id,
         dosar_id=request.dosar_id,
     )
     session.add(doc)
@@ -499,7 +508,7 @@ async def save_redflags(
         critice=request.critice,
         medii=request.medii,
         scazute=request.scazute,
-        user_id=user.id if user else None,
+        user_id=_require_user(user).id,
         dosar_id=request.dosar_id,
     )
     session.add(rf)
@@ -633,7 +642,7 @@ async def save_training(
         legislatie_citata=request.legislatie_citata or [],
         jurisprudenta_citata=request.jurisprudenta_citata or [],
         metadata_=request.metadata or {},
-        user_id=user.id if user else None,
+        user_id=_require_user(user).id,
         dosar_id=request.dosar_id,
     )
     session.add(tm)

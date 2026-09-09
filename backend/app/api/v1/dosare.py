@@ -14,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.core.deps import get_current_active_user, get_optional_user, require_feature
+from app.core.uploads import read_upload
 from app.core.logging import get_logger
 from app.db.session import get_session, is_db_available
 from app.models.decision import (
@@ -603,9 +604,7 @@ async def upload_dosar_document(
         raise HTTPException(400, f"Limita de {MAX_DOCS_PER_DOSAR} documente per dosar a fost atinsă")
 
     # Read file content
-    file_content = await file.read()
-    if len(file_content) > MAX_FILE_SIZE:
-        raise HTTPException(400, f"Fișier prea mare. Maxim {MAX_FILE_SIZE // (1024*1024)}MB")
+    file_content = await read_upload(file, MAX_FILE_SIZE)
 
     # Extract text
     try:
@@ -750,9 +749,7 @@ async def replace_dosar_document(
     if extension not in ALLOWED_EXTENSIONS:
         raise HTTPException(400, f"Tip fișier neacceptat. Tipuri acceptate: {', '.join(sorted(ALLOWED_EXTENSIONS))}")
 
-    file_content = await file.read()
-    if len(file_content) > MAX_FILE_SIZE:
-        raise HTTPException(400, f"Fișier prea mare. Maxim {MAX_FILE_SIZE // (1024*1024)}MB")
+    file_content = await read_upload(file, MAX_FILE_SIZE)
 
     try:
         extracted_text = _doc_processor.extract_text_from_file(

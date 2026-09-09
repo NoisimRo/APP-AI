@@ -9,6 +9,7 @@ Uses SMTP over SSL. Configure via environment variables:
   - SMTP_SSL (true/false — use implicit SSL via SMTP_SSL, default: true)
 """
 
+import html
 import os
 import smtplib
 from email.mime.multipart import MIMEMultipart
@@ -33,11 +34,12 @@ async def send_verification_email(to_email: str, code: str, name: str | None = N
             "smtp_not_configured",
             message="SMTP credentials not set. Verification email not sent.",
             to=to_email,
-            code=code,
         )
         return
 
-    display_name = name or to_email.split("@")[0]
+    # ``name`` is user-supplied profile text — escape it before interpolating
+    # into the HTML body so a display name cannot inject markup.
+    display_name = html.escape(name or to_email.split("@")[0])
     subject = f"ExpertAP — Cod de verificare: {code}"
 
     html_body = f"""
@@ -103,8 +105,7 @@ async def send_reset_password_email(to_email: str, reset_token: str, name: str |
         )
         return
 
-    display_name = name or to_email.split("@")[0]
-    # Show only first 8 chars in subject for recognition, full token in body
+    display_name = html.escape(name or to_email.split("@")[0])
     subject = "ExpertAP — Resetare parolă"
 
     html_body = f"""

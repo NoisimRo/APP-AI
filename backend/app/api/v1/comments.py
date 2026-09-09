@@ -76,6 +76,27 @@ def _comment_to_response(c: DocumentComment, user_name: str | None = None) -> Co
     )
 
 
+async def _load_accessible_document(
+    session: AsyncSession, document_id: str, user: Optional[User]
+) -> DocumentGenerat:
+    """Return the document if ``user`` may see it (owner or admin), else 401/403/404.
+
+    Comments carry ``anchor_text`` excerpts of the document, so listing them
+    for a document you do not own would leak its content.
+    """
+    if user is None:
+        raise HTTPException(401, "Autentificare necesară")
+    result = await session.execute(
+        select(DocumentGenerat).where(DocumentGenerat.id == document_id)
+    )
+    doc = result.scalar_one_or_none()
+    if not doc:
+        raise HTTPException(404, "Document negăsit")
+    if doc.user_id != user.id and user.rol != "admin":
+        raise HTTPException(403, "Nu aveți acces la acest document")
+    return doc
+
+
 # =============================================================================
 # ENDPOINTS
 # =============================================================================
@@ -91,13 +112,7 @@ async def create_comment(
     if not is_db_available():
         raise HTTPException(status_code=503, detail="Database not available")
 
-    # Verify document exists
-    doc_result = await session.execute(
-        select(DocumentGenerat).where(DocumentGenerat.id == document_id)
-    )
-    doc = doc_result.scalar_one_or_none()
-    if not doc:
-        raise HTTPException(404, "Document negăsit")
+    await _load_accessible_document(session, document_id, user)
 
     comment = DocumentComment(
         document_id=document_id,
@@ -126,13 +141,7 @@ async def list_comments(
     if not is_db_available():
         return []
 
-    # Verify document exists
-    doc_result = await session.execute(
-        select(DocumentGenerat).where(DocumentGenerat.id == document_id)
-    )
-    doc = doc_result.scalar_one_or_none()
-    if not doc:
-        raise HTTPException(404, "Document negăsit")
+    await _load_accessible_document(session, document_id, user)
 
     query = (
         select(DocumentComment)
@@ -167,6 +176,8 @@ async def comment_stats(
     """Get comment statistics for a document."""
     if not is_db_available():
         return CommentStats(total=0, resolved=0, unresolved=0)
+
+    await _load_accessible_document(session, document_id, user)
 
     total_result = await session.execute(
         select(func.count()).where(DocumentComment.document_id == document_id)
@@ -230,6 +241,8 @@ async def resolve_comment(
     if not is_db_available():
         raise HTTPException(status_code=503, detail="Database not available")
 
+    await _load_accessible_document(session, document_id, user)
+
     result = await session.execute(
         select(DocumentComment).where(
             DocumentComment.id == comment_id,
@@ -261,6 +274,8 @@ async def unresolve_comment(
     """Mark a comment as unresolved."""
     if not is_db_available():
         raise HTTPException(status_code=503, detail="Database not available")
+
+    await _load_accessible_document(session, document_id, user)
 
     result = await session.execute(
         select(DocumentComment).where(
