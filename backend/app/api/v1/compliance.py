@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.logging import get_logger
 from app.core.rate_limiter import require_rate_limit, increment_usage
 from app.core.deps import require_feature
+from app.core.uploads import read_upload
 from app.db.session import get_session, is_db_available
 from app.models.decision import User
 from app.services.llm.factory import get_active_llm_provider
@@ -44,7 +45,7 @@ async def check_compliance(
     if file and not doc_text:
         try:
             processor = DocumentProcessor()
-            content = await file.read()
+            content = await read_upload(file)
             filename = file.filename or "document.txt"
             doc_text = processor.extract_text_from_file(content, filename)
             logger.info("compliance_file_extracted", filename=filename, text_length=len(doc_text or ""))

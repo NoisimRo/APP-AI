@@ -3,7 +3,15 @@
 from functools import lru_cache
 from typing import Literal, Optional
 
+from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+# Placeholder shipped in .env.example — must never reach production.
+INSECURE_SECRET_KEYS = {
+    "change-me-in-production",
+    "your-secret-key-change-in-production",
+}
+MIN_SECRET_KEY_LENGTH = 32
 
 
 class Settings(BaseSettings):
@@ -18,9 +26,17 @@ class Settings(BaseSettings):
     # Application
     app_name: str = "ExpertAP"
     environment: Literal["development", "staging", "production", "test"] = "development"
-    debug: bool = True
-    log_level: str = "DEBUG"
+    debug: bool = False
+    log_level: str = "INFO"
     secret_key: str = "change-me-in-production"
+
+    # CORS — comma-separated list of allowed browser origins. The SPA is
+    # served from the same origin as the API, so only dev servers need this.
+    cors_origins: str = "http://localhost:3000,http://localhost:5173,http://127.0.0.1:3000"
+
+    # Largest request body accepted (multipart uploads, base64 payloads).
+    max_request_body_bytes: int = 60 * 1024 * 1024
+    max_upload_bytes: int = 25 * 1024 * 1024
 
     # Database - Optional for demo/test mode
     database_url: Optional[str] = None
@@ -56,6 +72,35 @@ class Settings(BaseSettings):
     enable_red_flags_detector: bool = True
     enable_litigation_predictor: bool = False
     enable_trend_spotter: bool = False
+
+    @model_validator(mode="after")
+    def _reject_insecure_secret_in_production(self) -> "Settings":
+        """Refuse to start in production with a forgeable JWT signing key.
+
+        Every access/refresh token is signed with ``secret_key``; with the
+        placeholder value anyone can mint an admin token. Failing fast beats
+        running exposed.
+        """
+        if self.environment == "production" and not self.secret_key_is_secure:
+            raise ValueError(
+                "SECRET_KEY is unset/placeholder or shorter than "
+                f"{MIN_SECRET_KEY_LENGTH} characters. Set a random secret "
+                "(e.g. `openssl rand -hex 32`) before running in production."
+            )
+        return self
+
+    @property
+    def secret_key_is_secure(self) -> bool:
+        """True if the JWT signing key is not a placeholder and is long enough."""
+        return (
+            self.secret_key not in INSECURE_SECRET_KEYS
+            and len(self.secret_key) >= MIN_SECRET_KEY_LENGTH
+        )
+
+    @property
+    def cors_origin_list(self) -> list[str]:
+        """Parsed ``cors_origins`` (empty entries dropped)."""
+        return [o.strip() for o in self.cors_origins.split(",") if o.strip()]
 
     @property
     def is_production(self) -> bool:

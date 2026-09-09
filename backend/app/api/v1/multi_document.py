@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.logging import get_logger
 from app.core.rate_limiter import require_rate_limit, increment_usage
 from app.core.deps import require_feature
+from app.core.uploads import read_upload
 from app.db.session import get_session, is_db_available
 from app.models.decision import User
 from app.services.llm.factory import get_active_llm_provider
@@ -44,7 +45,7 @@ async def analyze_multi_document(
     # Read all files
     documents = []
     for f in files:
-        content = await f.read()
+        content = await read_upload(f)
         documents.append({
             "filename": f.filename or "unknown",
             "content": content,

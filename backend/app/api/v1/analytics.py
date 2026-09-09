@@ -3,15 +3,16 @@
 import re
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 from sqlalchemy import select, func, case, and_, or_, not_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.logging import get_logger
+from app.core.rate_limiter import require_rate_limit, increment_usage
 from app.core.redis import cache_get_json, cache_set_json
 from app.db.session import get_session, is_db_available
-from app.models.decision import DecizieCNSC, ArgumentareCritica
+from app.models.decision import DecizieCNSC, ArgumentareCritica, User
 
 router = APIRouter()
 logger = get_logger(__name__)
@@ -305,7 +306,9 @@ class PredictRequest(BaseModel):
 @router.post("/predict-outcome")
 async def predict_outcome(
     request: PredictRequest,
+    http_request: Request,
     session: AsyncSession = Depends(get_session),
+    rate_user: Optional[User] = Depends(require_rate_limit),
 ):
     """Predict ADMIS/RESPINS probability based on case parameters.
 
@@ -449,6 +452,8 @@ async def predict_outcome(
     except Exception as e:
         logger.warning("predict_llm_reasoning_failed", error=str(e))
 
+    await increment_usage(rate_user, http_request)
+
     return {
         "prediction": {
             "outcome": predicted_outcome,
@@ -482,7 +487,9 @@ def _parse_bo_reference(ref: str) -> tuple[int, int] | None:
 @router.post("/compare")
 async def compare_decisions(
     request: CompareRequest,
+    http_request: Request,
     session: AsyncSession = Depends(get_session),
+    rate_user: Optional[User] = Depends(require_rate_limit),
 ):
     """Compare 2-3 decisions side-by-side with LLM analysis.
 
@@ -578,6 +585,8 @@ async def compare_decisions(
         llm_analysis = await llm.complete(prompt, temperature=0.2, max_tokens=1500)
     except Exception as e:
         logger.warning("compare_llm_analysis_failed", error=str(e))
+
+    await increment_usage(rate_user, http_request)
 
     return {
         "decisions": decisions_data,

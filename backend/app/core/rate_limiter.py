@@ -12,6 +12,7 @@ from fastapi import Depends, HTTPException, Request, status
 
 from app.core.deps import get_optional_user
 from app.core.logging import get_logger
+from app.core.throttle import get_client_ip
 from app.models.decision import User
 
 logger = get_logger(__name__)
@@ -34,10 +35,7 @@ def _get_identifier(user: Optional[User], request: Request) -> str:
     """Get rate limit identifier: user_id if authenticated, IP if not."""
     if user:
         return f"user:{user.id}"
-    forwarded = request.headers.get("x-forwarded-for")
-    if forwarded:
-        return f"ip:{forwarded.split(',')[0].strip()}"
-    return f"ip:{request.client.host if request.client else 'unknown'}"
+    return f"ip:{get_client_ip(request)}"
 
 
 def _redis_key(identifier: str, date_str: str) -> str:

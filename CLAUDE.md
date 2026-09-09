@@ -276,6 +276,8 @@ Cazuistică oficială ANAP (Autoritatea Națională pentru Achiziții Publice). 
 - Push to `main` branch triggers Cloud Build → Cloud Run
 - Never use `gcloud builds submit` manually
 - Cloud Run URL: `https://expertap-api-850584928584.europe-west1.run.app/`
+- `SECRET_KEY` (JWT signing) comes from Secret Manager (`expertap-secret-key`) via `cloudbuild.yaml`. In `ENVIRONMENT=production` the app refuses to start if it is missing, a placeholder, or shorter than 32 chars. Rotating it logs every user out.
+- `CORS_ORIGINS` defaults to localhost dev servers only — the SPA is served from the API origin, so production needs no extra entry.
 
 ## Testing Considerations
 

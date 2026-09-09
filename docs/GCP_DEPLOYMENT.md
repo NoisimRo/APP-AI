@@ -123,12 +123,21 @@ echo -n "postgresql://expertap_user:YOUR_APP_PASSWORD@/expertap?host=/cloudsql/g
 echo -n "YOUR_GEMINI_API_KEY" | \
     gcloud secrets create gemini-api-key --data-file=-
 
+# Create JWT signing key secret (REQUIRED — the app refuses to start in
+# production with the placeholder value; cloudbuild.yaml mounts it as SECRET_KEY)
+openssl rand -hex 32 | tr -d '\n' | \
+    gcloud secrets create expertap-secret-key --data-file=-
+
 # Grant Cloud Run access to secrets
 gcloud secrets add-iam-policy-binding expertap-db-url \
     --member="serviceAccount:850584928584-compute@developer.gserviceaccount.com" \
     --role="roles/secretmanager.secretAccessor"
 
 gcloud secrets add-iam-policy-binding gemini-api-key \
+    --member="serviceAccount:850584928584-compute@developer.gserviceaccount.com" \
+    --role="roles/secretmanager.secretAccessor"
+
+gcloud secrets add-iam-policy-binding expertap-secret-key \
     --member="serviceAccount:850584928584-compute@developer.gserviceaccount.com" \
     --role="roles/secretmanager.secretAccessor"
 ```

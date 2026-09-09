@@ -4,7 +4,7 @@ from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Depends, Query
 from pydantic import BaseModel, Field
-from sqlalchemy import select, func, or_, cast, String, true as sa_true
+from sqlalchemy import select, func, or_, cast, String, false as sa_false, true as sa_true
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.deps import get_optional_user
@@ -16,22 +16,28 @@ router = APIRouter()
 logger = get_logger(__name__)
 
 
+def _require_user(user: Optional[User]) -> User:
+    """Raise 401 for anonymous callers; scopes are per-account only."""
+    if user is None:
+        raise HTTPException(401, "Autentificare necesară pentru filtre salvate")
+    return user
+
+
 def _scope_ownership_filter(user: Optional[User]):
-    """Filter scopes by ownership. Admin sees all."""
+    """Filter scopes by ownership. Admin sees all; anonymous sees nothing."""
     if user and user.rol == "admin":
         return sa_true()
     if user:
         return SearchScope.user_id == user.id
-    return SearchScope.user_id.is_(None)
+    return sa_false()
 
 
 def _check_scope_ownership(scope: SearchScope, user: Optional[User]):
-    """Raise 403 if user doesn't own the scope. Admin bypasses."""
-    if user and user.rol == "admin":
+    """Raise 401/403 unless the user owns the scope. Admin bypasses."""
+    user = _require_user(user)
+    if user.rol == "admin":
         return
-    if user and scope.user_id != user.id:
-        raise HTTPException(403, "Nu aveți acces la acest filtru")
-    if not user and scope.user_id is not None:
+    if scope.user_id != user.id:
         raise HTTPException(403, "Nu aveți acces la acest filtru")
 
 
@@ -269,7 +275,7 @@ async def create_scope(
         description=request.description,
         filters=filters_dict,
         decision_count=count,
-        user_id=user.id if user else None,
+        user_id=_require_user(user).id,
     )
     session.add(scope)
     await session.commit()
