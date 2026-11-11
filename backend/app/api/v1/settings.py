@@ -39,10 +39,16 @@ PROVIDER_MODELS = {
         "gemini-2.5-flash-lite",
     ],
     "anthropic": [
+        "claude-opus-5-5",  # Implicit — primul din listă = implicit în UI
+        "claude-sonnet-5-5",
+        "claude-haiku-5-5",
+        "claude-fable-5-2",
+        "claude-opus-5",
+        "claude-sonnet-5",
+        "claude-opus-4-8",
         "claude-opus-4-6",
         "claude-sonnet-4-6",
-        "claude-opus-4-5",
-        "claude-sonnet-4-5",
+        "claude-haiku-4-5",
     ],
     "openai": [
         "gpt-5.4-2026-03-05",
@@ -88,7 +94,7 @@ OPENROUTER_FALLBACK_MODELS = [
 # Default model per provider
 DEFAULT_MODELS = {
     "gemini": "gemini-3.1-pro-preview",
-    "anthropic": "claude-sonnet-4-6",
+    "anthropic": "claude-opus-5-5",
     "openai": "gpt-5.4-2026-03-05",
     "groq": "llama-3.3-70b-versatile",
     "openrouter": "openrouter/free",
@@ -105,10 +111,16 @@ MODEL_TOKEN_LIMITS: dict[str, tuple[int, int]] = {
     "gemini-2.5-pro": (1_048_576, 65_536),
     "gemini-2.5-flash-lite": (1_048_576, 65_536),
     # Anthropic
-    "claude-opus-4-6": (200_000, 32_000),
-    "claude-sonnet-4-6": (200_000, 16_000),
-    "claude-opus-4-5": (200_000, 32_000),
-    "claude-sonnet-4-5": (200_000, 16_000),
+    "claude-opus-5-5": (1_000_000, 128_000),
+    "claude-sonnet-5-5": (1_000_000, 128_000),
+    "claude-haiku-5-5": (1_000_000, 128_000),
+    "claude-fable-5-2": (1_000_000, 128_000),
+    "claude-opus-5": (1_000_000, 128_000),
+    "claude-sonnet-5": (1_000_000, 128_000),
+    "claude-opus-4-8": (1_000_000, 128_000),
+    "claude-opus-4-6": (1_000_000, 128_000),
+    "claude-sonnet-4-6": (1_000_000, 64_000),
+    "claude-haiku-4-5": (200_000, 64_000),
     # OpenAI
     "gpt-5.4-2026-03-05": (200_000, 100_000),
     "gpt-5-2025-08-07": (128_000, 32_768),
