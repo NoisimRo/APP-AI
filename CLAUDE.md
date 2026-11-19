@@ -35,6 +35,7 @@ DATABASE_URL="postgresql+asyncpg://..." python scripts/generate_embeddings.py
 
 - **Frontend:** Single `index.tsx` file (React 19 + Vite + TailwindCSS)
 - **Backend:** `backend/app/` - FastAPI with async SQLAlchemy
+- **Modele LLM — fără hardcodare:** pentru Gemini și Claude, lista din Setări, limitele de tokeni, flag-ul thinking și înlocuirea unui model retras vin din API-ul furnizorului (cache 1h). `PROVIDER_MODELS` din `settings.py` e doar ordinea preferată + fallback offline. Un model retras (404) e înlocuit automat cu cel mai nou din aceeași familie; testul de conexiune afișează avertisment. Nu adăuga liste de prefixe de modele în cod.
 - **LLM:** Multi-provider (Gemini + Claude + OpenAI + Groq + OpenRouter) via factory pattern (`backend/app/services/llm/factory.py`). Groq = modele open-source gratuite (Llama, GPT-OSS, Qwen, Llama 4 Scout). OpenRouter = 400+ modele, multe gratuite (suffix `:free`). Fiecare provider cu token-aware context truncation (estimare ~4 chars/token, truncare proporțională automată). Embeddings always on Gemini.
 - **RAG Pipeline:** `backend/app/services/rag.py` - vector search on ArgumentareCritica + LegislatieFragmente + SpeteANAP → LLM generation
 - **Auth:** JWT-based (python-jose + bcrypt), `backend/app/core/auth.py` + `deps.py`. Role-based feature gating + in-memory rate limiting per role.
@@ -79,6 +80,8 @@ DATABASE_URL="postgresql+asyncpg://..." python scripts/generate_embeddings.py
 | `backend/app/services/llm/groq.py` | Groq provider — modele open-source gratuite (Llama, DeepSeek, Qwen) |
 | `backend/app/services/llm/openrouter.py` | OpenRouter provider — 400+ modele, multe gratuite (suffix `:free`) |
 | `backend/app/services/llm/factory.py` | LLM provider factory + `get_active_llm_provider()` |
+| `backend/app/services/llm/gemini_models.py` | Descoperire dinamică modele Gemini (ListModels): listă Setări, limite tokeni, thinking, înlocuire automată la 404 |
+| `backend/app/services/llm/anthropic_models.py` | Descoperire dinamică modele Claude (Models API): listă Setări, limite tokeni, înlocuire automată la 404 |
 | `backend/app/core/encryption.py` | Fernet encryption for API keys |
 | `backend/app/api/v1/settings.py` | LLM Settings API (GET/PUT/test) |
 | `backend/app/services/embedding.py` | Embedding generation service |

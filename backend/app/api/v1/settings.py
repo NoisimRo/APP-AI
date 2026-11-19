@@ -5,8 +5,10 @@ API keys are encrypted before storage.
 OpenRouter models are fetched dynamically from their API.
 """
 
+import hashlib
 import time
 
+import anthropic
 import httpx
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
@@ -19,6 +21,7 @@ from app.core.encryption import encrypt_value, decrypt_value
 from app.core.logging import get_logger
 from app.db.session import get_session
 from app.models.decision import LLMSettings, User
+from app.services.llm.anthropic_models import list_claude_models
 from app.services.llm.gemini_models import list_gemini_models
 from app.services.llm.factory import (
     clear_provider_cache,
@@ -30,7 +33,13 @@ logger = get_logger(__name__)
 
 # Hardcoded model lists per provider
 PROVIDER_MODELS = {
+    # Lista curatoriată = ordinea preferată în UI. Modelele dispărute sunt
+    # ascunse automat, iar cele noi apar automat (vezi _available_gemini_models).
     "gemini": [
+        "gemini-4-neon",
+        "gemini-4-carbon",
+        "gemini-4-argon",
+        "gemini-4-hydrogen",
         "gemini-3.1-pro-preview",
         "gemini-3.1-pro-preview-customtools",
         "gemini-3-flash-preview",
@@ -94,7 +103,7 @@ OPENROUTER_FALLBACK_MODELS = [
 
 # Default model per provider
 DEFAULT_MODELS = {
-    "gemini": "gemini-3.1-pro-preview",
+    "gemini": "gemini-4-neon",
     "anthropic": "claude-opus-5-5",
     "openai": "gpt-5.4-2026-03-05",
     "groq": "llama-3.3-70b-versatile",
@@ -353,7 +362,8 @@ def _build_model_list(model_ids: list[str]) -> list[ModelInfo]:
         limits = (
             MODEL_TOKEN_LIMITS.get(mid)
             or _openrouter_limits_cache.get(mid)
-            or _gemini_limits_cache.get(mid, (0, 0))
+            or _gemini_limits_cache.get(mid)
+            or _claude_limits_cache.get(mid, (0, 0))
         )
         models.append(ModelInfo(id=mid, input_tokens=limits[0], output_tokens=limits[1]))
     # Sortare stabilă: ordinea curatoriată (implicitul primul) se păstrează la egalitate.
@@ -361,8 +371,46 @@ def _build_model_list(model_ids: list[str]) -> list[ModelInfo]:
     return models
 
 
-# Limite de tokeni raportate de Google pentru modelele descoperite dinamic.
+# Limite de tokeni raportate de furnizori pentru modelele descoperite dinamic.
 _gemini_limits_cache: dict[str, tuple[int, int]] = {}
+_claude_limits_cache: dict[str, tuple[int, int]] = {}
+
+
+def _merge_live(curated: list[str], live_ids: set[str]) -> list[str]:
+    """Lista curatoriată filtrată la modelele existente + modelele noi (cele mai noi întâi)."""
+    kept = [m for m in curated if m in live_ids]
+    extra = sorted(
+        (m for m in live_ids if m not in curated and not m.endswith("-latest")),
+        reverse=True,
+    )
+    return kept + extra
+
+
+def _anthropic_api_key(settings_row: LLMSettings | None) -> str | None:
+    if settings_row and settings_row.anthropic_api_key_enc:
+        try:
+            return decrypt_value(settings_row.anthropic_api_key_enc)
+        except Exception:  # noqa: BLE001
+            pass
+    return get_settings().anthropic_api_key or None
+
+
+async def _available_claude_models(
+    settings_row: LLMSettings | None,
+    api_key: str | None = None,
+) -> list[str]:
+    """Modelele Claude disponibile ACUM (Models API), cu fallback la lista statică."""
+    curated = PROVIDER_MODELS["anthropic"]
+    key = api_key or _anthropic_api_key(settings_row)
+    if not key:
+        return curated
+    cache_key = hashlib.sha256(key.encode()).hexdigest()[:16]
+    live = await list_claude_models(anthropic.AsyncAnthropic(api_key=key), cache_key)
+    if not live:
+        return curated
+    for m in live:
+        _claude_limits_cache[m.id] = (m.input_tokens, m.output_tokens)
+    return _merge_live(curated, {m.id for m in live})
 
 
 def _gemini_api_key(settings_row: LLMSettings | None) -> str | None:
@@ -393,24 +441,21 @@ async def _available_gemini_models(
         return curated
     for m in live:
         _gemini_limits_cache[m.id] = (m.input_tokens, m.output_tokens)
-    live_ids = {m.id for m in live}
-    kept = [m for m in curated if m in live_ids]
-    extra = sorted(
-        (m for m in live_ids if m not in curated and not m.endswith("-latest")),
-        reverse=True,
-    )
-    return kept + extra
+    return _merge_live(curated, {m.id for m in live})
 
 
 async def _build_providers(settings_row: LLMSettings | None) -> dict[str, "ProviderInfo"]:
     openrouter_models = await _fetch_openrouter_free_models()
     gemini_models = await _available_gemini_models(settings_row)
+    claude_models = await _available_claude_models(settings_row)
     providers = {}
     for provider_name, model_ids in PROVIDER_MODELS.items():
         if provider_name == "openrouter":
             raw_ids = openrouter_models
         elif provider_name == "gemini":
             raw_ids = gemini_models
+        elif provider_name == "anthropic":
+            raw_ids = claude_models
         else:
             raw_ids = model_ids
         providers[provider_name] = ProviderInfo(
@@ -468,6 +513,8 @@ async def update_llm_settings(
     if request.active_model and request.active_provider != "openrouter":
         if request.active_provider == "gemini":
             valid_models = await _available_gemini_models(settings_row, request.api_key)
+        elif request.active_provider == "anthropic":
+            valid_models = await _available_claude_models(settings_row, request.api_key)
         else:
             valid_models = PROVIDER_MODELS.get(request.active_provider, [])
         if valid_models and request.active_model not in valid_models:

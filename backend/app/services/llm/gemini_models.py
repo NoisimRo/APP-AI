@@ -21,6 +21,11 @@ from app.core.logging import get_logger
 logger = get_logger(__name__)
 
 CACHE_TTL = 3600  # 1 oră
+FAILURE_TTL = 300  # după un eșec ListModels, nu reîncerca la fiecare cerere
+
+# Modele vechi despre care știm sigur că NU au thinking. Orice model necunoscut
+# (generații viitoare) e tratat ca model cu thinking — varianta sigură.
+_LEGACY_NON_THINKING_PREFIXES = ("gemini-1.", "gemini-2.0")
 
 # Modele care nu sunt pentru generare de text (sau sunt variante speciale).
 _EXCLUDED_KEYWORDS = (
@@ -34,9 +39,13 @@ class GeminiModelInfo:
     id: str
     input_tokens: int
     output_tokens: int
+    thinking: bool | None = None
 
 
 _cache: dict[str, tuple[float, list[GeminiModelInfo]]] = {}
+_failures: dict[str, float] = {}
+# metadate per model, indiferent de cheie (limite, thinking)
+_info: dict[str, GeminiModelInfo] = {}
 # model retras -> înlocuitor ales (evită un 404 la fiecare instanță nouă)
 _replacements: dict[str, str] = {}
 
@@ -62,6 +71,8 @@ async def list_gemini_models(api_key: str, force: bool = False) -> list[GeminiMo
     cached = _cache.get(key)
     if cached and not force and now - cached[0] < CACHE_TTL:
         return cached[1]
+    if not force and now - _failures.get(key, -FAILURE_TTL) < FAILURE_TTL:
+        return cached[1] if cached else []
 
     try:
         client = genai.Client(api_key=api_key)
@@ -75,24 +86,45 @@ async def list_gemini_models(api_key: str, force: bool = False) -> list[GeminiMo
                 id=name,
                 input_tokens=m.input_token_limit or 0,
                 output_tokens=m.output_token_limit or 0,
+                thinking=getattr(m, "thinking", None),
             ))
         if models:
             _cache[key] = (now, models)
+            _info.update({m.id: m for m in models})
+            _failures.pop(key, None)
             logger.info("gemini_models_fetched", count=len(models))
         return models
     except Exception as e:  # noqa: BLE001 — rețea/cheie invalidă: fallback la lista statică
+        _failures[key] = now
         logger.warning("gemini_models_fetch_failed", error=str(e))
         return cached[1] if cached else []
 
 
-def _tier(model_id: str) -> str:
-    if "flash-lite" in model_id:
-        return "flash-lite"
-    if "flash" in model_id:
-        return "flash"
-    if "pro" in model_id:
-        return "pro"
-    return "other"
+def get_model_info(model_id: str) -> GeminiModelInfo | None:
+    """Metadatele raportate de Google pentru model (dacă lista a fost încărcată)."""
+    return _info.get(model_id)
+
+
+def is_thinking_model(model_id: str) -> bool:
+    """Thinking după metadatele Google; necunoscut => True (sigur pt. modele noi)."""
+    info = _info.get(model_id)
+    if info and info.thinking is not None:
+        return info.thinking
+    return not model_id.startswith(_LEGACY_NON_THINKING_PREFIXES)
+
+
+def _family(model_id: str) -> str:
+    """Familia modelului, independent de generație și de sufixe.
+
+    gemini-3.1-pro-preview -> "pro", gemini-2.5-flash-lite -> "flash-lite",
+    gemini-4-argon -> "argon", gemini-3.1-pro-preview-customtools -> "pro-customtools".
+    Așa funcționează și pentru denumiri noi, fără modificări de cod.
+    """
+    fam = re.sub(r"^gemini-\d+(?:\.\d+)*-?", "", model_id)
+    fam = re.sub(r"-(preview|exp)\b", "", fam)     # stadiul nu schimbă familia
+    fam = re.sub(r"(-\d+)+$", "", fam)             # sufixe dată/versiune: -09-2025, -001
+    fam = re.sub(r"-latest$", "", fam)
+    return fam.strip("-") or "base"
 
 
 def _version(model_id: str) -> tuple[int, ...]:
@@ -111,7 +143,7 @@ def _rank(model_id: str) -> tuple:
 def pick_replacement(missing: str, available: list[str]) -> str | None:
     """Alege cel mai bun model disponibil pentru un model retras.
 
-    Preferă aceeași familie (pro/flash/flash-lite), apoi pro, apoi flash;
+    Preferă aceeași familie (pro, flash, argon, ...), apoi pro, apoi flash;
     în cadrul familiei: un model stabil de aceeași generație sau mai nouă,
     altfel versiunea cea mai nouă.
     """
@@ -126,11 +158,20 @@ def pick_replacement(missing: str, available: list[str]) -> str | None:
         stable = not any(k in m for k in ("preview", "exp"))
         return (stable and _version(m) >= base_version, _rank(m))
 
-    for tier in (_tier(missing), "pro", "flash", "flash-lite", "other"):
-        same = [m for m in candidates if _tier(m) == tier]
+    # 1) aceeași familie (pro→pro, argon→argon); 2) aceeași generație sau mai
+    # nouă; 3) familiile clasice; 4) orice model de text.
+    same = [m for m in candidates if _family(m) == _family(missing)]
+    if same:
+        return max(same, key=key)
+    # Familie dispărută complet: rămâi pe aceeași generație sau mai nouă.
+    newer = [m for m in candidates if _version(m) >= base_version]
+    if newer:
+        return max(newer, key=key)
+    for family in ("pro", "flash", "flash-lite"):
+        same = [m for m in candidates if _family(m) == family]
         if same:
             return max(same, key=key)
-    return None
+    return max(candidates, key=key)
 
 
 def get_known_replacement(model_id: str) -> str | None:
