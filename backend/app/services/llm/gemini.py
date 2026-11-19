@@ -10,7 +10,10 @@ from app.core.logging import get_logger
 from app.services.llm.base import LLMProvider, ResourceExhaustedError
 from app.services.llm.gemini_models import (
     get_known_replacement,
+    get_model_info,
     is_model_not_found,
+    is_thinking_model,
+    list_gemini_models,
     resolve_replacement,
 )
 
@@ -26,12 +29,13 @@ class GeminiProvider(LLMProvider):
 
     # Thinking models share max_output_tokens between thinking + visible output.
     # We need a minimum floor so short requests (50-500 tokens) don't get truncated.
-    THINKING_MODEL_PREFIXES = ("gemini-2.5", "gemini-3")
+    # Care model are thinking se decide din metadatele Google (vezi gemini_models),
+    # nu dintr-o listă hardcodată — modelele noi sunt acoperite automat.
     THINKING_MIN_OUTPUT_TOKENS = 4096
 
     def __init__(
         self,
-        model: str = "gemini-3.1-pro-preview",
+        model: str = "gemini-4-neon",
         embedding_model: str = "gemini-embedding-001",
         api_key: str | None = None,
     ):
@@ -40,9 +44,6 @@ class GeminiProvider(LLMProvider):
         model = get_known_replacement(model) or model
         self._model_name = model
         self._embedding_model = embedding_model
-        self._is_thinking_model = any(
-            model.startswith(p) for p in self.THINKING_MODEL_PREFIXES
-        )
 
         key = api_key or get_settings().gemini_api_key
         if not key:
@@ -55,7 +56,7 @@ class GeminiProvider(LLMProvider):
             "gemini_provider_initialized",
             model=model,
             embedding_model=embedding_model,
-            is_thinking_model=self._is_thinking_model,
+            is_thinking_model=is_thinking_model(model),
         )
 
     @property
@@ -68,9 +69,14 @@ class GeminiProvider(LLMProvider):
 
     def _set_model(self, model: str) -> None:
         self._model_name = model
-        self._is_thinking_model = any(
-            model.startswith(p) for p in self.THINKING_MODEL_PREFIXES
-        )
+
+    async def _ensure_model_metadata(self) -> None:
+        """Încarcă (cache 1h) metadatele modelelor: limite tokeni + thinking.
+
+        Fără ele se folosesc valori implicite sigure, deci un eșec nu blochează.
+        """
+        if get_model_info(self._model_name) is None:
+            await list_gemini_models(self._api_key)
 
     async def _switch_to_replacement(self, error: Exception) -> bool:
         """La 404 (model retras de Google), trece pe un model disponibil.
@@ -98,34 +104,63 @@ class GeminiProvider(LLMProvider):
         internal reasoning and visible output. A request for 50-500 tokens would
         leave almost nothing for visible text after thinking consumes most of it.
         """
-        if self._is_thinking_model and max_tokens < self.THINKING_MIN_OUTPUT_TOKENS:
+        if is_thinking_model(self._model_name) and max_tokens < self.THINKING_MIN_OUTPUT_TOKENS:
             logger.debug(
                 "gemini_thinking_tokens_adjusted",
                 requested=max_tokens,
                 adjusted=self.THINKING_MIN_OUTPUT_TOKENS,
             )
-            return self.THINKING_MIN_OUTPUT_TOKENS
+            max_tokens = self.THINKING_MIN_OUTPUT_TOKENS
+        # Nu cere mai mult decât permite modelul (altfel 400 INVALID_ARGUMENT).
+        info = get_model_info(self._model_name)
+        if info and info.output_tokens and max_tokens > info.output_tokens:
+            max_tokens = info.output_tokens
         return max_tokens
 
+    # Modele care au respins `temperature` (ex. modele noi care fixează sampling-ul).
+    _NO_TEMPERATURE_MODELS: set[str] = set()
+
     def _config(self, temperature: float, max_tokens: int) -> types.GenerateContentConfig:
-        return types.GenerateContentConfig(
-            temperature=temperature,
-            max_output_tokens=self._safe_max_tokens(max_tokens),
-        )
+        kwargs: dict = {"max_output_tokens": self._safe_max_tokens(max_tokens)}
+        if self._model_name not in self._NO_TEMPERATURE_MODELS:
+            kwargs["temperature"] = temperature
+        return types.GenerateContentConfig(**kwargs)
+
+    def _rejects_temperature(self, error: Exception) -> bool:
+        """400 cauzat de `temperature` → reține modelul și reia fără parametru."""
+        if (
+            getattr(error, "code", None) == 400
+            and "temperature" in str(error).lower()
+            and self._model_name not in self._NO_TEMPERATURE_MODELS
+        ):
+            logger.warning("gemini_temperature_rejected", model=self._model_name)
+            self._NO_TEMPERATURE_MODELS.add(self._model_name)
+            return True
+        return False
 
     async def _generate(self, contents: str, temperature: float, max_tokens: int):
-        return await self._client.aio.models.generate_content(
-            model=self._model_name,
-            contents=contents,
-            config=self._config(temperature, max_tokens),
-        )
+        try:
+            return await self._client.aio.models.generate_content(
+                model=self._model_name,
+                contents=contents,
+                config=self._config(temperature, max_tokens),
+            )
+        except Exception as e:
+            if not self._rejects_temperature(e):
+                raise
+            return await self._generate(contents, temperature, max_tokens)
 
     async def _generate_stream(self, contents: str, temperature: float, max_tokens: int):
-        return await self._client.aio.models.generate_content_stream(
-            model=self._model_name,
-            contents=contents,
-            config=self._config(temperature, max_tokens),
-        )
+        try:
+            return await self._client.aio.models.generate_content_stream(
+                model=self._model_name,
+                contents=contents,
+                config=self._config(temperature, max_tokens),
+            )
+        except Exception as e:
+            if not self._rejects_temperature(e):
+                raise
+            return await self._generate_stream(contents, temperature, max_tokens)
 
     async def complete(
         self,
@@ -137,6 +172,7 @@ class GeminiProvider(LLMProvider):
     ) -> str:
         """Generate a completion using Gemini."""
         full_prompt = self._build_prompt(prompt, context, system_prompt)
+        await self._ensure_model_metadata()
 
         try:
             try:
@@ -194,6 +230,7 @@ class GeminiProvider(LLMProvider):
     ) -> AsyncIterator[str]:
         """Stream a completion using Gemini."""
         full_prompt = self._build_prompt(prompt, context, system_prompt)
+        await self._ensure_model_metadata()
 
         try:
             try:

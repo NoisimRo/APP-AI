@@ -1,29 +1,34 @@
 """Anthropic Claude LLM Provider."""
 
+import hashlib
 from typing import AsyncIterator
 
 import anthropic
 
 from app.core.logging import get_logger
+from app.services.llm.anthropic_models import (
+    get_known_replacement,
+    get_model_info,
+    list_claude_models,
+    model_version,
+    resolve_replacement,
+)
 from app.services.llm.base import LLMProvider, ResourceExhaustedError
 
 logger = get_logger(__name__)
 
-# Modele care rulează mereu cu adaptive thinking (nu acceptă temperature și nici
-# dezactivarea thinking-ului) și care suportă fallback server-side la refuz.
-_FALLBACK_MODEL_PREFIXES = (
-    "claude-fable-5",
-    "claude-opus-5",
-    "claude-sonnet-5-5",
-)
+# Fallback server-side la refuz (beta). Cu valoarea "default", un model care
+# nu suportă fallback rulează cererea normal, deci e sigur de trimis pe orice
+# model din generația 5+ — inclusiv pe modele viitoare, fără modificări de cod.
 _FALLBACK_BETA = "server-side-fallback-2026-07-01"
+_FALLBACK_MIN_GENERATION = 5
 
 # Thinking-ul consumă din max_tokens; sub acest prag un răspuns poate ieși gol.
 _MIN_MAX_TOKENS = 2048
 
 
 def _supports_fallback(model: str) -> bool:
-    return model.startswith(_FALLBACK_MODEL_PREFIXES)
+    return model_version(model)[0] >= _FALLBACK_MIN_GENERATION
 
 
 def _extract_text(content: list) -> str:
@@ -43,9 +48,14 @@ class AnthropicProvider(LLMProvider):
         model: str = "claude-opus-5-5",
         api_key: str | None = None,
     ):
-        self._model_name = model
+        self._configured_model = model
+        # Dacă modelul a fost deja detectat ca retras, folosește înlocuitorul.
+        self._model_name = get_known_replacement(model) or model
         self._client = anthropic.AsyncAnthropic(
             api_key=api_key,  # Falls back to ANTHROPIC_API_KEY env var if None
+        )
+        self._cache_key = (
+            hashlib.sha256(api_key.encode()).hexdigest()[:16] if api_key else "env"
         )
 
         logger.info("anthropic_provider_initialized", model=model)
@@ -89,10 +99,15 @@ class AnthropicProvider(LLMProvider):
         Parametrul rămâne în semnătura provider-ului doar pentru compatibilitate
         cu interfața `LLMProvider`.
         """
+        max_tokens = max(max_tokens, _MIN_MAX_TOKENS)
+        # Nu cere mai mult decât permite modelul (limită raportată de Models API).
+        info = get_model_info(self._model_name)
+        if info and info.output_tokens:
+            max_tokens = min(max_tokens, info.output_tokens)
         kwargs: dict = {
             "model": self._model_name,
             "messages": messages,
-            "max_tokens": max(max_tokens, _MIN_MAX_TOKENS),
+            "max_tokens": max_tokens,
         }
         if system_prompt:
             kwargs["system"] = system_prompt
@@ -101,6 +116,27 @@ class AnthropicProvider(LLMProvider):
             kwargs["betas"] = [_FALLBACK_BETA]
             kwargs["fallbacks"] = "default"
         return kwargs
+
+    async def _ensure_model_metadata(self) -> None:
+        """Încarcă (cache 1h) limitele modelelor din Models API; eșecul nu blochează."""
+        if get_model_info(self._model_name) is None:
+            await list_claude_models(self._client, self._cache_key)
+
+    async def _switch_to_replacement(self) -> bool:
+        """La 404 (model retras), trece pe cel mai nou model din aceeași familie."""
+        replacement = await resolve_replacement(
+            self._model_name, self._client, self._cache_key
+        )
+        if not replacement or replacement == self._model_name:
+            return False
+        logger.warning(
+            "anthropic_model_unavailable_switching",
+            configured=self._configured_model,
+            missing=self._model_name,
+            replacement=replacement,
+        )
+        self._model_name = replacement
+        return True
 
     def _stream_ctx(self, kwargs: dict):
         if _supports_fallback(self._model_name):
@@ -119,12 +155,19 @@ class AnthropicProvider(LLMProvider):
         messages = self._build_messages(prompt, context)
 
         try:
-            kwargs = self._build_kwargs(messages, system_prompt, max_tokens)
-
+            await self._ensure_model_metadata()
             # Streaming + get_final_message: SDK-ul refuză cererile non-streaming
             # cu max_tokens mare (>~21K), iar modelele noi acceptă până la 128K.
-            async with self._stream_ctx(kwargs) as stream:
-                response = await stream.get_final_message()
+            try:
+                kwargs = self._build_kwargs(messages, system_prompt, max_tokens)
+                async with self._stream_ctx(kwargs) as stream:
+                    response = await stream.get_final_message()
+            except anthropic.NotFoundError:
+                if not await self._switch_to_replacement():
+                    raise
+                kwargs = self._build_kwargs(messages, system_prompt, max_tokens)
+                async with self._stream_ctx(kwargs) as stream:
+                    response = await stream.get_final_message()
 
             if response.stop_reason == "refusal":
                 raise RuntimeError(
@@ -151,11 +194,18 @@ class AnthropicProvider(LLMProvider):
         messages = self._build_messages(prompt, context)
 
         try:
-            kwargs = self._build_kwargs(messages, system_prompt, max_tokens)
-
-            async with self._stream_ctx(kwargs) as stream:
-                async for text in stream.text_stream:
-                    yield text
+            await self._ensure_model_metadata()
+            for attempt in range(2):
+                kwargs = self._build_kwargs(messages, system_prompt, max_tokens)
+                try:
+                    async with self._stream_ctx(kwargs) as stream:
+                        async for text in stream.text_stream:
+                            yield text
+                    return
+                except anthropic.NotFoundError:
+                    # 404 vine la deschiderea stream-ului, înainte de orice text.
+                    if attempt or not await self._switch_to_replacement():
+                        raise
 
         except anthropic.RateLimitError as e:
             raise ResourceExhaustedError("anthropic", str(e)) from e
