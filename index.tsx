@@ -799,7 +799,7 @@ const App = () => {
   const [settingsApiKey, setSettingsApiKey] = useState("");
   const [settingsSaving, setSettingsSaving] = useState(false);
   const [settingsTesting, setSettingsTesting] = useState(false);
-  const [settingsTestResult, setSettingsTestResult] = useState<{success: boolean, response_time_ms: number, error?: string} | null>(null);
+  const [settingsTestResult, setSettingsTestResult] = useState<{success: boolean, response_time_ms: number, model?: string, error?: string, warning?: string} | null>(null);
   const [settingsMessage, setSettingsMessage] = useState<{type: 'success' | 'error', text: string} | null>(null);
 
   // Role Permissions States
@@ -7215,7 +7215,10 @@ const App = () => {
                 </span>
               </div>
               {settingsTestResult.success && (
-                <p className="text-xs text-green-600">Timp de răspuns: {settingsTestResult.response_time_ms}ms</p>
+                <p className="text-xs text-green-600">Model: {settingsTestResult.model} · Timp de răspuns: {settingsTestResult.response_time_ms}ms</p>
+              )}
+              {settingsTestResult.warning && (
+                <p className="text-xs text-amber-700 mt-1">{settingsTestResult.warning}</p>
               )}
               {settingsTestResult.error && (
                 <p className="text-xs text-red-600 mt-1">{settingsTestResult.error}</p>

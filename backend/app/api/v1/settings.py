@@ -19,6 +19,7 @@ from app.core.encryption import encrypt_value, decrypt_value
 from app.core.logging import get_logger
 from app.db.session import get_session
 from app.models.decision import LLMSettings, User
+from app.services.llm.gemini_models import list_gemini_models
 from app.services.llm.factory import (
     clear_provider_cache,
     get_llm_provider,
@@ -311,6 +312,7 @@ class LLMTestResponse(BaseModel):
     model: str
     response_time_ms: int
     error: str | None = None
+    warning: str | None = None
 
 
 def _is_provider_configured(provider: str, settings_row: LLMSettings | None) -> bool:
@@ -348,10 +350,74 @@ def _build_model_list(model_ids: list[str]) -> list[ModelInfo]:
     """
     models = []
     for mid in model_ids:
-        limits = MODEL_TOKEN_LIMITS.get(mid) or _openrouter_limits_cache.get(mid, (0, 0))
+        limits = (
+            MODEL_TOKEN_LIMITS.get(mid)
+            or _openrouter_limits_cache.get(mid)
+            or _gemini_limits_cache.get(mid, (0, 0))
+        )
         models.append(ModelInfo(id=mid, input_tokens=limits[0], output_tokens=limits[1]))
+    # Sortare stabilă: ordinea curatoriată (implicitul primul) se păstrează la egalitate.
     models.sort(key=lambda m: m.input_tokens, reverse=True)
     return models
+
+
+# Limite de tokeni raportate de Google pentru modelele descoperite dinamic.
+_gemini_limits_cache: dict[str, tuple[int, int]] = {}
+
+
+def _gemini_api_key(settings_row: LLMSettings | None) -> str | None:
+    if settings_row and settings_row.gemini_api_key_enc:
+        try:
+            return decrypt_value(settings_row.gemini_api_key_enc)
+        except Exception:  # noqa: BLE001
+            pass
+    return get_settings().gemini_api_key or None
+
+
+async def _available_gemini_models(
+    settings_row: LLMSettings | None,
+    api_key: str | None = None,
+) -> list[str]:
+    """Modelele Gemini disponibile ACUM pentru cheia configurată.
+
+    Lista curatoriată (`PROVIDER_MODELS["gemini"]`) e filtrată la modelele încă
+    existente, iar modelele noi apărute la Google sunt adăugate după ea. Dacă
+    ListModels nu răspunde, se întoarce lista curatoriată neschimbată.
+    """
+    curated = PROVIDER_MODELS["gemini"]
+    key = api_key or _gemini_api_key(settings_row)
+    if not key:
+        return curated
+    live = await list_gemini_models(key)
+    if not live:
+        return curated
+    for m in live:
+        _gemini_limits_cache[m.id] = (m.input_tokens, m.output_tokens)
+    live_ids = {m.id for m in live}
+    kept = [m for m in curated if m in live_ids]
+    extra = sorted(
+        (m for m in live_ids if m not in curated and not m.endswith("-latest")),
+        reverse=True,
+    )
+    return kept + extra
+
+
+async def _build_providers(settings_row: LLMSettings | None) -> dict[str, "ProviderInfo"]:
+    openrouter_models = await _fetch_openrouter_free_models()
+    gemini_models = await _available_gemini_models(settings_row)
+    providers = {}
+    for provider_name, model_ids in PROVIDER_MODELS.items():
+        if provider_name == "openrouter":
+            raw_ids = openrouter_models
+        elif provider_name == "gemini":
+            raw_ids = gemini_models
+        else:
+            raw_ids = model_ids
+        providers[provider_name] = ProviderInfo(
+            configured=_is_provider_configured(provider_name, settings_row),
+            models=_build_model_list(raw_ids),
+        )
+    return providers
 
 
 async def _get_settings_row(session: AsyncSession) -> LLMSettings | None:
@@ -373,16 +439,7 @@ async def get_llm_settings(
     active_provider = settings_row.active_provider if settings_row else "gemini"
     active_model = settings_row.active_model if settings_row else None
 
-    # Fetch dynamic OpenRouter model list
-    openrouter_models = await _fetch_openrouter_free_models()
-
-    providers = {}
-    for provider_name, model_ids in PROVIDER_MODELS.items():
-        raw_ids = openrouter_models if provider_name == "openrouter" else model_ids
-        providers[provider_name] = ProviderInfo(
-            configured=_is_provider_configured(provider_name, settings_row),
-            models=_build_model_list(raw_ids),
-        )
+    providers = await _build_providers(settings_row)
 
     return LLMSettingsResponse(
         active_provider=active_provider,
@@ -405,17 +462,20 @@ async def update_llm_settings(
         has_key=bool(request.api_key),
     )
 
+    settings_row = await _get_settings_row(session)
+
     # Validate model is in the provider's list (skip for OpenRouter — models are dynamic)
     if request.active_model and request.active_provider != "openrouter":
-        valid_models = PROVIDER_MODELS.get(request.active_provider, [])
+        if request.active_provider == "gemini":
+            valid_models = await _available_gemini_models(settings_row, request.api_key)
+        else:
+            valid_models = PROVIDER_MODELS.get(request.active_provider, [])
         if valid_models and request.active_model not in valid_models:
             raise HTTPException(
                 status_code=400,
                 detail=f"Model '{request.active_model}' nu este disponibil pentru {request.active_provider}. "
                 f"Modele valide: {', '.join(valid_models)}",
             )
-
-    settings_row = await _get_settings_row(session)
 
     if not settings_row:
         # Create the settings row if it doesn't exist
@@ -446,14 +506,7 @@ async def update_llm_settings(
     clear_provider_cache()
 
     # Return updated settings (served from the 1h cache when warm)
-    openrouter_models = await _fetch_openrouter_free_models()
-    providers = {}
-    for provider_name, model_ids in PROVIDER_MODELS.items():
-        raw_ids = openrouter_models if provider_name == "openrouter" else model_ids
-        providers[provider_name] = ProviderInfo(
-            configured=_is_provider_configured(provider_name, settings_row),
-            models=_build_model_list(raw_ids),
-        )
+    providers = await _build_providers(settings_row)
 
     return LLMSettingsResponse(
         active_provider=settings_row.active_provider,
@@ -514,11 +567,20 @@ async def test_llm_connection(
             response=response[:50],
         )
 
+        warning = None
+        if model and llm.model_name != model:
+            warning = (
+                f"Modelul '{model}' nu mai este disponibil la furnizor. "
+                f"S-a folosit automat '{llm.model_name}'. "
+                "Selectați un model din listă și salvați setările."
+            )
+
         return LLMTestResponse(
             success=True,
             provider=provider_type,
             model=llm.model_name,
             response_time_ms=elapsed_ms,
+            warning=warning,
         )
 
     except Exception as e:

@@ -8,6 +8,11 @@ from google.genai import types
 from app.core.config import get_settings
 from app.core.logging import get_logger
 from app.services.llm.base import LLMProvider, ResourceExhaustedError
+from app.services.llm.gemini_models import (
+    get_known_replacement,
+    is_model_not_found,
+    resolve_replacement,
+)
 
 logger = get_logger(__name__)
 
@@ -30,6 +35,9 @@ class GeminiProvider(LLMProvider):
         embedding_model: str = "gemini-embedding-001",
         api_key: str | None = None,
     ):
+        # Dacă modelul a fost deja detectat ca retras, folosește direct înlocuitorul.
+        self._configured_model = model
+        model = get_known_replacement(model) or model
         self._model_name = model
         self._embedding_model = embedding_model
         self._is_thinking_model = any(
@@ -40,6 +48,7 @@ class GeminiProvider(LLMProvider):
         if not key:
             raise ValueError("GEMINI_API_KEY is required for GeminiProvider")
 
+        self._api_key = key
         self._client = genai.Client(api_key=key)
 
         logger.info(
@@ -57,6 +66,31 @@ class GeminiProvider(LLMProvider):
     def model_name(self) -> str:
         return self._model_name
 
+    def _set_model(self, model: str) -> None:
+        self._model_name = model
+        self._is_thinking_model = any(
+            model.startswith(p) for p in self.THINKING_MODEL_PREFIXES
+        )
+
+    async def _switch_to_replacement(self, error: Exception) -> bool:
+        """La 404 (model retras de Google), trece pe un model disponibil.
+
+        Întoarce True dacă s-a găsit un înlocuitor și cererea poate fi reluată.
+        """
+        if not is_model_not_found(error):
+            return False
+        replacement = await resolve_replacement(self._model_name, self._api_key)
+        if not replacement or replacement == self._model_name:
+            return False
+        logger.warning(
+            "gemini_model_unavailable_switching",
+            configured=self._configured_model,
+            missing=self._model_name,
+            replacement=replacement,
+        )
+        self._set_model(replacement)
+        return True
+
     def _safe_max_tokens(self, max_tokens: int) -> int:
         """Ensure max_tokens is high enough for thinking models.
 
@@ -73,6 +107,26 @@ class GeminiProvider(LLMProvider):
             return self.THINKING_MIN_OUTPUT_TOKENS
         return max_tokens
 
+    def _config(self, temperature: float, max_tokens: int) -> types.GenerateContentConfig:
+        return types.GenerateContentConfig(
+            temperature=temperature,
+            max_output_tokens=self._safe_max_tokens(max_tokens),
+        )
+
+    async def _generate(self, contents: str, temperature: float, max_tokens: int):
+        return await self._client.aio.models.generate_content(
+            model=self._model_name,
+            contents=contents,
+            config=self._config(temperature, max_tokens),
+        )
+
+    async def _generate_stream(self, contents: str, temperature: float, max_tokens: int):
+        return await self._client.aio.models.generate_content_stream(
+            model=self._model_name,
+            contents=contents,
+            config=self._config(temperature, max_tokens),
+        )
+
     async def complete(
         self,
         prompt: str,
@@ -83,17 +137,14 @@ class GeminiProvider(LLMProvider):
     ) -> str:
         """Generate a completion using Gemini."""
         full_prompt = self._build_prompt(prompt, context, system_prompt)
-        safe_tokens = self._safe_max_tokens(max_tokens)
 
         try:
-            response = await self._client.aio.models.generate_content(
-                model=self._model_name,
-                contents=full_prompt,
-                config=types.GenerateContentConfig(
-                    temperature=temperature,
-                    max_output_tokens=safe_tokens,
-                ),
-            )
+            try:
+                response = await self._generate(full_prompt, temperature, max_tokens)
+            except Exception as e:
+                if not await self._switch_to_replacement(e):
+                    raise
+                response = await self._generate(full_prompt, temperature, max_tokens)
 
             # Handle empty/blocked responses (safety filters, empty candidates)
             if not response.candidates:
@@ -143,17 +194,17 @@ class GeminiProvider(LLMProvider):
     ) -> AsyncIterator[str]:
         """Stream a completion using Gemini."""
         full_prompt = self._build_prompt(prompt, context, system_prompt)
-        safe_tokens = self._safe_max_tokens(max_tokens)
 
         try:
-            async for chunk in await self._client.aio.models.generate_content_stream(
-                model=self._model_name,
-                contents=full_prompt,
-                config=types.GenerateContentConfig(
-                    temperature=temperature,
-                    max_output_tokens=safe_tokens,
-                ),
-            ):
+            try:
+                stream = await self._generate_stream(full_prompt, temperature, max_tokens)
+            except Exception as e:
+                # 404 apare la deschiderea stream-ului, înainte de orice chunk.
+                if not await self._switch_to_replacement(e):
+                    raise
+                stream = await self._generate_stream(full_prompt, temperature, max_tokens)
+
+            async for chunk in stream:
                 if chunk.text:
                     yield chunk.text
 
