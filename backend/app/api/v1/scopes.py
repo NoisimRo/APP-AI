@@ -52,6 +52,17 @@ class ScopeFilters(BaseModel):
     categorie: str | None = None  # Furnizare, Servicii, Lucrări
     clasa: str | None = None  # Product class
     search: str | None = None
+    # Must mirror every key read by _apply_scope_filters — undeclared keys are
+    # silently dropped by Pydantic, so the scope would match all decisions.
+    motiv_respingere: list[str] | None = None
+    complet: list[str] | None = None
+    domeniu_legislativ: list[str] | None = None
+    tip_procedura: list[str] | None = None
+    criteriu_atribuire: list[str] | None = None
+    data_decizie_from: str | None = None
+    data_decizie_to: str | None = None
+    valoare_min: float | None = None
+    valoare_max: float | None = None
 
 
 class CreateScopeRequest(BaseModel):

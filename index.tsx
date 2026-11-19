@@ -8690,6 +8690,13 @@ const App = () => {
                           {s.filters.coduri_critici?.map((c: string) => <span key={c} className="text-[10px] bg-blue-50 text-blue-700 border border-blue-200 rounded-full px-2 py-0.5 font-mono">{c}</span>)}
                           {s.filters.cpv_codes?.map((c: string) => <span key={c} className="text-[10px] bg-purple-50 text-purple-700 border border-purple-200 rounded-full px-2 py-0.5 font-mono">{c}</span>)}
                           {s.filters.search && <span className="text-[10px] bg-slate-100 text-slate-600 border border-slate-200 rounded-full px-2 py-0.5">"{s.filters.search}"</span>}
+                          {s.filters.tip_procedura?.map((p: string) => <span key={p} className="text-[10px] bg-amber-50 text-amber-700 border border-amber-200 rounded-full px-2 py-0.5">{tipProceduraLabels[p] || p}</span>)}
+                          {s.filters.domeniu_legislativ?.map((d: string) => <span key={d} className="text-[10px] bg-sky-50 text-sky-700 border border-sky-200 rounded-full px-2 py-0.5">{d}</span>)}
+                          {s.filters.complet?.map((c: string) => <span key={c} className="text-[10px] bg-slate-100 text-slate-600 border border-slate-200 rounded-full px-2 py-0.5">{c}</span>)}
+                          {s.filters.criteriu_atribuire?.map((c: string) => <span key={c} className="text-[10px] bg-slate-100 text-slate-600 border border-slate-200 rounded-full px-2 py-0.5">{c}</span>)}
+                          {s.filters.motiv_respingere?.map((m: string) => <span key={m} className="text-[10px] bg-red-50 text-red-700 border border-red-200 rounded-full px-2 py-0.5">{m}</span>)}
+                          {(s.filters.data_decizie_from || s.filters.data_decizie_to) && <span className="text-[10px] bg-slate-100 text-slate-600 border border-slate-200 rounded-full px-2 py-0.5">{s.filters.data_decizie_from || '…'} → {s.filters.data_decizie_to || '…'}</span>}
+                          {(s.filters.valoare_min != null || s.filters.valoare_max != null) && <span className="text-[10px] bg-slate-100 text-slate-600 border border-slate-200 rounded-full px-2 py-0.5">VEA {s.filters.valoare_min ?? '…'} – {s.filters.valoare_max ?? '…'} RON</span>}
                         </div>
                         {/* Actions */}
                         <div className="flex items-center gap-2 mt-3 pt-2 border-t border-slate-100 flex-wrap">
@@ -8718,8 +8725,8 @@ const App = () => {
                               setFilterCriteriuAtribuire(s.filters.criteriu_atribuire || []);
                               setFilterDateFrom(s.filters.data_decizie_from || '');
                               setFilterDateTo(s.filters.data_decizie_to || '');
-                              setFilterValoareMin(s.filters.valoare_min || '');
-                              setFilterValoareMax(s.filters.valoare_max || '');
+                              setFilterValoareMin(s.filters.valoare_min != null ? String(s.filters.valoare_min) : '');
+                              setFilterValoareMax(s.filters.valoare_max != null ? String(s.filters.valoare_max) : '');
                               setShowScopeManager(false);
                               setMode('datalake');
                             }}
@@ -8754,8 +8761,8 @@ const App = () => {
                               setFilterCriteriuAtribuire(s.filters.criteriu_atribuire || []);
                               setFilterDateFrom(s.filters.data_decizie_from || '');
                               setFilterDateTo(s.filters.data_decizie_to || '');
-                              setFilterValoareMin(s.filters.valoare_min || '');
-                              setFilterValoareMax(s.filters.valoare_max || '');
+                              setFilterValoareMin(s.filters.valoare_min != null ? String(s.filters.valoare_min) : '');
+                              setFilterValoareMax(s.filters.valoare_max != null ? String(s.filters.valoare_max) : '');
                               setEditingScopeFilters(s.id);
                               setShowScopeManager(false);
                               setMode('datalake');
